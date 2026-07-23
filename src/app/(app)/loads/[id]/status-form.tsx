@@ -1,0 +1,49 @@
+"use client";
+
+import { useActionState, useEffect } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
+import { LOAD_STATUSES, type LoadStatus } from "@/types/database";
+import { titleCase } from "@/lib/format";
+import type { LoadFormState } from "../actions";
+
+const initialState: LoadFormState = { error: null };
+
+export function StatusForm({
+  currentStatus,
+  action,
+}: {
+  currentStatus: LoadStatus;
+  action: (state: LoadFormState, formData: FormData) => Promise<LoadFormState>;
+}) {
+  const [state, formAction, pending] = useActionState(action, initialState);
+
+  useEffect(() => {
+    if (state.error) toast.error(state.error);
+    else if (state !== initialState) toast.success("Status updated.");
+  }, [state]);
+
+  return (
+    <form action={formAction} className="flex flex-wrap items-end gap-3">
+      <div className="space-y-1.5">
+        <label className="text-xs text-muted-foreground">New status</label>
+        <NativeSelect name="status" defaultValue={currentStatus} className="w-44">
+          {LOAD_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {titleCase(s)}
+            </option>
+          ))}
+        </NativeSelect>
+      </div>
+      <div className="flex-1 space-y-1.5">
+        <label className="text-xs text-muted-foreground">Note (optional)</label>
+        <Textarea name="note" rows={1} className="min-h-8" />
+      </div>
+      <Button type="submit" disabled={pending}>
+        {pending ? "Updating..." : "Update status"}
+      </Button>
+    </form>
+  );
+}
