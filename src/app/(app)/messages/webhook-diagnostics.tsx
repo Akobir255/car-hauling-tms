@@ -24,7 +24,7 @@ const OUTCOME_VARIANT: Record<string, "default" | "secondary" | "destructive" | 
   stored_no_customer: "secondary",
   duplicate: "outline",
   validation: "outline",
-  ignored_not_inbound_sms: "outline",
+  ignored_not_sms: "outline",
   unauthorized: "destructive",
   error_insert: "destructive",
   error_bad_json: "destructive",

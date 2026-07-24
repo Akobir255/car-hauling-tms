@@ -31,7 +31,17 @@ import { DonutChart, type DonutSegment } from "@/components/charts/donut-chart";
 import { formatCurrency, titleCase } from "@/lib/format";
 import type { Carrier, Load, LoadVehicle, Message } from "@/types/database";
 
-const ACTIVE_STATUSES = ["quote", "booked", "dispatched", "picked_up", "in_transit"];
+const ACTIVE_STATUSES = [
+  "lead",
+  "quote",
+  "ready",
+  "posted_cd",
+  "posted_sd",
+  "booked",
+  "dispatched",
+  "picked_up",
+  "in_transit",
+];
 
 // Fixed color per vehicle-type entity (never by rank) — categorical slots
 // validated for light and dark with the palette checker.

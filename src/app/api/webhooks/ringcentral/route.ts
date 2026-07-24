@@ -146,13 +146,15 @@ export async function POST(request: NextRequest) {
   const eventType = msg?.type ?? null;
   const direction = msg?.direction ?? null;
 
-  // Only inbound SMS becomes a conversation row. Everything else (renewal
-  // pings, our own outbound echoes) is logged and acknowledged.
+  // We record SMS in both directions so the TMS shows a complete thread —
+  // inbound customer replies AND texts a rep sends straight from the
+  // RingCentral app (which the TMS didn't originate). Non-SMS events (renewal
+  // pings, etc.) are logged and acknowledged.
   const isSms = (eventType ?? "").toUpperCase() === "SMS";
   const isInbound = (direction ?? "").toLowerCase() === "inbound";
-  if (!msg || !isSms || !isInbound) {
+  if (!msg || !isSms) {
     await logEvent(supabase, {
-      outcome: "ignored_not_inbound_sms",
+      outcome: "ignored_not_sms",
       token_ok: true,
       event_type: eventType,
       direction,
@@ -163,17 +165,21 @@ export async function POST(request: NextRequest) {
 
   const providerMessageId = msg.id != null ? String(msg.id) : null;
   const fromNumber = toE164(msg.from?.phoneNumber) ?? msg.from?.phoneNumber ?? null;
-  const toNumber = msg.to?.[0]?.phoneNumber ?? null;
-  // RingCentral puts inbound SMS text in `subject`; fall back to `text`.
+  const toNumber = toE164(msg.to?.[0]?.phoneNumber) ?? msg.to?.[0]?.phoneNumber ?? null;
+  // The other party's number is who we match to a customer: sender if inbound,
+  // recipient if outbound.
+  const counterparty = isInbound ? fromNumber : toNumber;
+  const storedDirection = isInbound ? "inbound" : "outbound";
+  // RingCentral puts SMS text in `subject`; fall back to `text`.
   const text = (msg.subject ?? msg.text ?? "").trim();
 
-  // RingCentral retries deliveries — drop exact duplicates.
+  // Drop duplicates in EITHER direction: RingCentral retries, and TMS-sent
+  // outbound texts already have a row with this provider id.
   if (providerMessageId) {
     const { data: existing } = await supabase
       .from("messages")
       .select("id")
       .eq("provider_message_id", providerMessageId)
-      .eq("direction", "inbound")
       .limit(1);
     if (existing && existing.length > 0) {
       await logEvent(supabase, {
@@ -187,10 +193,10 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Match the sender to a customer by normalized phone.
+  // Match the other party to a customer by normalized phone.
   let customerId: string | null = null;
-  if (fromNumber) {
-    const { data } = await supabase.rpc("find_customer_by_phone", { p_phone: fromNumber });
+  if (counterparty) {
+    const { data } = await supabase.rpc("find_customer_by_phone", { p_phone: counterparty });
     customerId = (data as string | null) ?? null;
   }
 
@@ -206,8 +212,8 @@ export async function POST(request: NextRequest) {
     loadId = loads?.[0]?.id ?? null;
   }
 
-  // STOP/START compliance — flip the opt-out flag before logging the message.
-  const keyword = optKeyword(text);
+  // STOP/START compliance — inbound only — flip the opt-out flag.
+  const keyword = isInbound ? optKeyword(text) : null;
   if (customerId && keyword) {
     await supabase
       .from("customers")
@@ -219,13 +225,15 @@ export async function POST(request: NextRequest) {
     customer_id: customerId,
     load_id: loadId,
     channel: "sms",
-    direction: "inbound",
+    direction: storedDirection,
     from_addr: fromNumber,
     to_addr: toNumber,
     body: text || "(empty message)",
     provider_message_id: providerMessageId,
     status: "delivered",
     sent_by: null,
+    // Outbound isn't "unread" — only inbound drives the badge.
+    read_at: isInbound ? null : new Date().toISOString(),
   });
   if (insertError) {
     console.error("Inbound SMS insert failed:", insertError);

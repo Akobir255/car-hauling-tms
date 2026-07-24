@@ -5,10 +5,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Building2,
+  ClipboardList,
+  FileText,
   LayoutDashboard,
   Menu,
   MessageSquare,
-  Package,
+  Sparkles,
   Truck,
   UserCog,
   X,
@@ -21,8 +23,9 @@ import type { UserRole } from "@/types/database";
 
 const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; roles?: UserRole[] }[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/loads", label: "Loads", icon: Package },
-  { href: "/carriers", label: "Carriers", icon: Truck },
+  { href: "/leads", label: "Leads", icon: Sparkles },
+  { href: "/quotes", label: "Quotes", icon: FileText },
+  { href: "/orders", label: "Orders", icon: ClipboardList },
   { href: "/customers", label: "Customers", icon: Building2 },
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/admin/users", label: "Users", icon: UserCog, roles: ["admin"] },

@@ -58,6 +58,19 @@ function EndpointFields({
           <Input id={`${prefix}_contact_name`} name={`${prefix}_contact_name`} defaultValue={v(`${prefix}_contact_name`)} />
         </div>
         <div className="space-y-1.5">
+          <FieldLabel htmlFor={`${prefix}_company`}>Company</FieldLabel>
+          <Input id={`${prefix}_company`} name={`${prefix}_company`} defaultValue={v(`${prefix}_company`)} />
+        </div>
+        <div className="space-y-1.5">
+          <FieldLabel htmlFor={`${prefix}_contact_cell`}>Phone cell</FieldLabel>
+          <Input
+            id={`${prefix}_contact_cell`}
+            name={`${prefix}_contact_cell`}
+            type="tel"
+            defaultValue={v(`${prefix}_contact_cell`)}
+          />
+        </div>
+        <div className="space-y-1.5">
           <FieldLabel htmlFor={`${prefix}_contact_phone`}>Phone</FieldLabel>
           <Input
             id={`${prefix}_contact_phone`}
@@ -232,7 +245,7 @@ export function LoadDetailsForm({
           {dirty && !pending && !state.error && (
             <span className="text-xs text-muted-foreground">Unsaved changes</span>
           )}
-          {load.status === "quote" && (
+          {(load.status === "lead" || load.status === "quote") && (
             <Button type="submit" name="convert" value="1" variant="outline" disabled={pending}>
               Save and convert to order
             </Button>

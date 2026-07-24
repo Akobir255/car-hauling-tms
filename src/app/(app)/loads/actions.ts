@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth";
-import { LOAD_STATUSES } from "@/types/database";
+import { LOAD_STATUSES, type LoadStatus } from "@/types/database";
 
 export type LoadFormState = { error: string | null };
 
@@ -40,6 +40,8 @@ const loadCoreSchema = z.object({
   pickup_zip: z.string().optional(),
   pickup_contact_name: z.string().optional(),
   pickup_contact_phone: z.string().optional(),
+  pickup_company: z.string().optional(),
+  pickup_contact_cell: z.string().optional(),
   pickup_ready_date: z.string().optional(),
   delivery_address: z.string().optional(),
   delivery_city: z.string().optional(),
@@ -47,6 +49,8 @@ const loadCoreSchema = z.object({
   delivery_zip: z.string().optional(),
   delivery_contact_name: z.string().optional(),
   delivery_contact_phone: z.string().optional(),
+  delivery_company: z.string().optional(),
+  delivery_contact_cell: z.string().optional(),
   delivery_eta: z.string().optional(),
   transport_type: z.enum(["open", "enclosed", "driveaway"]),
   distance_miles: numeric,
@@ -64,6 +68,8 @@ function coreValues(d: z.infer<typeof loadCoreSchema>) {
     pickup_zip: d.pickup_zip || null,
     pickup_contact_name: d.pickup_contact_name || null,
     pickup_contact_phone: d.pickup_contact_phone || null,
+    pickup_company: d.pickup_company || null,
+    pickup_contact_cell: d.pickup_contact_cell || null,
     pickup_ready_date: d.pickup_ready_date || null,
     delivery_address: d.delivery_address || null,
     delivery_city: d.delivery_city || null,
@@ -71,6 +77,8 @@ function coreValues(d: z.infer<typeof loadCoreSchema>) {
     delivery_zip: d.delivery_zip || null,
     delivery_contact_name: d.delivery_contact_name || null,
     delivery_contact_phone: d.delivery_contact_phone || null,
+    delivery_company: d.delivery_company || null,
+    delivery_contact_cell: d.delivery_contact_cell || null,
     delivery_eta: d.delivery_eta || null,
     transport_type: d.transport_type,
     distance_miles: d.distance_miles,
@@ -106,15 +114,14 @@ export async function createLoad(
     return { error: "At least one vehicle is required." };
   }
 
-  // "Save as quote" vs full order — whitelisted here, never a free-form
-  // status from the client.
-  const createAs = formData.get("create_as") === "quote" ? ("quote" as const) : ("booked" as const);
+  // Pipeline entry point: a priced record is a Quote, an unpriced one a Lead.
+  const initialStatus = parsedCore.data.customer_rate != null ? ("quote" as const) : ("lead" as const);
 
   const supabase = await createClient();
   const payload = {
     ...coreValues(parsedCore.data),
     customer_id,
-    status: createAs,
+    status: initialStatus,
     sales_owner_id: profile.role === "sales" ? profile.id : null,
   };
 
@@ -150,9 +157,9 @@ export async function createLoad(
 
   await supabase.from("load_status_history").insert({
     load_id: load.id,
-    status: createAs,
+    status: initialStatus,
     changed_by: profile.id,
-    note: createAs === "quote" ? "Quote created" : "Load created",
+    note: initialStatus === "quote" ? "Quote created" : "Lead created",
   });
 
   revalidatePath("/loads");
@@ -187,20 +194,20 @@ export async function updateLoad(
   const { error } = await supabase.from("loads").update(values).eq("id", id);
   if (error) return { error: error.message };
 
-  // "Save and convert to order" — only meaningful from `quote`, re-checked
-  // here rather than trusting the button's presence in the UI.
+  // "Save and convert to order" — only from lead/quote, re-checked here
+  // rather than trusting the button's presence in the UI.
   if (formData.get("convert") === "1") {
     const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
     const { data: current } = await supabase.from(table).select("status").eq("id", id).single();
-    if (current?.status === "quote") {
+    if (current?.status === "quote" || current?.status === "lead") {
       const { error: convertError } = await supabase
         .from("loads")
-        .update({ status: "booked" })
+        .update({ status: "ready" })
         .eq("id", id);
       if (!convertError) {
         await supabase.from("load_status_history").insert({
           load_id: id,
-          status: "booked",
+          status: "ready",
           changed_by: profile.id,
           note: "Converted to order",
         });
@@ -211,6 +218,214 @@ export async function updateLoad(
   revalidatePath(`/loads/${id}`);
   revalidatePath("/loads");
   redirect(`/loads/${id}`);
+}
+
+// ---- Pipeline transitions ----
+// Each re-reads the current status server-side and only advances from a
+// permitted state, so a stale/forged button can't drive an invalid move.
+
+async function transition(
+  id: string,
+  allowedFrom: LoadStatus[],
+  updates: Record<string, unknown>,
+  toStatus: LoadStatus,
+  note: string
+): Promise<{ ok: boolean; error?: string }> {
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const supabase = await createClient();
+  const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
+  const { data: current } = await supabase.from(table).select("status").eq("id", id).single();
+  if (!current) return { ok: false, error: "Not found." };
+  if (!allowedFrom.includes(current.status as LoadStatus)) {
+    return { ok: false, error: `Can't do that from ${current.status}.` };
+  }
+  const { error } = await supabase
+    .from("loads")
+    .update({ status: toStatus, ...updates })
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  await supabase
+    .from("load_status_history")
+    .insert({ load_id: id, status: toStatus, changed_by: profile.id, note });
+
+  revalidatePath(`/loads/${id}`);
+  revalidatePath("/loads");
+  revalidatePath("/leads");
+  revalidatePath("/quotes");
+  revalidatePath("/orders");
+  return { ok: true };
+}
+
+export async function convertToQuote(id: string): Promise<void> {
+  await transition(id, ["lead"], {}, "quote", "Priced — moved to Quotes");
+}
+
+// Standalone quote → order (the header button), separate from the edit-form
+// convert path above.
+export async function convertToOrder(id: string): Promise<void> {
+  await transition(id, ["lead", "quote"], {}, "ready", "Converted to order");
+}
+
+export async function postOrder(id: string, board: "cd" | "sd" | "all"): Promise<void> {
+  const now = new Date().toISOString();
+  const updates: Record<string, unknown> = {};
+  let toStatus: LoadStatus = "posted_cd";
+  if (board === "sd") {
+    updates.posted_to_super_dispatch_at = now;
+    toStatus = "posted_sd";
+  } else if (board === "all") {
+    updates.posted_to_central_dispatch_at = now;
+    updates.posted_to_super_dispatch_at = now;
+    toStatus = "posted_cd";
+  } else {
+    updates.posted_to_central_dispatch_at = now;
+    toStatus = "posted_cd";
+  }
+  const label = board === "all" ? "All boards" : board.toUpperCase();
+  await transition(id, ["ready", "booked"], updates, toStatus, `Posted to ${label}`);
+}
+
+export async function unpostOrder(id: string): Promise<void> {
+  await transition(
+    id,
+    ["posted_cd", "posted_sd", "dispatched"],
+    {
+      posted_to_central_dispatch_at: null,
+      posted_to_super_dispatch_at: null,
+      cd_external_id: null,
+      sd_external_id: null,
+    },
+    "ready",
+    "Unposted — back to Ready"
+  );
+}
+
+export async function dispatchOrder(id: string): Promise<void> {
+  await transition(
+    id,
+    ["posted_cd", "posted_sd", "ready", "booked"],
+    { dispatched_at: new Date().toISOString().slice(0, 10) },
+    "dispatched",
+    "Dispatched"
+  );
+}
+
+export async function markPickedUp(id: string): Promise<void> {
+  await transition(
+    id,
+    ["dispatched", "in_transit"],
+    { picked_up_at: new Date().toISOString().slice(0, 10) },
+    "picked_up",
+    "Picked up"
+  );
+}
+
+export async function markDelivered(id: string): Promise<void> {
+  await transition(
+    id,
+    ["picked_up", "in_transit", "dispatched"],
+    { delivered_at: new Date().toISOString().slice(0, 10) },
+    "delivered",
+    "Delivered"
+  );
+}
+
+export async function holdOrder(id: string): Promise<void> {
+  await transition(id, ["ready", "posted_cd", "posted_sd", "booked"], {}, "hold", "Put on hold");
+}
+
+export async function archiveOrder(id: string): Promise<void> {
+  await transition(
+    id,
+    ["delivered", "invoiced", "paid", "hold"],
+    {},
+    "archived",
+    "Archived"
+  );
+}
+
+export async function reactivateOrder(id: string): Promise<void> {
+  await transition(id, ["hold", "archived", "lost", "cancelled"], {}, "ready", "Reactivated");
+}
+
+// Resend the posting notification without changing status (no board API yet,
+// so this just records that we re-sent it).
+export async function resendPost(id: string): Promise<void> {
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const supabase = await createClient();
+  const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
+  const { data: current } = await supabase.from(table).select("status").eq("id", id).single();
+  if (!current) return;
+  await supabase.from("load_status_history").insert({
+    load_id: id,
+    status: current.status as LoadStatus,
+    changed_by: profile.id,
+    note: "Re-sent to load board",
+  });
+  revalidatePath(`/loads/${id}`);
+}
+
+export async function markLost(id: string, _prevState: LoadFormState, formData: FormData): Promise<LoadFormState> {
+  const reason = (formData.get("lost_reason") || "").toString().trim() || null;
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const supabase = await createClient();
+  const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
+  const { data: current } = await supabase.from(table).select("status").eq("id", id).single();
+  if (!current) return { error: "Not found." };
+  const { error } = await supabase
+    .from("loads")
+    .update({ status: "lost", lost_reason: reason })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  await supabase.from("load_status_history").insert({
+    load_id: id,
+    status: "lost",
+    changed_by: profile.id,
+    note: reason ? `Marked lost — ${reason}` : "Marked lost",
+  });
+  revalidatePath(`/loads/${id}`);
+  revalidatePath("/orders");
+  revalidatePath("/quotes");
+  return { error: null };
+}
+
+// Records a customer payment against the order (adds to received_amount).
+export async function recordPayment(
+  id: string,
+  _prevState: LoadFormState,
+  formData: FormData
+): Promise<LoadFormState> {
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const amount = Number((formData.get("amount") || "").toString());
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { error: "Enter a payment amount greater than 0." };
+  }
+  const supabase = await createClient();
+  const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
+  const { data: current } = await supabase
+    .from(table)
+    .select("received_amount, status")
+    .eq("id", id)
+    .single();
+  if (!current) return { error: "Not found." };
+
+  const newReceived = Number(current.received_amount ?? 0) + amount;
+  const { error } = await supabase
+    .from("loads")
+    .update({ received_amount: newReceived })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  const method = (formData.get("method") || "").toString().trim();
+  await supabase.from("load_status_history").insert({
+    load_id: id,
+    status: current.status as LoadStatus,
+    changed_by: profile.id,
+    note: `Payment received: $${amount}${method ? ` (${method})` : ""}`,
+  });
+  revalidatePath(`/loads/${id}`);
+  return { error: null };
 }
 
 const statusSchema = z.enum(LOAD_STATUSES as [string, ...string[]]);
@@ -243,30 +458,6 @@ export async function deleteLoad(id: string): Promise<void> {
   await requireRole("admin");
   const supabase = await createClient();
   await supabase.from("loads").delete().eq("id", id);
-  revalidatePath("/loads");
-}
-
-// msgplane's "Save and convert to order": a quote becomes a booked order.
-// Only valid from `quote` — re-checked server-side, not trusted from the UI.
-export async function convertToOrder(id: string): Promise<void> {
-  const profile = await requireRole("admin", "dispatcher", "sales");
-  const supabase = await createClient();
-
-  const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
-  const { data: load } = await supabase.from(table).select("id, status").eq("id", id).single();
-  if (!load || load.status !== "quote") return;
-
-  const { error } = await supabase.from("loads").update({ status: "booked" }).eq("id", id);
-  if (error) return;
-
-  await supabase.from("load_status_history").insert({
-    load_id: id,
-    status: "booked",
-    changed_by: profile.id,
-    note: "Converted to order",
-  });
-
-  revalidatePath(`/loads/${id}`);
   revalidatePath("/loads");
 }
 

@@ -5,12 +5,19 @@
 export type UserRole = "admin" | "dispatcher" | "sales";
 
 export type LoadStatus =
+  | "lead"
   | "quote"
+  | "ready"
+  | "posted_cd"
+  | "posted_sd"
   | "booked"
   | "dispatched"
   | "picked_up"
   | "in_transit"
   | "delivered"
+  | "hold"
+  | "archived"
+  | "lost"
   | "invoiced"
   | "paid"
   | "cancelled";
@@ -103,6 +110,20 @@ export interface Load {
   follow_up_at: string | null;
   follow_up_note: string | null;
   notes: string | null;
+  received_amount: number | null;
+  carrier_received: number | null;
+  cod_to_carrier: number | null;
+  date_signed: string | null;
+  dispatched_at: string | null;
+  picked_up_at: string | null;
+  delivered_at: string | null;
+  lost_reason: string | null;
+  campaign: string | null;
+  shipper_info: string | null;
+  pickup_company: string | null;
+  pickup_contact_cell: string | null;
+  delivery_company: string | null;
+  delivery_contact_cell: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -162,12 +183,19 @@ export interface MessageTemplate {
 }
 
 export const LOAD_STATUSES: LoadStatus[] = [
+  "lead",
   "quote",
+  "ready",
+  "posted_cd",
+  "posted_sd",
   "booked",
   "dispatched",
   "picked_up",
   "in_transit",
   "delivered",
+  "hold",
+  "archived",
+  "lost",
   "invoiced",
   "paid",
   "cancelled",

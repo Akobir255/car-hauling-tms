@@ -106,13 +106,10 @@ export function NewLoadForm({ customers }: { customers: Customer[] }) {
               </p>
             )}
           </div>
-          <div className="space-y-1.5">
-            <FieldLabel htmlFor="create_as">Create as</FieldLabel>
-            <NativeSelect id="create_as" name="create_as" defaultValue="booked" className="w-44">
-              <option value="booked">Order (booked)</option>
-              <option value="quote">Quote</option>
-            </NativeSelect>
-          </div>
+          <p className="self-end text-xs text-muted-foreground">
+            No rate yet → saved as a <strong>Lead</strong>. Add a rate below → saved as a{" "}
+            <strong>Quote</strong>.
+          </p>
         </div>
       </FormSection>
 
