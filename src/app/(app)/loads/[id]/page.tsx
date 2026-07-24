@@ -83,7 +83,7 @@ export default async function LoadDetailPage({
     <div className="mx-auto max-w-5xl">
       {/* Sticky summary: number, status, customer, money — visible while
           scrolling any part of the form. */}
-      <div className="sticky top-0 z-20 -mx-6 -mt-6 mb-6 border-b bg-background/95 px-6 py-3 backdrop-blur">
+      <div className="sticky top-14 z-20 -mx-6 -mt-6 mb-6 border-b bg-background/95 px-6 py-3 backdrop-blur lg:top-0">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-3 gap-y-1">
           <h1 className="text-lg font-semibold tabular-nums">{load.load_number}</h1>
           <StatusBadge status={load.status} />
