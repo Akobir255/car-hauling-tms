@@ -213,3 +213,90 @@ export async function deleteLoad(id: string): Promise<void> {
   await supabase.from("loads").delete().eq("id", id);
   revalidatePath("/loads");
 }
+
+// ---- Follow-ups ----
+
+const FOLLOW_UP_PRESET_DAYS: Record<string, number> = {
+  "1d": 1,
+  "2d": 2,
+  "3d": 3,
+  "1w": 7,
+};
+
+export async function setFollowUp(
+  id: string,
+  _prevState: LoadFormState,
+  formData: FormData
+): Promise<LoadFormState> {
+  await requireRole("admin", "dispatcher", "sales");
+
+  const preset = (formData.get("preset") || "").toString();
+  const custom = (formData.get("follow_up_at") || "").toString();
+  const note = (formData.get("follow_up_note") || "").toString().trim() || null;
+
+  let followUpAt: Date;
+  if (preset && FOLLOW_UP_PRESET_DAYS[preset]) {
+    followUpAt = new Date();
+    followUpAt.setDate(followUpAt.getDate() + FOLLOW_UP_PRESET_DAYS[preset]);
+  } else if (custom) {
+    followUpAt = new Date(custom);
+    if (Number.isNaN(followUpAt.getTime())) return { error: "Invalid follow-up date." };
+  } else {
+    return { error: "Pick a follow-up time." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("loads")
+    .update({ follow_up_at: followUpAt.toISOString(), follow_up_note: note })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/loads/${id}`);
+  revalidatePath("/dashboard");
+  return { error: null };
+}
+
+export async function clearFollowUp(id: string): Promise<void> {
+  await requireRole("admin", "dispatcher", "sales");
+  const supabase = await createClient();
+  await supabase
+    .from("loads")
+    .update({ follow_up_at: null, follow_up_note: null })
+    .eq("id", id);
+  revalidatePath(`/loads/${id}`);
+  revalidatePath("/dashboard");
+}
+
+// ---- Vehicles (edit after creation) ----
+
+export async function addVehicle(
+  loadId: string,
+  _prevState: LoadFormState,
+  formData: FormData
+): Promise<LoadFormState> {
+  await requireRole("admin", "dispatcher", "sales");
+
+  const year = (formData.get("year") || "").toString().trim();
+  const supabase = await createClient();
+  const { error } = await supabase.from("load_vehicles").insert({
+    load_id: loadId,
+    year: year ? Number(year) : null,
+    make: (formData.get("make") || "").toString().trim() || null,
+    model: (formData.get("model") || "").toString().trim() || null,
+    vin: (formData.get("vin") || "").toString().trim() || null,
+    vehicle_type: (formData.get("vehicle_type") || "sedan").toString(),
+    condition: (formData.get("condition") || "running").toString(),
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath(`/loads/${loadId}`);
+  return { error: null };
+}
+
+export async function removeVehicle(loadId: string, vehicleId: string): Promise<void> {
+  await requireRole("admin", "dispatcher", "sales");
+  const supabase = await createClient();
+  await supabase.from("load_vehicles").delete().eq("id", vehicleId).eq("load_id", loadId);
+  revalidatePath(`/loads/${loadId}`);
+}

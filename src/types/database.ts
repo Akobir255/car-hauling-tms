@@ -98,6 +98,8 @@ export interface Load {
   posted_to_super_dispatch_at: string | null;
   sd_external_id: string | null;
   cancelled_reason: string | null;
+  follow_up_at: string | null;
+  follow_up_note: string | null;
   created_at: string;
   updated_at: string;
 }

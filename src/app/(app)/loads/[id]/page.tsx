@@ -4,19 +4,21 @@ import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { StatusBadge } from "@/components/status-badge";
 import { DeleteButton } from "@/components/delete-button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { formatCurrency, formatDate, titleCase } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import type { Carrier, Customer, Load, LoadStatusHistoryEntry, LoadVehicle, Profile } from "@/types/database";
 import { LoadDetailsForm } from "./load-details-form";
 import { StatusForm } from "./status-form";
-import { updateLoad, updateLoadStatus, deleteLoad } from "../actions";
+import { FollowUpForm } from "./follow-up-form";
+import { VehiclesEditor } from "./vehicles-editor";
+import {
+  updateLoad,
+  updateLoadStatus,
+  deleteLoad,
+  setFollowUp,
+  clearFollowUp,
+  addVehicle,
+  removeVehicle,
+} from "../actions";
 
 export default async function LoadDetailPage({
   params,
@@ -60,6 +62,10 @@ export default async function LoadDetailPage({
   const boundUpdate = updateLoad.bind(null, load.id);
   const boundStatusUpdate = updateLoadStatus.bind(null, load.id);
   const boundDelete = deleteLoad.bind(null, load.id);
+  const boundSetFollowUp = setFollowUp.bind(null, load.id);
+  const boundClearFollowUp = clearFollowUp.bind(null, load.id);
+  const boundAddVehicle = addVehicle.bind(null, load.id);
+  const boundRemoveVehicle = removeVehicle.bind(null, load.id);
 
   return (
     <div className="max-w-4xl space-y-8">
@@ -103,32 +109,18 @@ export default async function LoadDetailPage({
         <StatusForm currentStatus={load.status} action={boundStatusUpdate} />
       </section>
 
+      <section className="space-y-3 rounded-md border p-4">
+        <h2 className="text-sm font-semibold">Follow-up</h2>
+        <FollowUpForm load={load} action={boundSetFollowUp} onClear={boundClearFollowUp} />
+      </section>
+
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Vehicles</h2>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Year</TableHead>
-              <TableHead>Make/Model</TableHead>
-              <TableHead>VIN</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Condition</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {((vehicles ?? []) as LoadVehicle[]).map((v) => (
-              <TableRow key={v.id}>
-                <TableCell>{v.year ?? "—"}</TableCell>
-                <TableCell>
-                  {v.make} {v.model}
-                </TableCell>
-                <TableCell className="text-muted-foreground">{v.vin || "—"}</TableCell>
-                <TableCell className="text-muted-foreground">{titleCase(v.vehicle_type)}</TableCell>
-                <TableCell className="text-muted-foreground">{titleCase(v.condition)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <VehiclesEditor
+          vehicles={(vehicles ?? []) as LoadVehicle[]}
+          addAction={boundAddVehicle}
+          removeAction={boundRemoveVehicle}
+        />
       </section>
 
       <section className="space-y-3">
