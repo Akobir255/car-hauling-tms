@@ -15,7 +15,7 @@ export type LoadStatus =
   | "paid"
   | "cancelled";
 
-export type TransportType = "open" | "enclosed";
+export type TransportType = "open" | "enclosed" | "driveaway";
 export type VehicleType = "sedan" | "suv" | "pickup" | "van" | "motorcycle" | "other";
 export type VehicleCondition = "running" | "non_running";
 
@@ -102,6 +102,7 @@ export interface Load {
   cancelled_reason: string | null;
   follow_up_at: string | null;
   follow_up_note: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -115,6 +116,7 @@ export interface LoadVehicle {
   vin: string | null;
   vehicle_type: VehicleType;
   condition: VehicleCondition;
+  tariff: number | null;
   notes: string | null;
   created_at: string;
 }

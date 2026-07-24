@@ -13,6 +13,7 @@ type VehicleRow = {
   vin: string;
   vehicle_type: string;
   condition: string;
+  tariff: string;
 };
 
 const EMPTY_ROW: VehicleRow = {
@@ -22,6 +23,7 @@ const EMPTY_ROW: VehicleRow = {
   vin: "",
   vehicle_type: "sedan",
   condition: "running",
+  tariff: "",
 };
 
 export function VehiclesFieldArray() {
@@ -36,7 +38,7 @@ export function VehiclesFieldArray() {
       <input type="hidden" name="vehicles_json" value={JSON.stringify(vehicles)} readOnly />
       {vehicles.map((v, i) => (
         <div key={i} className="grid grid-cols-12 items-end gap-2 rounded-md border p-3">
-          <div className="col-span-2 space-y-1">
+          <div className="col-span-1 space-y-1">
             <label className="text-xs text-muted-foreground">Year</label>
             <Input value={v.year} onChange={(e) => update(i, "year", e.target.value)} inputMode="numeric" />
           </div>
@@ -52,7 +54,7 @@ export function VehiclesFieldArray() {
             <label className="text-xs text-muted-foreground">VIN</label>
             <Input value={v.vin} onChange={(e) => update(i, "vin", e.target.value)} />
           </div>
-          <div className="col-span-2 space-y-1">
+          <div className="col-span-1 space-y-1">
             <label className="text-xs text-muted-foreground">Type</label>
             <NativeSelect value={v.vehicle_type} onChange={(e) => update(i, "vehicle_type", e.target.value)}>
               {VEHICLE_TYPES.map((t) => (
@@ -62,12 +64,16 @@ export function VehiclesFieldArray() {
               ))}
             </NativeSelect>
           </div>
-          <div className="col-span-1 space-y-1">
+          <div className="col-span-2 space-y-1">
             <label className="text-xs text-muted-foreground">Condition</label>
             <NativeSelect value={v.condition} onChange={(e) => update(i, "condition", e.target.value)}>
               <option value="running">Running</option>
               <option value="non_running">Non-running</option>
             </NativeSelect>
+          </div>
+          <div className="col-span-1 space-y-1">
+            <label className="text-xs text-muted-foreground">Tariff ($)</label>
+            <Input value={v.tariff} onChange={(e) => update(i, "tariff", e.target.value)} inputMode="decimal" />
           </div>
           <div className="col-span-1">
             <Button

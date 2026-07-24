@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { titleCase } from "@/lib/format";
+import { formatCurrency, titleCase } from "@/lib/format";
 import { VEHICLE_TYPES, type LoadVehicle } from "@/types/database";
 import type { LoadFormState } from "../actions";
 
@@ -47,12 +47,15 @@ export function VehiclesEditor({
   vehicles,
   addAction,
   removeAction,
+  tariffsAction,
 }: {
   vehicles: LoadVehicle[];
   addAction: (state: LoadFormState, formData: FormData) => Promise<LoadFormState>;
   removeAction: (vehicleId: string) => Promise<void>;
+  tariffsAction: (state: LoadFormState, formData: FormData) => Promise<LoadFormState>;
 }) {
   const [state, formAction, pending] = useActionState(addAction, initialState);
+  const [tariffState, tariffFormAction, tariffPending] = useActionState(tariffsAction, initialState);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -63,46 +66,76 @@ export function VehiclesEditor({
     }
   }, [state]);
 
+  useEffect(() => {
+    if (tariffState.error) toast.error(tariffState.error);
+    else if (tariffState !== initialState) toast.success("Tariffs saved.");
+  }, [tariffState]);
+
+  const totalTariff = vehicles.reduce((sum, v) => sum + (v.tariff ?? 0), 0);
+
   return (
     <div className="space-y-3">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Year</TableHead>
-            <TableHead>Make/Model</TableHead>
-            <TableHead>VIN</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Condition</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {vehicles.map((v) => (
-            <TableRow key={v.id}>
-              <TableCell>{v.year ?? "—"}</TableCell>
-              <TableCell>
-                {v.make} {v.model}
-              </TableCell>
-              <TableCell className="text-muted-foreground">{v.vin || "—"}</TableCell>
-              <TableCell className="text-muted-foreground">{titleCase(v.vehicle_type)}</TableCell>
-              <TableCell className="text-muted-foreground">{titleCase(v.condition)}</TableCell>
-              <TableCell className="text-right">
-                <RemoveVehicleButton
-                  onRemove={removeAction.bind(null, v.id)}
-                  disabled={vehicles.length === 1}
-                />
-              </TableCell>
-            </TableRow>
-          ))}
-          {vehicles.length === 0 && (
+      <form action={tariffFormAction} className="space-y-3">
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
-                No vehicles on this load.
-              </TableCell>
+              <TableHead>Year</TableHead>
+              <TableHead>Make/Model</TableHead>
+              <TableHead>VIN</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Condition</TableHead>
+              <TableHead>Tariff ($)</TableHead>
+              <TableHead />
             </TableRow>
-          )}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {vehicles.map((v) => (
+              <TableRow key={v.id}>
+                <TableCell>{v.year ?? "—"}</TableCell>
+                <TableCell>
+                  {v.make} {v.model}
+                </TableCell>
+                <TableCell className="text-muted-foreground">{v.vin || "—"}</TableCell>
+                <TableCell className="text-muted-foreground">{titleCase(v.vehicle_type)}</TableCell>
+                <TableCell className="text-muted-foreground">{titleCase(v.condition)}</TableCell>
+                <TableCell>
+                  <Input
+                    name={`tariff_${v.id}`}
+                    inputMode="decimal"
+                    defaultValue={v.tariff ?? ""}
+                    className="w-24"
+                    aria-label={`Tariff for ${v.year ?? ""} ${v.make ?? ""} ${v.model ?? ""}`}
+                  />
+                </TableCell>
+                <TableCell className="text-right">
+                  <RemoveVehicleButton
+                    onRemove={removeAction.bind(null, v.id)}
+                    disabled={vehicles.length === 1}
+                  />
+                </TableCell>
+              </TableRow>
+            ))}
+            {vehicles.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  No vehicles on this load.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+        {vehicles.length > 0 && (
+          <div className="flex items-center gap-4">
+            <Button type="submit" size="sm" variant="outline" disabled={tariffPending}>
+              {tariffPending ? "Saving..." : "Save tariffs"}
+            </Button>
+            <p className="text-sm">
+              <span className="text-muted-foreground">Total tariff: </span>
+              <span className="font-medium tabular-nums">{formatCurrency(totalTariff)}</span>
+            </p>
+          </div>
+        )}
+      </form>
 
       <form
         ref={formRef}
@@ -141,6 +174,10 @@ export function VehiclesEditor({
             <option value="running">Running</option>
             <option value="non_running">Non-running</option>
           </NativeSelect>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Tariff ($)</label>
+          <Input name="tariff" inputMode="decimal" className="w-24" />
         </div>
         <Button type="submit" size="sm" disabled={pending}>
           {pending ? "Adding..." : "Add vehicle"}

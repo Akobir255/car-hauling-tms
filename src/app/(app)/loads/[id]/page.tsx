@@ -16,10 +16,12 @@ import {
   updateLoadStatus,
   deleteLoad,
   duplicateLoad,
+  convertToOrder,
   setFollowUp,
   clearFollowUp,
   addVehicle,
   removeVehicle,
+  saveVehicleTariffs,
 } from "../actions";
 
 export default async function LoadDetailPage({
@@ -69,6 +71,8 @@ export default async function LoadDetailPage({
   const boundClearFollowUp = clearFollowUp.bind(null, load.id);
   const boundAddVehicle = addVehicle.bind(null, load.id);
   const boundRemoveVehicle = removeVehicle.bind(null, load.id);
+  const boundConvert = convertToOrder.bind(null, load.id);
+  const boundSaveTariffs = saveVehicleTariffs.bind(null, load.id);
 
   return (
     <div className="max-w-4xl space-y-8">
@@ -78,6 +82,13 @@ export default async function LoadDetailPage({
           <StatusBadge status={load.status} />
         </div>
         <div className="flex items-center gap-2">
+          {load.status === "quote" && (
+            <form action={boundConvert}>
+              <Button type="submit" size="sm">
+                Convert to Order
+              </Button>
+            </form>
+          )}
           <form action={boundDuplicate}>
             <Button type="submit" variant="outline" size="sm">
               Duplicate
@@ -130,6 +141,7 @@ export default async function LoadDetailPage({
           vehicles={(vehicles ?? []) as LoadVehicle[]}
           addAction={boundAddVehicle}
           removeAction={boundRemoveVehicle}
+          tariffsAction={boundSaveTariffs}
         />
       </section>
 

@@ -1,10 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
+import { RouteMap } from "@/components/route-map";
 import type { Carrier, Load } from "@/types/database";
 import type { LoadFormState } from "../actions";
 
@@ -22,9 +24,28 @@ export function LoadDetailsForm({
   canManageCarrier: boolean;
 }) {
   const [state, formAction, pending] = useActionState(action, initialState);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [distance, setDistance] = useState(load.distance_miles?.toString() ?? "");
+
+  // The map reads the LIVE field values, so a rep can retype cities and hit
+  // Calculate before ever saving.
+  const getEndpoints = useCallback(() => {
+    const form = formRef.current;
+    if (!form) return null;
+    const fd = new FormData(form);
+    const val = (name: string) => (fd.get(name) || "").toString().trim();
+    const origin = { city: val("pickup_city"), state: val("pickup_state"), zip: val("pickup_zip") };
+    const destination = {
+      city: val("delivery_city"),
+      state: val("delivery_state"),
+      zip: val("delivery_zip"),
+    };
+    if ((!origin.city && !origin.zip) || (!destination.city && !destination.zip)) return null;
+    return { origin, destination };
+  }, []);
 
   return (
-    <form action={formAction} className="space-y-8">
+    <form ref={formRef} action={formAction} className="space-y-8">
       <section className="space-y-4">
         <h2 className="text-sm font-semibold text-muted-foreground">Pickup</h2>
         <div className="grid grid-cols-4 gap-4">
@@ -108,6 +129,11 @@ export function LoadDetailsForm({
       </section>
 
       <section className="space-y-4">
+        <h2 className="text-sm font-semibold text-muted-foreground">Route & mileage</h2>
+        <RouteMap getEndpoints={getEndpoints} onMiles={(mi) => setDistance(String(mi))} />
+      </section>
+
+      <section className="space-y-4">
         <h2 className="text-sm font-semibold text-muted-foreground">Transport & rate</h2>
         <div className="grid grid-cols-4 gap-4">
           <div className="space-y-1.5">
@@ -115,11 +141,18 @@ export function LoadDetailsForm({
             <NativeSelect id="transport_type" name="transport_type" defaultValue={load.transport_type}>
               <option value="open">Open</option>
               <option value="enclosed">Enclosed</option>
+              <option value="driveaway">Driveaway</option>
             </NativeSelect>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="distance_miles">Distance (mi)</Label>
-            <Input id="distance_miles" name="distance_miles" inputMode="numeric" defaultValue={load.distance_miles ?? ""} />
+            <Input
+              id="distance_miles"
+              name="distance_miles"
+              inputMode="numeric"
+              value={distance}
+              onChange={(e) => setDistance(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="customer_rate">Customer rate ($)</Label>
@@ -134,6 +167,16 @@ export function LoadDetailsForm({
             <Input id="balance_due" name="balance_due" inputMode="decimal" defaultValue={load.balance_due ?? ""} />
           </div>
         </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-sm font-semibold text-muted-foreground">Notes from shipper</h2>
+        <Textarea
+          name="notes"
+          rows={3}
+          defaultValue={load.notes ?? ""}
+          placeholder="Gate codes, flexible dates, keys location..."
+        />
       </section>
 
       {canManageCarrier && (

@@ -9,13 +9,23 @@ import { LOAD_STATUSES } from "@/types/database";
 
 export type LoadFormState = { error: string | null };
 
+// "" from an untouched form field must become null, not Number("") === 0.
+const emptyToNullNumber = z.preprocess(
+  (v) => (v === "" || v == null ? null : Number(v)),
+  z.number().nullable()
+);
+
 const vehicleSchema = z.object({
-  year: z.coerce.number().int().optional().nullable(),
+  year: z.preprocess(
+    (v) => (v === "" || v == null ? null : Number(v)),
+    z.number().int().nullable()
+  ).optional(),
   make: z.string().optional(),
   model: z.string().optional(),
   vin: z.string().optional(),
   vehicle_type: z.string().optional(),
   condition: z.string().optional(),
+  tariff: emptyToNullNumber.optional(),
 });
 
 const numeric = z
@@ -38,11 +48,12 @@ const loadCoreSchema = z.object({
   delivery_contact_name: z.string().optional(),
   delivery_contact_phone: z.string().optional(),
   delivery_eta: z.string().optional(),
-  transport_type: z.enum(["open", "enclosed"]),
+  transport_type: z.enum(["open", "enclosed", "driveaway"]),
   distance_miles: numeric,
   customer_rate: numeric,
   deposit_amount: numeric,
   balance_due: numeric,
+  notes: z.string().optional(),
 });
 
 function coreValues(d: z.infer<typeof loadCoreSchema>) {
@@ -66,6 +77,7 @@ function coreValues(d: z.infer<typeof loadCoreSchema>) {
     customer_rate: d.customer_rate,
     deposit_amount: d.deposit_amount,
     balance_due: d.balance_due,
+    notes: d.notes || null,
   };
 }
 
@@ -94,11 +106,15 @@ export async function createLoad(
     return { error: "At least one vehicle is required." };
   }
 
+  // "Save as quote" vs full order — whitelisted here, never a free-form
+  // status from the client.
+  const createAs = formData.get("create_as") === "quote" ? ("quote" as const) : ("booked" as const);
+
   const supabase = await createClient();
   const payload = {
     ...coreValues(parsedCore.data),
     customer_id,
-    status: "booked" as const,
+    status: createAs,
     sales_owner_id: profile.role === "sales" ? profile.id : null,
   };
 
@@ -125,15 +141,19 @@ export async function createLoad(
       vin: v.vin || null,
       vehicle_type: v.vehicle_type || "sedan",
       condition: v.condition || "running",
+      tariff: v.tariff ?? null,
     }))
   );
   if (vehiclesError) {
     return { error: `Load created but vehicles failed to save: ${vehiclesError.message}` };
   }
 
-  await supabase
-    .from("load_status_history")
-    .insert({ load_id: load.id, status: "booked", changed_by: profile.id, note: "Load created" });
+  await supabase.from("load_status_history").insert({
+    load_id: load.id,
+    status: createAs,
+    changed_by: profile.id,
+    note: createAs === "quote" ? "Quote created" : "Load created",
+  });
 
   revalidatePath("/loads");
   redirect(`/loads/${load.id}`);
@@ -205,6 +225,59 @@ export async function deleteLoad(id: string): Promise<void> {
   revalidatePath("/loads");
 }
 
+// msgplane's "Save and convert to order": a quote becomes a booked order.
+// Only valid from `quote` — re-checked server-side, not trusted from the UI.
+export async function convertToOrder(id: string): Promise<void> {
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const supabase = await createClient();
+
+  const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
+  const { data: load } = await supabase.from(table).select("id, status").eq("id", id).single();
+  if (!load || load.status !== "quote") return;
+
+  const { error } = await supabase.from("loads").update({ status: "booked" }).eq("id", id);
+  if (error) return;
+
+  await supabase.from("load_status_history").insert({
+    load_id: id,
+    status: "booked",
+    changed_by: profile.id,
+    note: "Converted to order",
+  });
+
+  revalidatePath(`/loads/${id}`);
+  revalidatePath("/loads");
+}
+
+// Per-vehicle tariffs, saved in one submit: inputs are named tariff_<vehicleId>.
+export async function saveVehicleTariffs(
+  loadId: string,
+  _prevState: LoadFormState,
+  formData: FormData
+): Promise<LoadFormState> {
+  await requireRole("admin", "dispatcher", "sales");
+  const supabase = await createClient();
+
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("tariff_")) continue;
+    const vehicleId = key.slice("tariff_".length);
+    const raw = value.toString().trim();
+    const tariff = raw === "" ? null : Number(raw);
+    if (tariff !== null && (Number.isNaN(tariff) || tariff < 0)) {
+      return { error: "Tariff must be a positive number." };
+    }
+    const { error } = await supabase
+      .from("load_vehicles")
+      .update({ tariff })
+      .eq("id", vehicleId)
+      .eq("load_id", loadId);
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath(`/loads/${loadId}`);
+  return { error: null };
+}
+
 // Duplicate a load: everything copies over, the new load gets the next
 // sequential number WITHOUT the hyphen (msgplane convention for duplicates:
 // 22222222-US -> 22222223US).
@@ -237,7 +310,7 @@ export async function duplicateLoad(id: string): Promise<void> {
 
   const { data: vehicles } = await supabase
     .from("load_vehicles")
-    .select("year, make, model, vin, vehicle_type, condition, notes")
+    .select("year, make, model, vin, vehicle_type, condition, tariff, notes")
     .eq("load_id", id);
   if (vehicles && vehicles.length > 0) {
     await supabase
@@ -320,6 +393,7 @@ export async function addVehicle(
   await requireRole("admin", "dispatcher", "sales");
 
   const year = (formData.get("year") || "").toString().trim();
+  const tariffRaw = (formData.get("tariff") || "").toString().trim();
   const supabase = await createClient();
   const { error } = await supabase.from("load_vehicles").insert({
     load_id: loadId,
@@ -329,6 +403,7 @@ export async function addVehicle(
     vin: (formData.get("vin") || "").toString().trim() || null,
     vehicle_type: (formData.get("vehicle_type") || "sedan").toString(),
     condition: (formData.get("condition") || "running").toString(),
+    tariff: tariffRaw && !Number.isNaN(Number(tariffRaw)) ? Number(tariffRaw) : null,
   });
   if (error) return { error: error.message };
 

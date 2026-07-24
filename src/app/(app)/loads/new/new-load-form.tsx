@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
 import type { Customer } from "@/types/database";
 import type { LoadFormState } from "../actions";
 import { createLoad } from "../actions";
@@ -114,10 +115,18 @@ export function NewLoadForm({ customers }: { customers: Customer[] }) {
         <h2 className="text-sm font-semibold text-muted-foreground">Transport & rate</h2>
         <div className="grid grid-cols-4 gap-4">
           <div className="space-y-1.5">
+            <Label htmlFor="create_as">Create as</Label>
+            <NativeSelect id="create_as" name="create_as" defaultValue="booked">
+              <option value="booked">Order (booked)</option>
+              <option value="quote">Quote</option>
+            </NativeSelect>
+          </div>
+          <div className="space-y-1.5">
             <Label htmlFor="transport_type">Transport type</Label>
             <NativeSelect id="transport_type" name="transport_type" defaultValue="open">
               <option value="open">Open</option>
               <option value="enclosed">Enclosed</option>
+              <option value="driveaway">Driveaway</option>
             </NativeSelect>
           </div>
           <div className="space-y-1.5">
@@ -138,6 +147,15 @@ export function NewLoadForm({ customers }: { customers: Customer[] }) {
       <section className="space-y-4">
         <h2 className="text-sm font-semibold text-muted-foreground">Vehicles *</h2>
         <VehiclesFieldArray />
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-sm font-semibold text-muted-foreground">Notes from shipper</h2>
+        <Textarea
+          name="notes"
+          rows={3}
+          placeholder="Gate codes, flexible dates, keys location..."
+        />
       </section>
 
       {state.error && <p className="text-sm text-destructive">{state.error}</p>}
