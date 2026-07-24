@@ -43,15 +43,15 @@ export function OrderActionBar({ loadId, actions }: { loadId: string; actions: O
   const has = (a: OrderAction) => actions.includes(a);
 
   return (
-    <div className="flex flex-col items-end gap-2">
+    <div className="flex flex-col items-end gap-2 [&_button]:h-8 [&_button]:text-xs [&_button]:font-semibold [&_button]:uppercase [&_button]:tracking-wide">
       <div className="flex flex-wrap items-center justify-end gap-2">
         {has("convert_to_quote") && (
-          <Button size="sm" disabled={pending} onClick={() => run(() => convertToQuote(loadId))}>
+          <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => convertToQuote(loadId))}>
             Move to Quote
           </Button>
         )}
         {has("convert_to_order") && (
-          <Button size="sm" disabled={pending} onClick={() => run(() => convertToOrder(loadId))}>
+          <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => convertToOrder(loadId))}>
             Convert to Order
           </Button>
         )}
@@ -65,22 +65,22 @@ export function OrderActionBar({ loadId, actions }: { loadId: string; actions: O
           </Button>
         )}
         {has("post") && (
-          <Button size="sm" onClick={() => setOpenPanel(openPanel === "post" ? null : "post")}>
+          <Button size="sm" variant="secondary" onClick={() => setOpenPanel(openPanel === "post" ? null : "post")}>
             Post
           </Button>
         )}
         {has("dispatch") && (
-          <Button size="sm" disabled={pending} onClick={() => run(() => dispatchOrder(loadId))}>
+          <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => dispatchOrder(loadId))}>
             Dispatch
           </Button>
         )}
         {has("mark_picked_up") && (
-          <Button size="sm" disabled={pending} onClick={() => run(() => markPickedUp(loadId))}>
+          <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => markPickedUp(loadId))}>
             Mark Picked-Up
           </Button>
         )}
         {has("mark_delivered") && (
-          <Button size="sm" disabled={pending} onClick={() => run(() => markDelivered(loadId))}>
+          <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => markDelivered(loadId))}>
             Mark Delivered
           </Button>
         )}
@@ -110,7 +110,7 @@ export function OrderActionBar({ loadId, actions }: { loadId: string; actions: O
           </Button>
         )}
         {has("reactivate") && (
-          <Button size="sm" disabled={pending} onClick={() => run(() => reactivateOrder(loadId))}>
+          <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => reactivateOrder(loadId))}>
             Reactivate
           </Button>
         )}
@@ -129,7 +129,7 @@ export function OrderActionBar({ loadId, actions }: { loadId: string; actions: O
       {openPanel === "post" && (
         <div className="flex items-center gap-2 rounded-md border bg-card p-2 shadow-sm">
           <span className="text-xs text-muted-foreground">Post to:</span>
-          <Button size="sm" disabled={pending} onClick={() => run(() => postOrder(loadId, "all"))}>
+          <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => postOrder(loadId, "all"))}>
             All
           </Button>
           <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => postOrder(loadId, "cd"))}>
