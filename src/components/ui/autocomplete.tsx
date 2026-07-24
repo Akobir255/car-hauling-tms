@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 // A free-text input with async suggestions. The value is always what's typed —
-// suggestions just help fill it (make/model), they don't constrain it. Debounced;
-// fetchOptions is read through a ref so parent re-renders don't reset the timer.
+// suggestions just help fill it (make/model), they don't constrain it.
+// Debounced; full keyboard support (arrows/Enter/Escape) and combobox ARIA.
 export function Autocomplete({
   value,
   onValueChange,
@@ -23,6 +24,8 @@ export function Autocomplete({
 }) {
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<string[]>([]);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const listId = useId();
   const boxRef = useRef<HTMLDivElement>(null);
   // Kept in a ref (updated in an effect, not during render) so parent
   // re-renders with a new fetchOptions closure don't reset the debounce.
@@ -38,14 +41,23 @@ export function Autocomplete({
     // in the effect body.
     const timer = setTimeout(async () => {
       if (q.length < 2) {
-        if (active) setOptions([]);
+        if (active) {
+          setOptions([]);
+          setActiveIndex(-1);
+        }
         return;
       }
       try {
         const opts = await fetchRef.current(q);
-        if (active) setOptions(opts);
+        if (active) {
+          setOptions(opts);
+          setActiveIndex(-1);
+        }
       } catch {
-        if (active) setOptions([]);
+        if (active) {
+          setOptions([]);
+          setActiveIndex(-1);
+        }
       }
     }, 180);
     return () => {
@@ -62,31 +74,78 @@ export function Autocomplete({
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
+  const select = (opt: string) => {
+    onValueChange(opt);
+    setOpen(false);
+    setActiveIndex(-1);
+  };
+
+  const showList = open && options.length > 0;
+
   return (
     <div ref={boxRef} className="relative">
       <Input
         {...inputProps}
+        role="combobox"
+        aria-expanded={showList}
+        aria-controls={listId}
+        aria-activedescendant={activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined}
+        aria-autocomplete="list"
         value={value}
         onChange={(e) => {
           onValueChange(e.target.value);
           setOpen(true);
         }}
         onFocus={() => value.trim().length >= 2 && setOpen(true)}
+        onKeyDown={(e) => {
+          if (!showList) {
+            if (e.key === "ArrowDown" && options.length > 0) {
+              e.preventDefault();
+              setOpen(true);
+              setActiveIndex(0);
+            }
+            return;
+          }
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setActiveIndex((i) => (i + 1) % options.length);
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setActiveIndex((i) => (i <= 0 ? options.length - 1 : i - 1));
+          } else if (e.key === "Enter") {
+            // Only intercept Enter while a suggestion is highlighted, so the
+            // form's normal Enter behavior is otherwise untouched.
+            if (activeIndex >= 0) {
+              e.preventDefault();
+              select(options[activeIndex]);
+            }
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            setOpen(false);
+            setActiveIndex(-1);
+          }
+        }}
         placeholder={placeholder}
         className={className}
         autoComplete="off"
       />
-      {open && options.length > 0 && (
-        <ul className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-md border bg-popover p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10">
-          {options.map((opt) => (
-            <li key={opt}>
+      {showList && (
+        <ul
+          id={listId}
+          role="listbox"
+          className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-md border bg-popover p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10"
+        >
+          {options.map((opt, i) => (
+            <li key={opt} id={`${listId}-${i}`} role="option" aria-selected={i === activeIndex}>
               <button
                 type="button"
-                className="block w-full truncate rounded px-2 py-1 text-left hover:bg-accent hover:text-accent-foreground"
-                onClick={() => {
-                  onValueChange(opt);
-                  setOpen(false);
-                }}
+                tabIndex={-1}
+                className={cn(
+                  "block w-full truncate rounded px-2 py-1 text-left hover:bg-accent hover:text-accent-foreground",
+                  i === activeIndex && "bg-accent text-accent-foreground"
+                )}
+                onMouseEnter={() => setActiveIndex(i)}
+                onClick={() => select(opt)}
               >
                 {opt}
               </button>

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Truck } from "lucide-react";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -38,9 +39,17 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
 
   return (
     <div className="mx-auto max-w-lg space-y-6 px-4 py-10">
-      <div className="text-center">
-        <h1 className="text-xl font-bold">Vehicle Transport Agreement</h1>
-        <p className="text-sm text-muted-foreground">Order {load.load_number}</p>
+      <div className="space-y-3 text-center">
+        <span className="mx-auto flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+          <Truck className="size-6" aria-hidden="true" />
+        </span>
+        <div className="space-y-1">
+          <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            US Star Trucking
+          </p>
+          <h1 className="text-2xl font-bold tracking-tight">Vehicle Transport Agreement</h1>
+          <p className="text-sm text-muted-foreground">Order {load.load_number}</p>
+        </div>
       </div>
 
       <div className="rounded-lg border bg-card p-5 shadow-sm">

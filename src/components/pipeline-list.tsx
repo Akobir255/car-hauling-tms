@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Car, Mail, MapPin, Phone, User } from "lucide-react";
+import { CalendarCheck2, Car, Inbox, Mail, MapPin, Phone, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { SelectionProvider } from "@/components/pipeline/selection-context";
 import { RowCheckbox, SelectAllCheckbox } from "@/components/pipeline/row-checkbox";
 import { BulkActionBar } from "@/components/pipeline/bulk-action-bar";
+import { EmptyState } from "@/components/empty-state";
 import {
   LEAD_STATUSES,
   LEAD_TABS,
@@ -347,8 +348,25 @@ export async function PipelineList({
             })}
             {loads.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-3 py-12 text-center text-base text-muted-foreground">
-                  Nothing here yet.
+                <td colSpan={10}>
+                  {activeTab.followUpDue ? (
+                    <EmptyState
+                      icon={CalendarCheck2}
+                      title="Queue clear"
+                      hint="No follow-ups due today. Anything you schedule lands here on its day."
+                    />
+                  ) : (
+                    <EmptyState
+                      icon={Inbox}
+                      title="Nothing here yet"
+                      hint={`New ${stage}s will show up in this list.`}
+                      action={
+                        <Button size="sm" render={<Link href="/loads/new" />}>
+                          New {stage}
+                        </Button>
+                      }
+                    />
+                  )}
                 </td>
               </tr>
             )}
