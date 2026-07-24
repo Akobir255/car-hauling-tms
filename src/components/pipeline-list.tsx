@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { formatCurrency, formatDate, formatPhone } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { SelectionProvider } from "@/components/pipeline/selection-context";
+import { RowCheckbox, SelectAllCheckbox } from "@/components/pipeline/row-checkbox";
+import { BulkActionBar } from "@/components/pipeline/bulk-action-bar";
 import {
   LEAD_STATUSES,
   ORDER_STATUSES,
@@ -109,7 +112,13 @@ export async function PipelineList({
     };
   };
 
+  const repsForBar = ((reps ?? []) as Pick<Profile, "id" | "full_name" | "email">[]).map((r) => ({
+    id: r.id,
+    name: r.full_name || r.email,
+  }));
+
   return (
+    <SelectionProvider>
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -161,7 +170,9 @@ export async function PipelineList({
         <table className="w-full border-collapse text-[15px]">
           <thead>
             <tr className="border-b bg-muted/50 text-left text-sm font-bold uppercase tracking-wide text-foreground">
-              <th className="w-8 px-2 py-3"></th>
+              <th className="w-8 px-2 py-3">
+                <SelectAllCheckbox ids={loadIds} />
+              </th>
               <th className="px-3 py-3">ID</th>
               <th className="px-3 py-3">Converted</th>
               <th className="px-3 py-3">Notes</th>
@@ -182,7 +193,7 @@ export async function PipelineList({
               return (
                 <tr key={load.id} className="border-b align-top last:border-b-0 hover:bg-muted/40">
                   <td className="px-2 py-4">
-                    <input type="checkbox" aria-label={`Select ${load.load_number}`} className="mt-1" />
+                    <RowCheckbox id={load.id} label={`Select ${load.load_number}`} />
                   </td>
                   <td className="px-3 py-4">
                     <Link
@@ -305,6 +316,9 @@ export async function PipelineList({
           </tbody>
         </table>
       </div>
+
+      <BulkActionBar reps={repsForBar} canReassign={canSeeMargin} />
     </div>
+    </SelectionProvider>
   );
 }

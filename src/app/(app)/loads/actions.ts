@@ -745,3 +745,88 @@ export async function removeVehicle(loadId: string, vehicleId: string): Promise<
   await supabase.from("load_vehicles").delete().eq("id", vehicleId).eq("load_id", loadId);
   revalidatePath(`/loads/${loadId}`);
 }
+
+// ---- Bulk actions (list selection) ----
+// Applied to whatever rows are checked in the Leads/Quotes/Orders list.
+
+function revalidatePipeline() {
+  revalidatePath("/leads");
+  revalidatePath("/quotes");
+  revalidatePath("/orders");
+  revalidatePath("/dashboard");
+}
+
+export async function bulkReassign(loadIds: string[], repId: string): Promise<void> {
+  await requireRole("admin", "dispatcher");
+  if (loadIds.length === 0) return;
+  const supabase = await createClient();
+  await supabase.from("loads").update({ sales_owner_id: repId || null }).in("id", loadIds);
+  revalidatePipeline();
+}
+
+export async function bulkSetFollowUp(loadIds: string[], preset: string): Promise<void> {
+  await requireRole("admin", "dispatcher", "sales");
+  const days = FOLLOW_UP_PRESET_DAYS[preset];
+  if (loadIds.length === 0 || !days) return;
+  const followUpAt = new Date();
+  followUpAt.setDate(followUpAt.getDate() + days);
+  const supabase = await createClient();
+  await supabase
+    .from("loads")
+    .update({ follow_up_at: followUpAt.toISOString() })
+    .in("id", loadIds);
+  revalidatePipeline();
+}
+
+export async function bulkSms(
+  loadIds: string[],
+  body: string
+): Promise<{ sent: number; failed: number; skipped: number }> {
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const text = body.trim();
+  if (loadIds.length === 0 || !text) return { sent: 0, failed: 0, skipped: 0 };
+
+  const supabase = await createClient();
+  const { data: loads } = await supabase.from("loads").select("id, customer_id").in("id", loadIds);
+  const customerIds = [...new Set((loads ?? []).map((l) => l.customer_id).filter(Boolean))];
+  const { data: customers } = customerIds.length
+    ? await supabase.from("customers").select("id, phone, sms_opt_out").in("id", customerIds)
+    : { data: [] as { id: string; phone: string | null; sms_opt_out: boolean }[] };
+  const custById = new Map((customers ?? []).map((c) => [c.id, c]));
+
+  const ready = isSmsConfigured();
+  let sent = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (const l of loads ?? []) {
+    const c = custById.get(l.customer_id);
+    const to = toE164(c?.phone);
+    if (!c || c.sms_opt_out || !to || !ready) {
+      skipped++;
+      continue;
+    }
+    let status = "sent";
+    try {
+      await sendSms(to, text);
+      sent++;
+    } catch (err) {
+      console.error(`Bulk SMS to ${to} failed:`, err);
+      status = "failed";
+      failed++;
+    }
+    await supabase.from("messages").insert({
+      customer_id: c.id,
+      load_id: l.id,
+      channel: "sms",
+      direction: "outbound",
+      to_addr: to,
+      body: text,
+      status,
+      sent_by: profile.id,
+    });
+  }
+
+  revalidatePath("/messages");
+  return { sent, failed, skipped };
+}
