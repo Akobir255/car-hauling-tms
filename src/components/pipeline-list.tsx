@@ -214,17 +214,26 @@ export async function PipelineList({
             </tr>
           </thead>
           <tbody>
-            {loads.map((load) => {
+            {loads.map((load, rowIndex) => {
               const customer = customerById.get(load.customer_id);
               const rp = load.sales_owner_id ? repById.get(load.sales_owner_id) : undefined;
               const loadVehicles = vehiclesByLoad.get(load.id) ?? [];
               const created = dateTime(load.created_at);
               return (
-                <tr key={load.id} className="border-b align-top last:border-b-0 hover:bg-muted/40">
+                // Banded rows + a firm rule between records, so a long list
+                // reads as separate rows rather than one block of text.
+                <tr
+                  key={load.id}
+                  className={cn(
+                    "border-b border-border align-top transition-colors last:border-b-0 hover:bg-accent/60",
+                    rowIndex % 2 === 1 && "bg-muted/40"
+                  )}
+                >
                   <td className="px-2 py-4">
                     <RowCheckbox id={load.id} label={`Select ${load.load_number}`} />
                   </td>
-                  <td className="px-3 py-4">
+                  {/* Accent rail marks where each record starts. */}
+                  <td className="px-3 py-4 shadow-[inset_3px_0_0_var(--color-primary)]">
                     <Link
                       href={`/loads/${load.id}`}
                       className="font-semibold tabular-nums text-primary hover:underline"

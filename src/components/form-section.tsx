@@ -19,10 +19,11 @@ export function FormSection({
 }) {
   return (
     <section className={cn("overflow-hidden rounded-lg border bg-card shadow-sm", className)}>
-      <div className="flex items-center gap-2.5 border-b bg-muted/50 px-5 py-3">
-        <span className="h-4 w-1 rounded-full bg-primary" aria-hidden="true" />
-        <Icon className="size-4 text-primary" aria-hidden="true" />
-        <h2 className="text-sm font-semibold tracking-tight text-foreground">{title}</h2>
+      {/* Solid title bar — each field group announces itself, msgplane-style,
+          so a long form never reads as one undivided sheet. */}
+      <div className="flex items-center gap-2.5 bg-primary px-5 py-2.5 text-primary-foreground">
+        <Icon className="size-4" aria-hidden="true" />
+        <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
         {aside && <div className="ml-auto">{aside}</div>}
       </div>
       <div className="p-5">{children}</div>
