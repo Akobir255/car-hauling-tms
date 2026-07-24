@@ -72,13 +72,26 @@ export function stageOf(status: LoadStatus): PipelineStage {
 }
 
 // msgplane-style Orders sub-status tabs. `statuses: null` = the default
-// "Orders" tab (active, unposted work queue). `notSigned` is derived.
+// "Orders" tab (active, unposted work queue). `notSigned` is derived;
+// `followUpDue` filters to rows whose follow-up is due today or overdue.
 export type OrderTab = {
   key: string;
   label: string;
   statuses?: LoadStatus[];
   notSigned?: boolean;
+  followUpDue?: boolean;
 };
+
+// The reps' working queue on Leads and Quotes — msgplane's "Follow-up Today".
+export const LEAD_TABS: OrderTab[] = [
+  { key: "leads", label: "Leads", statuses: ["lead"] },
+  { key: "followup", label: "Follow-up Today", statuses: ["lead"], followUpDue: true },
+];
+
+export const QUOTE_TABS: OrderTab[] = [
+  { key: "quotes", label: "Quotes", statuses: ["quote"] },
+  { key: "followup", label: "Follow-up Today", statuses: ["quote"], followUpDue: true },
+];
 
 export const ORDER_TABS: OrderTab[] = [
   { key: "orders", label: "Orders", statuses: ["ready", "booked"] },

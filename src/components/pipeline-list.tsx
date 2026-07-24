@@ -11,15 +11,19 @@ import { RowCheckbox, SelectAllCheckbox } from "@/components/pipeline/row-checkb
 import { BulkActionBar } from "@/components/pipeline/bulk-action-bar";
 import {
   LEAD_STATUSES,
+  LEAD_TABS,
   ORDER_STATUSES,
   ORDER_TABS,
   QUOTE_STATUSES,
+  QUOTE_TABS,
+  type OrderTab,
   type PipelineStage,
 } from "@/lib/order-status";
 import type { Load, LoadStatus, LoadVehicle, Profile } from "@/types/database";
 
 // Shared list for Leads / Quotes / Orders — one query path, msgplane column
-// layout. Orders get the sub-status tab bar; leads and quotes don't.
+// layout. Orders get sub-status tabs; Leads and Quotes get the working-queue
+// pair (All | Follow-up Today).
 export async function PipelineList({
   stage,
   title,
@@ -40,33 +44,52 @@ export async function PipelineList({
 
   const stageStatuses: LoadStatus[] =
     stage === "lead" ? LEAD_STATUSES : stage === "quote" ? QUOTE_STATUSES : ORDER_STATUSES;
+  const tabs: OrderTab[] =
+    stage === "order" ? ORDER_TABS : stage === "quote" ? QUOTE_TABS : LEAD_TABS;
+  const activeTab = tabs.find((t) => t.key === tab) ?? tabs[0];
 
-  const activeTab = stage === "order" ? ORDER_TABS.find((t) => t.key === tab) ?? ORDER_TABS[0] : null;
+  // "Due" = follow-up scheduled for any time up to the end of today (UTC),
+  // which includes everything overdue.
+  const endOfToday = new Date();
+  endOfToday.setUTCHours(23, 59, 59, 999);
+  const endOfTodayIso = endOfToday.toISOString();
 
-  let query = supabase.from(table).select("*").order("created_at", { ascending: false }).limit(200);
-  if (activeTab) {
-    if (activeTab.notSigned) query = query.in("status", ORDER_STATUSES).is("date_signed", null);
-    else query = query.in("status", activeTab.statuses ?? stageStatuses);
+  let query = supabase.from(table).select("*").limit(200);
+  if (activeTab.notSigned) {
+    query = query.in("status", ORDER_STATUSES).is("date_signed", null);
   } else {
-    query = query.in("status", stageStatuses);
+    query = query.in("status", activeTab.statuses ?? stageStatuses);
+  }
+  if (activeTab.followUpDue) {
+    // Oldest follow-up first — that's the order reps should work the queue in.
+    query = query
+      .not("follow_up_at", "is", null)
+      .lte("follow_up_at", endOfTodayIso)
+      .order("follow_up_at", { ascending: true });
+  } else {
+    query = query.order("created_at", { ascending: false });
   }
   if (canSeeMargin && rep) query = query.eq("sales_owner_id", rep);
 
-  let countQuery = supabase.from(table).select("status, date_signed").in("status", ORDER_STATUSES);
+  // One slim query feeds every tab count for this stage.
+  let countQuery = supabase
+    .from(table)
+    .select("status, date_signed, follow_up_at")
+    .in("status", stageStatuses);
   if (canSeeMargin && rep) countQuery = countQuery.eq("sales_owner_id", rep);
 
-  const [{ data, error }, { data: countRows }] = await Promise.all([
-    query,
-    stage === "order"
-      ? countQuery
-      : Promise.resolve({ data: [] as { status: LoadStatus; date_signed: string | null }[] }),
-  ]);
+  const [{ data, error }, { data: countRows }] = await Promise.all([query, countQuery]);
   const loads = (data ?? []) as Load[];
 
-  const tabCount = (t: (typeof ORDER_TABS)[number]) => {
-    const rows = (countRows ?? []) as { status: LoadStatus; date_signed: string | null }[];
+  type CountRow = { status: LoadStatus; date_signed: string | null; follow_up_at: string | null };
+  const tabCount = (t: OrderTab) => {
+    const rows = (countRows ?? []) as CountRow[];
     if (t.notSigned) return rows.filter((r) => r.date_signed == null).length;
-    return rows.filter((r) => (t.statuses ?? []).includes(r.status)).length;
+    const inStatuses = rows.filter((r) => (t.statuses ?? stageStatuses).includes(r.status));
+    if (t.followUpDue) {
+      return inStatuses.filter((r) => r.follow_up_at && r.follow_up_at <= endOfTodayIso).length;
+    }
+    return inStatuses.length;
   };
 
   const loadIds = loads.map((l) => l.id);
@@ -98,7 +121,7 @@ export async function PipelineList({
   const basePath = stage === "lead" ? "/leads" : stage === "quote" ? "/quotes" : "/orders";
   const tabHref = (tabKey: string) => {
     const params = new URLSearchParams();
-    if (tabKey !== ORDER_TABS[0].key) params.set("tab", tabKey);
+    if (tabKey !== tabs[0].key) params.set("tab", tabKey);
     if (rep) params.set("rep", rep);
     const qs = params.toString();
     return qs ? `${basePath}?${qs}` : basePath;
@@ -131,11 +154,11 @@ export async function PipelineList({
       </div>
 
       {/* msgplane-style tab bar: coral active pill, per-status counts. */}
-      {stage === "order" && (
+      {tabs.length > 1 && (
         <div className="overflow-x-auto border-b pb-1">
           <div className="flex items-center gap-1">
-            {ORDER_TABS.map((t) => {
-              const active = (activeTab?.key ?? ORDER_TABS[0].key) === t.key;
+            {tabs.map((t) => {
+              const active = activeTab.key === t.key;
               return (
                 <Link
                   key={t.key}
@@ -205,6 +228,19 @@ export async function PipelineList({
                     <div className="mt-1.5">
                       <StatusBadge status={load.status} />
                     </div>
+                    {load.follow_up_at && (
+                      <span
+                        title={load.follow_up_note ?? undefined}
+                        className={cn(
+                          "mt-1.5 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset",
+                          new Date(load.follow_up_at) < new Date()
+                            ? "bg-red-100 text-red-800 ring-red-600/20 dark:bg-red-400/15 dark:text-red-300"
+                            : "bg-amber-100 text-amber-800 ring-amber-600/20 dark:bg-amber-400/15 dark:text-amber-300"
+                        )}
+                      >
+                        FU {formatDate(load.follow_up_at)}
+                      </span>
+                    )}
                   </td>
                   <td className="whitespace-nowrap px-3 py-4">
                     <p className="tabular-nums text-foreground">{created.date}</p>
