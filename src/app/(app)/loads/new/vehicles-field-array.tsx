@@ -7,7 +7,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Autocomplete } from "@/components/ui/autocomplete";
 import { FieldLabel } from "@/components/form-section";
 import { searchMakes, searchModels } from "@/lib/vehicles/nhtsa";
-import { VEHICLE_TYPES } from "@/types/database";
+import { VEHICLE_TYPES, VEHICLE_TYPE_LABELS } from "@/types/database";
 
 type VehicleRow = {
   year: string;
@@ -88,7 +88,7 @@ export function VehiclesFieldArray({
             <NativeSelect value={v.vehicle_type} onChange={(e) => update(i, "vehicle_type", e.target.value)}>
               {VEHICLE_TYPES.map((t) => (
                 <option key={t} value={t}>
-                  {t}
+                  {VEHICLE_TYPE_LABELS[t]}
                 </option>
               ))}
             </NativeSelect>

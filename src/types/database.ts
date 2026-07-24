@@ -215,3 +215,14 @@ export const VEHICLE_TYPES: VehicleType[] = [
   "motorcycle",
   "other",
 ];
+
+// Industry labels shown in the UI. The stored enum values stay as-is (pricing
+// and the DB depend on them) — this is display only.
+export const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
+  sedan: "Car",
+  suv: "SUV",
+  pickup: "Pickup Truck",
+  van: "Van",
+  motorcycle: "Motorcycle",
+  other: "Other",
+};

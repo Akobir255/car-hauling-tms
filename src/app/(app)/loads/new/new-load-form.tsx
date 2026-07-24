@@ -257,15 +257,15 @@ export function NewLoadForm() {
             <FieldLabel htmlFor="customer_name" required>
               Customer name
             </FieldLabel>
-            <Input id="customer_name" name="customer_name" required placeholder="Full name" />
+            <Input id="customer_name" name="customer_name" required />
           </div>
           <div className="space-y-1.5">
             <FieldLabel htmlFor="customer_phone">Phone</FieldLabel>
-            <Input id="customer_phone" name="customer_phone" type="tel" placeholder="(555) 123-4567" />
+            <Input id="customer_phone" name="customer_phone" type="tel" />
           </div>
           <div className="space-y-1.5">
             <FieldLabel htmlFor="customer_email">Email</FieldLabel>
-            <Input id="customer_email" name="customer_email" type="email" placeholder="name@email.com" />
+            <Input id="customer_email" name="customer_email" type="email" />
           </div>
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
@@ -304,8 +304,11 @@ export function NewLoadForm() {
               inputMode="numeric"
               value={distance}
               onChange={(e) => {
-                distanceEditedRef.current = true;
-                setDistance(e.target.value);
+                const v = e.target.value;
+                // Typing a value pins it; clearing the field hands control
+                // back to the estimator so it fills the routed mileage again.
+                distanceEditedRef.current = v.trim() !== "";
+                setDistance(v);
               }}
             />
           </div>
@@ -361,12 +364,7 @@ export function NewLoadForm() {
                 Notes from shipper
               </span>
             </FieldLabel>
-            <Textarea
-              id="notes"
-              name="notes"
-              rows={3}
-              placeholder="Gate codes, flexible dates, keys location..."
-            />
+            <Textarea id="notes" name="notes" rows={3} />
           </div>
         </div>
       </FormSection>
