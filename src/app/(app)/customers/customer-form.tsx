@@ -76,6 +76,17 @@ export function CustomerForm({
         <Textarea id="notes" name="notes" rows={3} defaultValue={customer?.notes ?? ""} />
       </div>
 
+      <div className="flex gap-6">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="sms_opt_out" defaultChecked={customer?.sms_opt_out} />
+          Opted out of SMS
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="email_opt_out" defaultChecked={customer?.email_opt_out} />
+          Opted out of email
+        </label>
+      </div>
+
       {state.error && <p className="text-sm text-destructive">{state.error}</p>}
 
       <div className="flex gap-3">

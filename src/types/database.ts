@@ -61,6 +61,8 @@ export interface Customer {
   sales_owner_id: string | null;
   source: string | null;
   notes: string | null;
+  sms_opt_out: boolean;
+  email_opt_out: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -124,6 +126,36 @@ export interface LoadStatusHistoryEntry {
   changed_by: string | null;
   note: string | null;
   created_at: string;
+}
+
+export type MessageChannel = "sms" | "email" | "internal_note";
+export type MessageStatus = "queued" | "sent" | "delivered" | "failed";
+
+export interface Message {
+  id: string;
+  load_id: string | null;
+  carrier_id: string | null;
+  customer_id: string | null;
+  channel: MessageChannel;
+  direction: "inbound" | "outbound";
+  from_addr: string | null;
+  to_addr: string | null;
+  body: string;
+  provider_message_id: string | null;
+  status: MessageStatus;
+  sent_by: string | null;
+  created_at: string;
+}
+
+export interface MessageTemplate {
+  id: string;
+  name: string;
+  channel: MessageChannel;
+  subject: string | null;
+  body: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export const LOAD_STATUSES: LoadStatus[] = [

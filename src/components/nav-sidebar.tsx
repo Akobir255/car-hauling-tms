@@ -10,6 +10,7 @@ const NAV_ITEMS: { href: string; label: string; roles?: UserRole[] }[] = [
   { href: "/loads", label: "Loads" },
   { href: "/carriers", label: "Carriers" },
   { href: "/customers", label: "Customers" },
+  { href: "/messages", label: "Messages" },
   { href: "/admin/users", label: "Users", roles: ["admin"] },
 ];
 

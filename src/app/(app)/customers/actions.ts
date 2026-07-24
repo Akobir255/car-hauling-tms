@@ -44,6 +44,8 @@ async function parseCustomerForm(formData: FormData) {
       source: d.source || null,
       notes: d.notes || null,
       sales_owner_id,
+      sms_opt_out: formData.get("sms_opt_out") === "on",
+      email_opt_out: formData.get("email_opt_out") === "on",
     },
   };
 }
