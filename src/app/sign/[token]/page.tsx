@@ -3,8 +3,9 @@ import { Truck } from "lucide-react";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { TERMS_SECTIONS } from "@/lib/esign-terms";
 import type { Load, LoadVehicle } from "@/types/database";
-import { SignButton } from "./sign-button";
+import { SignatureForm } from "./sign-button";
 
 // Public, no-login contract page reached from the SMS/email link. Loads by the
 // unguessable token via the service-role client (like the webhooks). Shows only
@@ -76,7 +77,33 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
         {row("Deposit", formatCurrency(load.deposit_amount))}
       </div>
 
-      <SignButton token={token} alreadySigned={Boolean(load.date_signed)} />
+      {/* The agreement itself. Scrolls on screen; prints in full. */}
+      <div className="max-h-96 space-y-5 overflow-y-auto rounded-lg border bg-card p-5 text-sm leading-relaxed shadow-sm print:max-h-none print:overflow-visible">
+        {TERMS_SECTIONS.map((section) => (
+          <section key={section.heading} className="space-y-3">
+            <h2 className="text-base font-bold">{section.heading}</h2>
+            {section.intro && <p className="italic">{section.intro}</p>}
+            {section.clauses.map((c) => (
+              <p key={c.label} className={c.important ? "font-semibold" : undefined}>
+                <span className="font-bold">{c.label}.</span> {c.body}
+              </p>
+            ))}
+          </section>
+        ))}
+      </div>
+
+      <SignatureForm
+        token={token}
+        alreadySigned={Boolean(load.date_signed)}
+        signedName={load.contract_signed_name}
+      />
+
+      {load.date_signed && (
+        <p className="text-center text-xs text-muted-foreground">
+          Signed {formatDate(load.date_signed)}
+          {load.contract_signed_name ? ` by ${load.contract_signed_name}` : ""}
+        </p>
+      )}
     </div>
   );
 }

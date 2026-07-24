@@ -16,12 +16,16 @@ export function EsignPanel({
   signedAt,
   sentAt,
   canManage,
+  signedName,
+  signedIp,
 }: {
   loadId: string;
   token: string | null;
   signedAt: string | null;
   sentAt: string | null;
   canManage: boolean;
+  signedName?: string | null;
+  signedIp?: string | null;
 }) {
   const send = sendContract.bind(null, loadId);
   const [state, formAction] = useActionState(send, initial);
@@ -41,8 +45,12 @@ export function EsignPanel({
       <div className="flex flex-wrap items-center gap-3">
         <span className="font-medium">Customer Contract</span>
         {signedAt ? (
-          <span className="rounded-full bg-green-600/10 px-2.5 py-0.5 text-xs font-semibold text-green-700 dark:text-green-400">
+          <span
+            className="rounded-full bg-green-600/10 px-2.5 py-0.5 text-xs font-semibold text-green-700 dark:text-green-400"
+            title={signedIp ? `Signed from IP ${signedIp}` : undefined}
+          >
             Signed {formatDate(signedAt)}
+            {signedName ? ` — ${signedName}` : ""}
           </span>
         ) : sentAt ? (
           <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">

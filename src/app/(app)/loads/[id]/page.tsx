@@ -277,6 +277,8 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               signedAt={load.date_signed}
               sentAt={load.contract_sent_at}
               canManage={canManageCarrier}
+              signedName={load.contract_signed_name}
+              signedIp={load.contract_signed_ip}
             />
           </SectionBand>
         </div>
