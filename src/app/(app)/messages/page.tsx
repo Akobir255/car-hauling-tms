@@ -14,6 +14,7 @@ import {
 import { isSmsConfigured } from "@/lib/messaging/ringcentral";
 import { markAllMessagesRead } from "./actions";
 import { WebhookSyncButton } from "./webhook-sync-button";
+import { WebhookDiagnostics } from "./webhook-diagnostics";
 import { cn } from "@/lib/utils";
 import type { Message } from "@/types/database";
 
@@ -70,6 +71,8 @@ export default async function MessagesPage() {
       </div>
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
+
+      {profile.role === "admin" && <WebhookDiagnostics />}
 
       <Table>
         <TableHeader>
