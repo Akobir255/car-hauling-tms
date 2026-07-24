@@ -1,7 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/set-password"];
+// /sign/<token> is the customer-facing contract page — no login, reached from
+// an SMS/email link. It authenticates by the unguessable token, not a session.
+const PUBLIC_PATHS = ["/login", "/set-password", "/sign"];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });

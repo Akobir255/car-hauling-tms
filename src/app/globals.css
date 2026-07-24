@@ -64,8 +64,8 @@
   --secondary: oklch(0.961 0.007 247.86);
   --secondary-foreground: oklch(0.32 0.02 261);
   --muted: oklch(0.966 0.005 247.86);
-  /* Near-foreground so labels read as dark as the values, not faint gray. */
-  --muted-foreground: oklch(0.33 0.02 258);
+  /* Same as foreground: all text is equally dark and bold, like the dates. */
+  --muted-foreground: oklch(0.278 0.021 261.32);
   --accent: oklch(0.953 0.014 255);
   --accent-foreground: oklch(0.32 0.02 261);
   --destructive: oklch(0.585 0.212 27.3);
@@ -104,8 +104,8 @@
   --secondary: oklch(0.30 0.02 261);
   --secondary-foreground: oklch(0.965 0.004 247.86);
   --muted: oklch(0.30 0.02 261);
-  /* Near-foreground so labels read as bright as the values on dark. */
-  --muted-foreground: oklch(0.87 0.015 258);
+  /* Same as foreground: all text equally bright and bold on dark. */
+  --muted-foreground: oklch(0.965 0.004 247.86);
   --accent: oklch(0.33 0.025 261);
   --accent-foreground: oklch(0.965 0.004 247.86);
   --destructive: oklch(0.70 0.185 22.2);

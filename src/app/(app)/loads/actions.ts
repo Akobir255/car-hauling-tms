@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth";
+import { isSmsConfigured, sendSms, toE164 } from "@/lib/messaging/ringcentral";
 import { LOAD_STATUSES, type LoadStatus } from "@/types/database";
 
 export type LoadFormState = { error: string | null };
@@ -539,6 +540,121 @@ export async function duplicateLoad(id: string): Promise<void> {
 
   revalidatePath("/loads");
   redirect(`/loads/${newLoad.id}`);
+}
+
+// ---- E-sign ----
+// A per-order signing link the customer opens at /sign/<token>. "Send" marks
+// it sent (and can text the link via RingCentral); the customer signs on that
+// public page; staff can also mark it signed manually.
+
+function appBaseUrl(): string {
+  const explicit = (process.env.NEXT_PUBLIC_APP_URL || "").trim().replace(/\/$/, "");
+  if (explicit) return explicit;
+  const vercel = (process.env.VERCEL_PROJECT_PRODUCTION_URL || "").trim();
+  return vercel ? `https://${vercel}` : "";
+}
+
+export type EsignState = { error: string | null; link?: string; sentVia?: string };
+
+// Ensures the load has a signing token, records the send, and optionally texts
+// the link to the customer. `resend` uses the same path.
+export async function sendContract(
+  loadId: string,
+  _prevState: EsignState,
+  formData: FormData
+): Promise<EsignState> {
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const viaSms = formData.get("via") === "sms";
+  const supabase = await createClient();
+
+  const { data: load } = await supabase
+    .from("loads")
+    .select("contract_token, customer_id")
+    .eq("id", loadId)
+    .single();
+  if (!load) return { error: "Order not found." };
+
+  let token = load.contract_token as string | null;
+  if (!token) {
+    const { randomUUID } = await import("node:crypto");
+    token = randomUUID();
+  }
+
+  const { error } = await supabase
+    .from("loads")
+    .update({ contract_token: token, contract_sent_at: new Date().toISOString() })
+    .eq("id", loadId);
+  if (error) return { error: error.message };
+
+  const base = appBaseUrl();
+  const link = base ? `${base}/sign/${token}` : `/sign/${token}`;
+
+  let sentVia: string | undefined;
+  if (viaSms) {
+    const { data: customer } = await supabase
+      .from("customers")
+      .select("phone, sms_opt_out")
+      .eq("id", load.customer_id)
+      .single();
+    const to = toE164(customer?.phone);
+    if (customer?.sms_opt_out) return { error: "Customer opted out of SMS — can't text the link.", link };
+    if (!to) return { error: "No valid customer phone on file to text the link.", link };
+    if (!isSmsConfigured()) return { error: "SMS isn't connected yet — copy the link and send it manually.", link };
+    if (!base) return { error: "Set NEXT_PUBLIC_APP_URL so the link is a full URL.", link };
+    try {
+      await sendSms(to, `Please review and sign your vehicle transport agreement: ${link}`);
+      sentVia = "sms";
+    } catch (err) {
+      console.error("E-sign SMS failed:", err);
+      return { error: "Couldn't text the link — copy it and send manually.", link };
+    }
+  }
+
+  await supabase.from("load_status_history").insert({
+    load_id: loadId,
+    status: "quote" as LoadStatus, // history note only; status unchanged
+    changed_by: profile.id,
+    note: sentVia === "sms" ? "Contract texted to customer" : "Contract link generated",
+  });
+
+  revalidatePath(`/loads/${loadId}`);
+  return { error: null, link, sentVia };
+}
+
+// Staff override: mark the contract signed without the customer using the link.
+export async function markContractSigned(loadId: string): Promise<void> {
+  const profile = await requireRole("admin", "dispatcher");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("loads")
+    .update({ date_signed: new Date().toISOString() })
+    .eq("id", loadId);
+  if (error) return;
+  await supabase.from("load_status_history").insert({
+    load_id: loadId,
+    status: "quote" as LoadStatus,
+    changed_by: profile.id,
+    note: "Contract marked signed (manual)",
+  });
+  revalidatePath(`/loads/${loadId}`);
+}
+
+// Clear a signature (e.g. sent in error), so it can be re-sent.
+export async function voidSignature(loadId: string): Promise<void> {
+  const profile = await requireRole("admin", "dispatcher");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("loads")
+    .update({ date_signed: null, contract_signed_ip: null })
+    .eq("id", loadId);
+  if (error) return;
+  await supabase.from("load_status_history").insert({
+    load_id: loadId,
+    status: "quote" as LoadStatus,
+    changed_by: profile.id,
+    note: "Signature voided",
+  });
+  revalidatePath(`/loads/${loadId}`);
 }
 
 // ---- Follow-ups ----

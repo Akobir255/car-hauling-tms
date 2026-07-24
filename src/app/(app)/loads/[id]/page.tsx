@@ -11,6 +11,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { ACTIONS_BY_STATUS, stageOf } from "@/lib/order-status";
 import type { Customer, Load, LoadStatusHistoryEntry, LoadVehicle, Profile } from "@/types/database";
 import { OrderActionBar } from "./order-action-bar";
+import { EsignPanel } from "./esign-panel";
 import { deleteLoad, duplicateLoad } from "../actions";
 
 const BACK_PATH = { lead: "/leads", quote: "/quotes", order: "/orders" } as const;
@@ -105,21 +106,13 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
       </div>
 
       <SectionBand title="E-Sign">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm font-medium">Customer Contract</span>
-          {load.date_signed ? (
-            <span className="rounded-full bg-green-600/10 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
-              Signed {formatDate(load.date_signed)}
-            </span>
-          ) : (
-            <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-              Not signed
-            </span>
-          )}
-          <span className="ml-auto text-xs text-muted-foreground">
-            e-sign sending arrives with the contract integration
-          </span>
-        </div>
+        <EsignPanel
+          loadId={load.id}
+          token={load.contract_token}
+          signedAt={load.date_signed}
+          sentAt={load.contract_sent_at}
+          canManage={canManageCarrier}
+        />
       </SectionBand>
 
       <SectionBand title="Order Information">
