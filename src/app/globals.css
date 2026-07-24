@@ -49,8 +49,9 @@
 }
 
 :root {
-  /* Soft off-white — never pure white (oklch 1), which is what glares. */
-  --background: oklch(0.984 0.003 247.86);
+  /* Light gray page so the white cards read as distinct boxes, not one
+     white sheet. Cards stay pure white below for the contrast. */
+  --background: oklch(0.955 0.004 247.86);
   /* Dark slate, not near-black — high readability without the harsh edge. */
   --foreground: oklch(0.278 0.021 261.32);
   /* Cards sit a touch brighter than the page, so they lift gently. */
@@ -69,9 +70,9 @@
   --accent: oklch(0.953 0.014 255);
   --accent-foreground: oklch(0.32 0.02 261);
   --destructive: oklch(0.585 0.212 27.3);
-  /* Softer borders — the grid recedes instead of boxing everything in. */
-  --border: oklch(0.923 0.006 247.86);
-  --input: oklch(0.923 0.006 247.86);
+  /* Crisp enough that every card and field reads as a defined box. */
+  --border: oklch(0.9 0.006 247.86);
+  --input: oklch(0.9 0.006 247.86);
   --ring: oklch(0.546 0.176 258.4);
   /* A real categorical set so charts/badges aren't five shades of gray. */
   --chart-1: oklch(0.55 0.18 258);
@@ -91,8 +92,8 @@
 }
 
 .dark {
-  /* Slate, not pure black — a warmer, calmer dark than the default. */
-  --background: oklch(0.205 0.017 261);
+  /* Darker than the cards so boxes separate clearly on dark too. */
+  --background: oklch(0.185 0.017 261);
   --foreground: oklch(0.965 0.004 247.86);
   --card: oklch(0.245 0.018 261);
   --card-foreground: oklch(0.965 0.004 247.86);
