@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,14 @@ const initialState: LoginState = { error: null };
 
 export function LoginForm({ next }: { next: string }) {
   const [state, formAction, pending] = useActionState(login, initialState);
+
+  // Invite/recovery emails that redirect to the site root end up here with
+  // auth tokens in the URL hash — hand them to the set-password page.
+  useEffect(() => {
+    if (window.location.hash.includes("access_token")) {
+      window.location.replace(`/set-password${window.location.hash}`);
+    }
+  }, []);
 
   return (
     <form action={formAction} className="space-y-4">

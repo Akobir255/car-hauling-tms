@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -25,9 +26,20 @@ export async function inviteUser(
   }
   const { email, full_name, role } = parsed.data;
 
+  // Send invitees to the in-app set-password page on whatever host the
+  // admin is using (production URL in prod, localhost in dev).
+  const hdrs = await headers();
+  const forwardedHost = hdrs.get("x-forwarded-host");
+  const origin =
+    hdrs.get("origin") ??
+    (forwardedHost
+      ? `${hdrs.get("x-forwarded-proto") ?? "https"}://${forwardedHost}`
+      : "http://localhost:3000");
+
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.inviteUserByEmail(email, {
     data: { full_name, role },
+    redirectTo: `${origin}/set-password`,
   });
   if (error) return { error: error.message };
 
