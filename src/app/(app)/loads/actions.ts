@@ -96,8 +96,10 @@ export async function createLoad(
 ): Promise<LoadFormState> {
   const profile = await requireRole("admin", "dispatcher", "sales");
 
-  const customer_id = (formData.get("customer_id") || "").toString();
-  if (!customer_id) return { error: "Customer is required." };
+  const customerName = (formData.get("customer_name") || "").toString().trim();
+  const customerEmail = (formData.get("customer_email") || "").toString().trim();
+  const customerPhone = (formData.get("customer_phone") || "").toString().trim();
+  if (!customerName) return { error: "Customer name is required." };
 
   const parsedCore = loadCoreSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsedCore.success) {
@@ -119,6 +121,37 @@ export async function createLoad(
   const initialStatus = parsedCore.data.customer_rate != null ? ("quote" as const) : ("lead" as const);
 
   const supabase = await createClient();
+
+  // Find-or-create the customer from the name/email/phone captured up front,
+  // so a repeat customer's phone/email reuses their record instead of duping.
+  let customer_id: string | null = null;
+  const phoneDigits = customerPhone.replace(/\D/g, "");
+  const last10 = phoneDigits.length >= 10 ? phoneDigits.slice(-10) : "";
+  if (customerEmail) {
+    const { data } = await supabase.from("customers").select("id").ilike("email", customerEmail).limit(1);
+    if (data && data[0]) customer_id = data[0].id;
+  }
+  if (!customer_id && last10) {
+    const pattern = `%${last10.slice(0, 3)}%${last10.slice(3, 6)}%${last10.slice(6)}%`;
+    const { data } = await supabase.from("customers").select("id, phone").ilike("phone", pattern).limit(10);
+    const match = (data ?? []).find((c) => (c.phone ?? "").replace(/\D/g, "").slice(-10) === last10);
+    if (match) customer_id = match.id;
+  }
+  if (!customer_id) {
+    const { data: newCust, error: custErr } = await supabase
+      .from("customers")
+      .insert({
+        contact_name: customerName,
+        email: customerEmail || null,
+        phone: customerPhone || null,
+        sales_owner_id: profile.role === "sales" ? profile.id : null,
+      })
+      .select("id")
+      .single();
+    if (custErr || !newCust) return { error: custErr?.message ?? "Could not create customer." };
+    customer_id = newCust.id;
+  }
+
   const payload = {
     ...coreValues(parsedCore.data),
     customer_id,

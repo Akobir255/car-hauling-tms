@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
+import { Autocomplete } from "@/components/ui/autocomplete";
 import { FieldLabel } from "@/components/form-section";
+import { searchMakes, searchModels } from "@/lib/vehicles/nhtsa";
 import { VEHICLE_TYPES } from "@/types/database";
 
 type VehicleRow = {
@@ -27,12 +29,22 @@ const EMPTY_ROW: VehicleRow = {
   tariff: "",
 };
 
-export function VehiclesFieldArray() {
+export function VehiclesFieldArray({
+  onFirstVehicleChange,
+}: {
+  // Reports the first vehicle's type/condition up to the form for the quote suggestion.
+  onFirstVehicleChange?: (v: { vehicle_type: string; condition: string }) => void;
+}) {
   const [vehicles, setVehicles] = useState<VehicleRow[]>([{ ...EMPTY_ROW }]);
 
   function update(index: number, field: keyof VehicleRow, value: string) {
     setVehicles((prev) => prev.map((v, i) => (i === index ? { ...v, [field]: value } : v)));
   }
+
+  const first = vehicles[0];
+  useEffect(() => {
+    onFirstVehicleChange?.({ vehicle_type: first.vehicle_type, condition: first.condition });
+  }, [first.vehicle_type, first.condition, onFirstVehicleChange]);
 
   const totalTariff = vehicles.reduce((sum, v) => {
     const n = Number(v.tariff);
@@ -53,11 +65,21 @@ export function VehiclesFieldArray() {
           </div>
           <div className="space-y-1 lg:col-span-2">
             <FieldLabel>Make</FieldLabel>
-            <Input value={v.make} onChange={(e) => update(i, "make", e.target.value)} />
+            <Autocomplete
+              value={v.make}
+              onValueChange={(val) => update(i, "make", val)}
+              fetchOptions={(q) => searchMakes(q)}
+              placeholder="Chev…"
+            />
           </div>
           <div className="space-y-1 lg:col-span-2">
             <FieldLabel>Model</FieldLabel>
-            <Input value={v.model} onChange={(e) => update(i, "model", e.target.value)} />
+            <Autocomplete
+              value={v.model}
+              onValueChange={(val) => update(i, "model", val)}
+              fetchOptions={(q) => searchModels(v.make, q)}
+              placeholder={v.make ? "Silverado…" : "Pick a make first"}
+            />
           </div>
           <div className="space-y-1 lg:col-span-2">
             <FieldLabel>VIN</FieldLabel>
