@@ -10,10 +10,12 @@ import { LoadDetailsForm } from "./load-details-form";
 import { StatusForm } from "./status-form";
 import { FollowUpForm } from "./follow-up-form";
 import { VehiclesEditor } from "./vehicles-editor";
+import { Button } from "@/components/ui/button";
 import {
   updateLoad,
   updateLoadStatus,
   deleteLoad,
+  duplicateLoad,
   setFollowUp,
   clearFollowUp,
   addVehicle,
@@ -62,6 +64,7 @@ export default async function LoadDetailPage({
   const boundUpdate = updateLoad.bind(null, load.id);
   const boundStatusUpdate = updateLoadStatus.bind(null, load.id);
   const boundDelete = deleteLoad.bind(null, load.id);
+  const boundDuplicate = duplicateLoad.bind(null, load.id);
   const boundSetFollowUp = setFollowUp.bind(null, load.id);
   const boundClearFollowUp = clearFollowUp.bind(null, load.id);
   const boundAddVehicle = addVehicle.bind(null, load.id);
@@ -74,12 +77,19 @@ export default async function LoadDetailPage({
           <h1 className="text-2xl font-semibold">{load.load_number}</h1>
           <StatusBadge status={load.status} />
         </div>
-        {profile.role === "admin" && (
-          <DeleteButton
-            onDelete={boundDelete}
-            confirmMessage={`Delete load ${load.load_number}? This cannot be undone.`}
-          />
-        )}
+        <div className="flex items-center gap-2">
+          <form action={boundDuplicate}>
+            <Button type="submit" variant="outline" size="sm">
+              Duplicate
+            </Button>
+          </form>
+          {profile.role === "admin" && (
+            <DeleteButton
+              onDelete={boundDelete}
+              confirmMessage={`Delete load ${load.load_number}? This cannot be undone.`}
+            />
+          )}
+        </div>
       </div>
 
       <div className="rounded-md border p-4 text-sm">

@@ -11,9 +11,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StatusBadge } from "@/components/status-badge";
-import { formatCurrency, titleCase } from "@/lib/format";
+import { formatCurrency, formatDate, titleCase } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { LOAD_STATUSES, type Load, type LoadStatus, type Profile } from "@/types/database";
+import {
+  LOAD_STATUSES,
+  type Load,
+  type LoadStatus,
+  type LoadVehicle,
+  type Profile,
+} from "@/types/database";
 
 export default async function LoadsPage({
   searchParams,
@@ -41,23 +47,46 @@ export default async function LoadsPage({
   const { data, error } = await query;
   const loads = (data ?? []) as Load[];
 
+  const loadIds = loads.map((l) => l.id);
   const customerIds = [...new Set(loads.map((l) => l.customer_id).filter(Boolean))];
   const carrierIds = [...new Set(loads.map((l) => l.carrier_id).filter(Boolean) as string[])];
 
-  const [{ data: customers }, { data: carriers }, { data: reps }] = await Promise.all([
-    customerIds.length
-      ? supabase.from("customers").select("id, contact_name, company_name").in("id", customerIds)
-      : Promise.resolve({ data: [] as { id: string; contact_name: string; company_name: string | null }[] }),
-    carrierIds.length
-      ? supabase.from("carriers").select("id, company_name").in("id", carrierIds)
-      : Promise.resolve({ data: [] as { id: string; company_name: string }[] }),
-    canSeeMargin
-      ? supabase.from("profiles").select("id, full_name, email").order("full_name")
-      : Promise.resolve({ data: [] as Pick<Profile, "id" | "full_name" | "email">[] }),
-  ]);
+  const [{ data: customers }, { data: carriers }, { data: reps }, { data: vehicles }] =
+    await Promise.all([
+      customerIds.length
+        ? supabase
+            .from("customers")
+            .select("id, contact_name, company_name, phone, email")
+            .in("id", customerIds)
+        : Promise.resolve({
+            data: [] as {
+              id: string;
+              contact_name: string;
+              company_name: string | null;
+              phone: string | null;
+              email: string | null;
+            }[],
+          }),
+      carrierIds.length
+        ? supabase.from("carriers").select("id, company_name").in("id", carrierIds)
+        : Promise.resolve({ data: [] as { id: string; company_name: string }[] }),
+      supabase.from("profiles").select("id, full_name, email").order("full_name"),
+      loadIds.length
+        ? supabase.from("load_vehicles").select("*").in("load_id", loadIds)
+        : Promise.resolve({ data: [] as LoadVehicle[] }),
+    ]);
 
   const customerById = new Map((customers ?? []).map((c) => [c.id, c]));
   const carrierById = new Map((carriers ?? []).map((c) => [c.id, c]));
+  const repById = new Map(
+    ((reps ?? []) as Pick<Profile, "id" | "full_name" | "email">[]).map((r) => [r.id, r])
+  );
+  const vehiclesByLoad = new Map<string, LoadVehicle[]>();
+  for (const v of (vehicles ?? []) as LoadVehicle[]) {
+    const list = vehiclesByLoad.get(v.load_id) ?? [];
+    list.push(v);
+    vehiclesByLoad.set(v.load_id, list);
+  }
 
   const tabHref = (status: LoadStatus | null) => {
     const params = new URLSearchParams();
@@ -68,7 +97,7 @@ export default async function LoadsPage({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Loads</h1>
@@ -131,49 +160,100 @@ export default async function LoadsPage({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Load #</TableHead>
-            <TableHead>Customer</TableHead>
-            <TableHead>Route</TableHead>
-            <TableHead>Carrier</TableHead>
+            <TableHead>ID</TableHead>
+            <TableHead>Created</TableHead>
+            <TableHead>Assigned to</TableHead>
+            <TableHead>Shipper</TableHead>
+            <TableHead>Vehicles</TableHead>
+            <TableHead>Orig/Dest</TableHead>
+            <TableHead>Quote</TableHead>
+            <TableHead>Est. Ship</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead>Customer rate</TableHead>
-            {canSeeMargin && <TableHead>Margin</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
           {loads.map((load) => {
             const customer = customerById.get(load.customer_id);
             const carrier = load.carrier_id ? carrierById.get(load.carrier_id) : undefined;
-            const margin =
-              load.customer_rate != null && load.carrier_pay != null
-                ? load.customer_rate - load.carrier_pay
-                : null;
+            const rep = load.sales_owner_id ? repById.get(load.sales_owner_id) : undefined;
+            const loadVehicles = vehiclesByLoad.get(load.id) ?? [];
             return (
-              <TableRow key={load.id}>
-                <TableCell className="font-medium">
-                  <Link href={`/loads/${load.id}`} className="hover:underline">
+              <TableRow key={load.id} className="align-top">
+                <TableCell>
+                  <Link href={`/loads/${load.id}`} className="font-medium text-blue-700 hover:underline dark:text-blue-400">
                     {load.load_number}
                   </Link>
                 </TableCell>
+                <TableCell className="text-muted-foreground">{formatDate(load.created_at)}</TableCell>
                 <TableCell className="text-muted-foreground">
-                  {customer?.contact_name ?? "—"}
+                  {rep ? rep.full_name || rep.email : "—"}
+                </TableCell>
+                <TableCell>
+                  <div className="text-sm leading-5">
+                    <p className="font-medium">{customer?.contact_name ?? "—"}</p>
+                    {customer?.phone && <p className="text-muted-foreground">{customer.phone}</p>}
+                    {customer?.email && (
+                      <p className="max-w-44 truncate text-muted-foreground">{customer.email}</p>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="space-y-1 text-sm leading-5">
+                    {loadVehicles.length === 0 && <span className="text-muted-foreground">—</span>}
+                    {loadVehicles.map((v) => (
+                      <div key={v.id}>
+                        <p>
+                          {[v.year, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {titleCase(v.vehicle_type)}
+                          {v.condition === "non_running" ? " · Non-running" : ""}
+                          {load.transport_type === "enclosed" ? (
+                            <span className="text-red-600"> · enclosed</span>
+                          ) : null}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="text-sm leading-5">
+                    <p>
+                      <span className="mr-1 inline-block size-2 rounded-full border-2 border-blue-600" />
+                      {load.pickup_city || "—"} {load.pickup_state || ""} {load.pickup_zip || ""}
+                    </p>
+                    <p>
+                      <span className="mr-1 inline-block size-2 rounded-full bg-red-600" />
+                      {load.delivery_city || "—"} {load.delivery_state || ""} {load.delivery_zip || ""}
+                    </p>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="text-xs leading-5">
+                    <p>Tariff: {formatCurrency(load.customer_rate)}</p>
+                    <p className="text-muted-foreground">
+                      Deposit: {formatCurrency(load.deposit_amount)}
+                    </p>
+                    {canSeeMargin && (
+                      <p className="text-muted-foreground">
+                        Carrier: {formatCurrency(load.carrier_pay)}
+                        {carrier ? ` (${carrier.company_name})` : ""}
+                      </p>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {load.pickup_city || "—"}, {load.pickup_state || "—"} &rarr;{" "}
-                  {load.delivery_city || "—"}, {load.delivery_state || "—"}
+                  {formatDate(load.pickup_ready_date)}
                 </TableCell>
-                <TableCell className="text-muted-foreground">{carrier?.company_name ?? "Unassigned"}</TableCell>
                 <TableCell>
                   <StatusBadge status={load.status} />
                 </TableCell>
-                <TableCell>{formatCurrency(load.customer_rate)}</TableCell>
-                {canSeeMargin && <TableCell>{formatCurrency(margin)}</TableCell>}
               </TableRow>
             );
           })}
           {loads.length === 0 && (
             <TableRow>
-              <TableCell colSpan={canSeeMargin ? 7 : 6} className="text-center text-muted-foreground">
+              <TableCell colSpan={9} className="text-center text-muted-foreground">
                 No loads{statusFilter ? ` with status ${titleCase(statusFilter)}` : ""} yet.
               </TableCell>
             </TableRow>

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import type { UserRole } from "@/types/database";
 
 const NAV_ITEMS: { href: string; label: string; roles?: UserRole[] }[] = [
-  { href: "/dashboard", label: "Dashboard" },
+  { href: "/dashboard", label: "Home" },
   { href: "/loads", label: "Loads" },
   { href: "/carriers", label: "Carriers" },
   { href: "/customers", label: "Customers" },
@@ -14,11 +14,12 @@ const NAV_ITEMS: { href: string; label: string; roles?: UserRole[] }[] = [
   { href: "/admin/users", label: "Users", roles: ["admin"] },
 ];
 
-export function NavSidebar({ role }: { role: UserRole }) {
+// msgplane-style horizontal top nav: blue bar, white links, darker active tab.
+export function NavBar({ role }: { role: UserRole }) {
   const pathname = usePathname();
 
   return (
-    <nav className="flex flex-col gap-1 p-3">
+    <nav className="flex items-stretch">
       {NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(role)).map((item) => {
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
@@ -26,10 +27,8 @@ export function NavSidebar({ role }: { role: UserRole }) {
             key={item.href}
             href={item.href}
             className={cn(
-              "rounded-md px-3 py-2 text-sm font-medium transition-colors",
-              active
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              "flex items-center px-4 text-sm font-medium text-white transition-colors",
+              active ? "bg-blue-900/60" : "hover:bg-blue-800/50"
             )}
           >
             {item.label}

@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth";
-import { generateLoadNumber } from "@/lib/load-number";
 import { LOAD_STATUSES } from "@/types/database";
 
 export type LoadFormState = { error: string | null };
@@ -103,26 +102,18 @@ export async function createLoad(
     sales_owner_id: profile.role === "sales" ? profile.id : null,
   };
 
-  let load = null;
-  let lastError: { message: string } | null = null;
-  for (let attempt = 0; attempt < 5 && !load; attempt++) {
-    const load_number = generateLoadNumber();
-    const { data, error } = await supabase
-      .from("loads")
-      .insert({ ...payload, load_number })
-      .select()
-      .single();
-    if (data) {
-      load = data;
-    } else if (error && !error.message.toLowerCase().includes("duplicate")) {
-      lastError = error;
-      break;
-    } else {
-      lastError = error;
-    }
+  const { data: seq, error: seqError } = await supabase.rpc("next_load_number");
+  if (seqError || seq == null) {
+    return { error: "Could not generate a load number — is migration 0004 applied?" };
   }
+
+  const { data: load, error: insertError } = await supabase
+    .from("loads")
+    .insert({ ...payload, load_number: `${seq}-US` })
+    .select()
+    .single();
   if (!load) {
-    return { error: lastError?.message ?? "Could not create load — try again." };
+    return { error: insertError?.message ?? "Could not create load — try again." };
   }
 
   const { error: vehiclesError } = await supabase.from("load_vehicles").insert(
@@ -212,6 +203,57 @@ export async function deleteLoad(id: string): Promise<void> {
   const supabase = await createClient();
   await supabase.from("loads").delete().eq("id", id);
   revalidatePath("/loads");
+}
+
+// Duplicate a load: everything copies over, the new load gets the next
+// sequential number WITHOUT the hyphen (msgplane convention for duplicates:
+// 22222222-US -> 22222223US).
+export async function duplicateLoad(id: string): Promise<void> {
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const supabase = await createClient();
+
+  // Sales reps read via the safe view, so a sales-made duplicate simply
+  // won't carry carrier_pay — consistent with what they're allowed to see.
+  const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
+  const { data: source } = await supabase.from(table).select("*").eq("id", id).single();
+  if (!source) return;
+
+  const { data: seq, error: seqError } = await supabase.rpc("next_load_number");
+  if (seqError || seq == null) return;
+
+  const copy = { ...(source as Record<string, unknown>) };
+  const sourceNumber = copy.load_number as string;
+  delete copy.id;
+  delete copy.load_number;
+  delete copy.created_at;
+  delete copy.updated_at;
+
+  const { data: newLoad, error } = await supabase
+    .from("loads")
+    .insert({ ...copy, load_number: `${seq}US` })
+    .select()
+    .single();
+  if (error || !newLoad) return;
+
+  const { data: vehicles } = await supabase
+    .from("load_vehicles")
+    .select("year, make, model, vin, vehicle_type, condition, notes")
+    .eq("load_id", id);
+  if (vehicles && vehicles.length > 0) {
+    await supabase
+      .from("load_vehicles")
+      .insert(vehicles.map((v) => ({ ...v, load_id: newLoad.id })));
+  }
+
+  await supabase.from("load_status_history").insert({
+    load_id: newLoad.id,
+    status: newLoad.status,
+    changed_by: profile.id,
+    note: `Duplicated from ${sourceNumber}`,
+  });
+
+  revalidatePath("/loads");
+  redirect(`/loads/${newLoad.id}`);
 }
 
 // ---- Follow-ups ----
