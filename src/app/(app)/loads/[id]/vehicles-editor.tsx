@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { FieldLabel } from "@/components/form-section";
 import { formatCurrency, titleCase } from "@/lib/format";
 import { VEHICLE_TYPES, type LoadVehicle } from "@/types/database";
 import type { LoadFormState } from "../actions";
@@ -131,35 +132,36 @@ export function VehiclesEditor({
             </Button>
             <p className="text-sm">
               <span className="text-muted-foreground">Total tariff: </span>
-              <span className="font-medium tabular-nums">{formatCurrency(totalTariff)}</span>
+              <span className="font-semibold tabular-nums">{formatCurrency(totalTariff)}</span>
             </p>
           </div>
         )}
       </form>
 
+      {/* Quick-add row: same columns as the table, no ceremony. */}
       <form
         ref={formRef}
         action={formAction}
-        className="flex flex-wrap items-end gap-2 rounded-md border p-3"
+        className="flex flex-wrap items-end gap-2 rounded-md bg-muted/40 p-3"
       >
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Year</label>
+          <FieldLabel>Year</FieldLabel>
           <Input name="year" inputMode="numeric" className="w-20" />
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Make</label>
+          <FieldLabel>Make</FieldLabel>
           <Input name="make" className="w-32" />
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Model</label>
+          <FieldLabel>Model</FieldLabel>
           <Input name="model" className="w-32" />
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">VIN</label>
+          <FieldLabel>VIN</FieldLabel>
           <Input name="vin" className="w-44" />
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Type</label>
+          <FieldLabel>Type</FieldLabel>
           <NativeSelect name="vehicle_type" defaultValue="sedan" className="w-32">
             {VEHICLE_TYPES.map((t) => (
               <option key={t} value={t}>
@@ -169,14 +171,14 @@ export function VehiclesEditor({
           </NativeSelect>
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Condition</label>
+          <FieldLabel>Condition</FieldLabel>
           <NativeSelect name="condition" defaultValue="running" className="w-36">
             <option value="running">Running</option>
             <option value="non_running">Non-running</option>
           </NativeSelect>
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Tariff ($)</label>
+          <FieldLabel>Tariff ($)</FieldLabel>
           <Input name="tariff" inputMode="decimal" className="w-24" />
         </div>
         <Button type="submit" size="sm" disabled={pending}>

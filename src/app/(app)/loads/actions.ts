@@ -187,6 +187,27 @@ export async function updateLoad(
   const { error } = await supabase.from("loads").update(values).eq("id", id);
   if (error) return { error: error.message };
 
+  // "Save and convert to order" — only meaningful from `quote`, re-checked
+  // here rather than trusting the button's presence in the UI.
+  if (formData.get("convert") === "1") {
+    const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
+    const { data: current } = await supabase.from(table).select("status").eq("id", id).single();
+    if (current?.status === "quote") {
+      const { error: convertError } = await supabase
+        .from("loads")
+        .update({ status: "booked" })
+        .eq("id", id);
+      if (!convertError) {
+        await supabase.from("load_status_history").insert({
+          load_id: id,
+          status: "booked",
+          changed_by: profile.id,
+          note: "Converted to order",
+        });
+      }
+    }
+  }
+
   revalidatePath(`/loads/${id}`);
   revalidatePath("/loads");
   redirect(`/loads/${id}`);

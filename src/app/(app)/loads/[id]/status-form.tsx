@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
+import { FieldLabel } from "@/components/form-section";
 import { LOAD_STATUSES, type LoadStatus } from "@/types/database";
 import { titleCase } from "@/lib/format";
 import type { LoadFormState } from "../actions";
@@ -28,7 +29,7 @@ export function StatusForm({
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
       <div className="space-y-1.5">
-        <label className="text-xs text-muted-foreground">New status</label>
+        <FieldLabel>New status</FieldLabel>
         <NativeSelect name="status" defaultValue={currentStatus} className="w-44">
           {LOAD_STATUSES.map((s) => (
             <option key={s} value={s}>
@@ -38,7 +39,7 @@ export function StatusForm({
         </NativeSelect>
       </div>
       <div className="flex-1 space-y-1.5">
-        <label className="text-xs text-muted-foreground">Note (optional)</label>
+        <FieldLabel>Note (optional)</FieldLabel>
         <Textarea name="note" rows={1} className="min-h-8" />
       </div>
       <Button type="submit" disabled={pending}>

@@ -41,7 +41,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </form>
         </div>
       </header>
-      <main className="flex-1 overflow-x-auto p-6">{children}</main>
+      {/* No overflow on main: tables scroll in their own wrappers, and a
+          scroll container here would break position:sticky on form pages. */}
+      <main className="flex-1 p-6">{children}</main>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useActionState, useEffect, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldLabel } from "@/components/form-section";
 import type { Load } from "@/types/database";
 import type { LoadFormState } from "../actions";
 
@@ -76,11 +77,11 @@ export function FollowUpForm({
           ))}
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Or pick a date/time</label>
+          <FieldLabel>Or pick a date/time</FieldLabel>
           <Input name="follow_up_at" type="datetime-local" className="w-52" />
         </div>
         <div className="flex-1 space-y-1">
-          <label className="text-xs text-muted-foreground">Note (optional)</label>
+          <FieldLabel>Note (optional)</FieldLabel>
           <Input name="follow_up_note" placeholder="Left message / spoke to someone..." />
         </div>
         <Button type="submit" size="sm" disabled={pending}>

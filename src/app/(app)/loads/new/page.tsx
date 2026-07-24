@@ -10,7 +10,7 @@ export default async function NewLoadPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">New load</h1>
+      <h1 className="mx-auto max-w-5xl text-2xl font-semibold">New load</h1>
       <NewLoadForm customers={(data ?? []) as Customer[]} />
     </div>
   );
