@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, formatPhone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   LEAD_STATUSES,
@@ -223,7 +223,7 @@ export async function PipelineList({
                         {customer.phone && (
                           <p className="flex items-center gap-1.5 tabular-nums text-muted-foreground">
                             <Phone className="size-3.5 shrink-0" aria-hidden="true" />
-                            {customer.phone}
+                            {formatPhone(customer.phone)}
                           </p>
                         )}
                         {customer.email && (

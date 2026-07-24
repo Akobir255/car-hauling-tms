@@ -60,11 +60,20 @@ export function BandRow({
   value: React.ReactNode;
   valueClassName?: string;
 }) {
+  // Empty fields ("—") shouldn't carry the same weight as real data — dim the
+  // whole row so filled dates/amounts are what the eye lands on.
+  const empty = value === "—" || value === "" || value == null;
   return (
     <div className="flex items-baseline justify-between gap-4 border-b border-border/60 py-2 last:border-0">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className={cn("text-sm font-semibold tabular-nums text-foreground", valueClassName)}>
-        {value}
+      <span className={cn("text-sm", empty ? "text-foreground/45" : "text-foreground")}>{label}</span>
+      <span
+        className={cn(
+          "text-sm tabular-nums",
+          empty ? "font-normal text-foreground/35" : "font-semibold text-foreground",
+          valueClassName
+        )}
+      >
+        {empty ? "—" : value}
       </span>
     </div>
   );

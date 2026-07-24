@@ -20,6 +20,15 @@ export function daysUntil(value: string | null | undefined): number | null {
   return Math.round((target.getTime() - now.getTime()) / 86_400_000);
 }
 
+// (865) 328-7418 from any 10/11-digit input; returns the trimmed original if
+// it isn't a US number, and "—" when empty.
+export function formatPhone(value: string | null | undefined): string {
+  const digits = (value || "").replace(/\D/g, "");
+  const ten = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  if (ten.length !== 10) return (value || "").trim() || "—";
+  return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
+}
+
 export function titleCase(value: string): string {
   return value
     .split("_")

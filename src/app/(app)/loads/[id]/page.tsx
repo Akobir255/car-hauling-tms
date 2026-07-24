@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { DeleteButton } from "@/components/delete-button";
 import { SectionBand, BandRow, Field } from "@/components/section-band";
 import { Button } from "@/components/ui/button";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, formatPhone } from "@/lib/format";
 import { ACTIONS_BY_STATUS, stageOf } from "@/lib/order-status";
 import type { Customer, Load, LoadStatusHistoryEntry, LoadVehicle, Profile } from "@/types/database";
 import { OrderActionBar } from "./order-action-bar";
@@ -83,7 +83,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
         </div>
         <div>
           <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Status</p>
-          <StatusBadge status={load.status} />
+          <StatusBadge status={load.status} size="lg" />
         </div>
         <div className="hidden sm:block">
           <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Campaign</p>
@@ -133,7 +133,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                   </Link>
                   {customer.phone && (
                     <p className="flex items-center gap-1.5 text-sm tabular-nums text-muted-foreground">
-                      {customer.phone}
+                      {formatPhone(customer.phone)}
                       <span className="rounded bg-muted px-1 py-0.5 text-[10px] font-medium uppercase">
                         sms
                       </span>
