@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { CalendarCheck2, Car, Inbox, Mail, MapPin, Phone, User } from "lucide-react";
+import { CalendarCheck2, Inbox, Mail, MapPin, Phone, User } from "lucide-react";
+import { VehicleThumb } from "@/components/vehicle-thumb";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import {
   type OrderTab,
   type PipelineStage,
 } from "@/lib/order-status";
+import { VEHICLE_TYPE_LABELS } from "@/types/database";
 import type { Load, LoadStatus, LoadVehicle, Profile } from "@/types/database";
 
 // Shared list for Leads / Quotes / Orders — one query path, msgplane column
@@ -293,15 +295,13 @@ export async function PipelineList({
                       {loadVehicles.length === 0 && <span className="text-muted-foreground">—</span>}
                       {loadVehicles.map((v) => (
                         <div key={v.id} className="flex items-center gap-2.5">
-                          <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                            <Car className="size-5" aria-hidden="true" />
-                          </span>
+                          <VehicleThumb type={v.vehicle_type} />
                           <div className="leading-tight">
                             <p className="font-medium">
                               {[v.year, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}
                             </p>
                             <p className="text-[13px] text-muted-foreground">
-                              {v.vehicle_type}
+                              {VEHICLE_TYPE_LABELS[v.vehicle_type] ?? v.vehicle_type}
                               {load.transport_type === "enclosed" ? (
                                 <span className="font-medium text-amber-600 dark:text-amber-400">
                                   {" "}

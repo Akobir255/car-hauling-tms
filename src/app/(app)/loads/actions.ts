@@ -163,10 +163,18 @@ export async function createLoad(
     customer_id = newCust.id;
   }
 
+  // Carrier pay is derived, never taken from the client: the customer's total
+  // minus the reservation fee we keep. That's the figure posted to CD/SD.
+  const totalRate = parsedCore.data.customer_rate;
+  const reservationFee = parsedCore.data.deposit_amount;
+  const derivedCarrierPay =
+    totalRate != null ? Math.max(0, Math.round((totalRate - (reservationFee ?? 0)) * 100) / 100) : null;
+
   const payload = {
     ...coreValues(parsedCore.data),
     customer_id,
     status: initialStatus,
+    carrier_pay: derivedCarrierPay,
     sales_owner_id: profile.role === "sales" ? profile.id : null,
   };
 

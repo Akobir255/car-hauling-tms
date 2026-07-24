@@ -137,6 +137,7 @@ export function NewLoadForm() {
   const [delivery, setDelivery] = useState<EndpointState>({ ...EMPTY_ENDPOINT });
   const [transport, setTransport] = useState("open");
   const [rate, setRate] = useState("");
+  const [reservation, setReservation] = useState("");
   const [distance, setDistance] = useState("");
   // Once the agent types a distance themselves, the estimator stops
   // overwriting it (it re-runs on transport/vehicle changes too). A ref so
@@ -236,6 +237,14 @@ export function NewLoadForm() {
     };
   }, [pickup.zip, delivery.zip, transport, firstVehicle.vehicle_type, firstVehicle.condition]);
 
+  // What the carrier is offered = total minus the reservation fee we keep.
+  const rateNum = Number(rate);
+  const reservationNum = Number(reservation || 0);
+  const carrierPay =
+    rate.trim() !== "" && Number.isFinite(rateNum) && Number.isFinite(reservationNum)
+      ? Math.max(0, Math.round((rateNum - reservationNum) * 100) / 100)
+      : null;
+
   const pickupField = (field: keyof EndpointState, value: string) =>
     setPickup((prev) => ({ ...prev, [field]: value }));
   const deliveryField = (field: keyof EndpointState, value: string) =>
@@ -313,7 +322,7 @@ export function NewLoadForm() {
             />
           </div>
           <div className="space-y-1.5">
-            <FieldLabel htmlFor="customer_rate">Rate ($)</FieldLabel>
+            <FieldLabel htmlFor="customer_rate">Total ($)</FieldLabel>
             <Input
               id="customer_rate"
               name="customer_rate"
@@ -323,9 +332,27 @@ export function NewLoadForm() {
             />
           </div>
           <div className="space-y-1.5">
-            <FieldLabel htmlFor="deposit_amount">Deposit ($)</FieldLabel>
-            <Input id="deposit_amount" name="deposit_amount" inputMode="decimal" />
+            <FieldLabel htmlFor="deposit_amount">Reservation fee ($)</FieldLabel>
+            <Input
+              id="deposit_amount"
+              name="deposit_amount"
+              inputMode="decimal"
+              value={reservation}
+              onChange={(e) => setReservation(e.target.value)}
+            />
           </div>
+
+          {/* Total − reservation is what the carrier is offered on the board. */}
+          {carrierPay !== null && (
+            <div className="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border bg-muted/40 px-3 py-2 text-sm lg:col-span-4">
+              <span className="text-muted-foreground">Carrier pay</span>
+              <span className="font-semibold tabular-nums">${carrierPay.toLocaleString()}</span>
+              <span className="text-muted-foreground">
+                — total ${Number(rate).toLocaleString()} − reservation $
+                {Number(reservation || 0).toLocaleString()}. This is the amount posted to CD/SD.
+              </span>
+            </div>
+          )}
 
           {/* Suggested price — advisory only; the agent sets the real rate. */}
           {(suggestLoading || suggestion || suggestError) && (
