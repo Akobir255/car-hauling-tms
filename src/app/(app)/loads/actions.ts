@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
 import { isSmsConfigured, sendSms, toE164 } from "@/lib/messaging/ringcentral";
 import { LOAD_STATUSES, type LoadStatus } from "@/types/database";
@@ -124,18 +125,25 @@ export async function createLoad(
 
   // Find-or-create the customer from the name/email/phone captured up front,
   // so a repeat customer's phone/email reuses their record instead of duping.
+  //
+  // The LOOKUP runs through the service-role client on purpose: sales reps'
+  // RLS only shows their own customers, so a caller-scoped search would
+  // re-create every cross-rep repeat customer. Only the matched id is used —
+  // nothing else crosses back. The INSERT stays on the caller's client so the
+  // normal RLS insert policy applies.
+  const admin = createAdminClient();
   let customer_id: string | null = null;
-  const phoneDigits = customerPhone.replace(/\D/g, "");
-  const last10 = phoneDigits.length >= 10 ? phoneDigits.slice(-10) : "";
   if (customerEmail) {
-    const { data } = await supabase.from("customers").select("id").ilike("email", customerEmail).limit(1);
+    // Escape LIKE wildcards: "_" is common in real emails and would otherwise
+    // match any character ("john_doe@" would also match "johnadoe@").
+    const escaped = customerEmail.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+    const { data } = await admin.from("customers").select("id").ilike("email", escaped).limit(1);
     if (data && data[0]) customer_id = data[0].id;
   }
-  if (!customer_id && last10) {
-    const pattern = `%${last10.slice(0, 3)}%${last10.slice(3, 6)}%${last10.slice(6)}%`;
-    const { data } = await supabase.from("customers").select("id, phone").ilike("phone", pattern).limit(10);
-    const match = (data ?? []).find((c) => (c.phone ?? "").replace(/\D/g, "").slice(-10) === last10);
-    if (match) customer_id = match.id;
+  if (!customer_id && customerPhone.replace(/\D/g, "").length >= 10) {
+    // Indexed exact match on the last 10 digits (same RPC the SMS webhook uses).
+    const { data } = await admin.rpc("find_customer_by_phone", { p_phone: customerPhone });
+    customer_id = (data as string | null) ?? null;
   }
   if (!customer_id) {
     const { data: newCust, error: custErr } = await supabase
@@ -148,7 +156,10 @@ export async function createLoad(
       })
       .select("id")
       .single();
-    if (custErr || !newCust) return { error: custErr?.message ?? "Could not create customer." };
+    if (custErr || !newCust) {
+      console.error("Customer create failed:", custErr);
+      return { error: "Could not create the customer — try again." };
+    }
     customer_id = newCust.id;
   }
 

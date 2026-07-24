@@ -29,6 +29,7 @@ import { StatCard } from "@/components/stat-card";
 import { RevenueChart, type RevenuePoint } from "@/components/charts/revenue-chart";
 import { DonutChart, type DonutSegment } from "@/components/charts/donut-chart";
 import { formatCurrency, titleCase } from "@/lib/format";
+import { endOfBusinessDay } from "@/lib/dates";
 import type { Carrier, Load, LoadVehicle, Message } from "@/types/database";
 
 const ACTIVE_STATUSES = [
@@ -70,8 +71,9 @@ export default async function DashboardPage() {
   const since90 = daysAgo(90).toISOString();
   const in30Days = new Date();
   in30Days.setDate(in30Days.getDate() + 30);
-  const endOfToday = new Date();
-  endOfToday.setHours(23, 59, 59, 999);
+  // Same business-timezone boundary as the Follow-up Today tabs, so this
+  // card's count always agrees with the queue.
+  const endOfToday = endOfBusinessDay();
 
   const [
     { data: loads60Data },

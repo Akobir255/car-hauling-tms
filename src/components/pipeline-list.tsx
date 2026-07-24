@@ -5,6 +5,7 @@ import { requireProfile } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { formatCurrency, formatDate, formatPhone } from "@/lib/format";
+import { endOfBusinessDay } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { SelectionProvider } from "@/components/pipeline/selection-context";
 import { RowCheckbox, SelectAllCheckbox } from "@/components/pipeline/row-checkbox";
@@ -48,10 +49,10 @@ export async function PipelineList({
     stage === "order" ? ORDER_TABS : stage === "quote" ? QUOTE_TABS : LEAD_TABS;
   const activeTab = tabs.find((t) => t.key === tab) ?? tabs[0];
 
-  // "Due" = follow-up scheduled for any time up to the end of today (UTC),
-  // which includes everything overdue.
-  const endOfToday = new Date();
-  endOfToday.setUTCHours(23, 59, 59, 999);
+  // "Due" = follow-up scheduled for any time up to the end of today in the
+  // business timezone (includes everything overdue). Shared with the
+  // dashboard's due-today card so the two counts can never disagree.
+  const endOfToday = endOfBusinessDay();
   const endOfTodayIso = endOfToday.toISOString();
 
   let query = supabase.from(table).select("*").limit(200);
@@ -87,7 +88,9 @@ export async function PipelineList({
     if (t.notSigned) return rows.filter((r) => r.date_signed == null).length;
     const inStatuses = rows.filter((r) => (t.statuses ?? stageStatuses).includes(r.status));
     if (t.followUpDue) {
-      return inStatuses.filter((r) => r.follow_up_at && r.follow_up_at <= endOfTodayIso).length;
+      // Compare as Dates — string compare breaks if offset formats ever differ.
+      return inStatuses.filter((r) => r.follow_up_at && new Date(r.follow_up_at) <= endOfToday)
+        .length;
     }
     return inStatuses.length;
   };

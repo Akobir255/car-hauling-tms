@@ -15,8 +15,10 @@ const ORS_KEY = (process.env.ORS_KEY || "").trim();
 type Geo = { coords: [number, number]; city: string; state: string };
 
 async function geocode(zip: string): Promise<Geo | null> {
+  // Key goes in the header, not the URL — query strings end up in logs.
   const r = await fetch(
-    `https://api.openrouteservice.org/geocode/search?api_key=${ORS_KEY}&text=${zip}&boundary.country=USA&size=1`
+    `https://api.openrouteservice.org/geocode/search?text=${zip}&boundary.country=USA&size=1`,
+    { headers: { Authorization: ORS_KEY }, signal: AbortSignal.timeout(5000) }
   );
   const d = await r.json();
   const f = d.features?.[0];
@@ -54,6 +56,7 @@ export async function GET(req: NextRequest) {
         method: "POST",
         headers: { Authorization: `Bearer ${ORS_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({ coordinates: [origin.coords, dest.coords], radiuses: [-1, -1] }),
+        signal: AbortSignal.timeout(8000),
       }
     );
     const rd = await routeRes.json();

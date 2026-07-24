@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useCallback, useEffect, useState } from "react";
+import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Car, MapPin, StickyNote, Truck, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -138,6 +138,10 @@ export function NewLoadForm() {
   const [transport, setTransport] = useState("open");
   const [rate, setRate] = useState("");
   const [distance, setDistance] = useState("");
+  // Once the agent types a distance themselves, the estimator stops
+  // overwriting it (it re-runs on transport/vehicle changes too). A ref so
+  // the in-flight timer always sees the current value.
+  const distanceEditedRef = useRef(false);
   const [firstVehicle, setFirstVehicle] = useState({ vehicle_type: "sedan", condition: "running" });
 
   const [suggestion, setSuggestion] = useState<{ miles: number; price: number } | null>(null);
@@ -213,8 +217,9 @@ export function NewLoadForm() {
           );
         } else {
           const d = await r.json();
+          if (!active) return;
           setSuggestion({ miles: d.miles, price: d.price });
-          setDistance(String(d.miles));
+          if (!distanceEditedRef.current) setDistance(String(d.miles));
         }
       } catch {
         if (active) {
@@ -298,7 +303,10 @@ export function NewLoadForm() {
               name="distance_miles"
               inputMode="numeric"
               value={distance}
-              onChange={(e) => setDistance(e.target.value)}
+              onChange={(e) => {
+                distanceEditedRef.current = true;
+                setDistance(e.target.value);
+              }}
             />
           </div>
           <div className="space-y-1.5">

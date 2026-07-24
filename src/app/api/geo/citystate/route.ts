@@ -19,8 +19,10 @@ export async function GET(req: NextRequest) {
   if (!/^\d{5}$/.test(zip)) return Response.json({ error: "BAD_ZIP" }, { status: 400 });
 
   try {
+    // Key goes in the header, not the URL — query strings end up in logs.
     const r = await fetch(
-      `https://api.openrouteservice.org/geocode/search?api_key=${ORS_KEY}&text=${zip}&boundary.country=USA&size=1`
+      `https://api.openrouteservice.org/geocode/search?text=${zip}&boundary.country=USA&size=1`,
+      { headers: { Authorization: ORS_KEY }, signal: AbortSignal.timeout(5000) }
     );
     const d = await r.json();
     const p = d.features?.[0]?.properties;
