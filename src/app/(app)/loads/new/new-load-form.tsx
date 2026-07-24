@@ -137,6 +137,7 @@ export function NewLoadForm() {
   const [delivery, setDelivery] = useState<EndpointState>({ ...EMPTY_ENDPOINT });
   const [transport, setTransport] = useState("open");
   const [rate, setRate] = useState("");
+  const [distance, setDistance] = useState("");
   const [firstVehicle, setFirstVehicle] = useState({ vehicle_type: "sedan", condition: "running" });
 
   const [suggestion, setSuggestion] = useState<{ miles: number; price: number } | null>(null);
@@ -176,17 +177,23 @@ export function NewLoadForm() {
     autofill(delivery.zip, setDelivery);
   }, [delivery.zip, autofill]);
 
-  // Suggested quote once both ZIPs are valid — shown only, never auto-filled.
+  // Suggested quote once both ZIPs are valid. The PRICE is only a suggestion
+  // (never auto-filled — the agent sets the rate); the computed mileage does
+  // auto-fill the Distance field, still editable. All state updates are
+  // deferred into the timer so the effect body itself stays side-effect free.
   useEffect(() => {
-    if (!/^\d{5}$/.test(pickup.zip) || !/^\d{5}$/.test(delivery.zip)) {
-      setSuggestion(null);
-      setSuggestError(null);
-      return;
-    }
+    const valid = /^\d{5}$/.test(pickup.zip) && /^\d{5}$/.test(delivery.zip);
     let active = true;
-    setSuggestLoading(true);
-    setSuggestError(null);
     const timer = setTimeout(async () => {
+      if (!active) return;
+      if (!valid) {
+        setSuggestion(null);
+        setSuggestError(null);
+        setSuggestLoading(false);
+        return;
+      }
+      setSuggestLoading(true);
+      setSuggestError(null);
       try {
         const params = new URLSearchParams({
           from: pickup.zip,
@@ -207,6 +214,7 @@ export function NewLoadForm() {
         } else {
           const d = await r.json();
           setSuggestion({ miles: d.miles, price: d.price });
+          setDistance(String(d.miles));
         }
       } catch {
         if (active) {
@@ -285,7 +293,13 @@ export function NewLoadForm() {
           </div>
           <div className="space-y-1.5">
             <FieldLabel htmlFor="distance_miles">Distance (mi)</FieldLabel>
-            <Input id="distance_miles" name="distance_miles" inputMode="numeric" />
+            <Input
+              id="distance_miles"
+              name="distance_miles"
+              inputMode="numeric"
+              value={distance}
+              onChange={(e) => setDistance(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <FieldLabel htmlFor="customer_rate">Rate ($)</FieldLabel>

@@ -69,7 +69,6 @@ export function VehiclesFieldArray({
               value={v.make}
               onValueChange={(val) => update(i, "make", val)}
               fetchOptions={(q) => searchMakes(q)}
-              placeholder="Chev…"
             />
           </div>
           <div className="space-y-1 lg:col-span-2">
@@ -78,7 +77,6 @@ export function VehiclesFieldArray({
               value={v.model}
               onValueChange={(val) => update(i, "model", val)}
               fetchOptions={(q) => searchModels(v.make, q)}
-              placeholder={v.make ? "Silverado…" : "Pick a make first"}
             />
           </div>
           <div className="space-y-1 lg:col-span-2">

@@ -24,8 +24,12 @@ export function Autocomplete({
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<string[]>([]);
   const boxRef = useRef<HTMLDivElement>(null);
+  // Kept in a ref (updated in an effect, not during render) so parent
+  // re-renders with a new fetchOptions closure don't reset the debounce.
   const fetchRef = useRef(fetchOptions);
-  fetchRef.current = fetchOptions;
+  useEffect(() => {
+    fetchRef.current = fetchOptions;
+  }, [fetchOptions]);
 
   useEffect(() => {
     const q = value.trim();
