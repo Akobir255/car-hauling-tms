@@ -18,8 +18,8 @@ const initialState: LoadFormState = { error: null };
 function EndpointFields({ prefix, title }: { prefix: "pickup" | "delivery"; title: string }) {
   return (
     <fieldset className="min-w-0 space-y-3">
-      <legend className="flex items-center gap-1.5 pb-1 text-xs font-semibold text-muted-foreground">
-        <MapPin className="size-3.5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+      <legend className="flex items-center gap-1.5 pb-1 text-[13px] font-semibold text-foreground">
+        <MapPin className="size-4 text-primary" aria-hidden="true" />
         {title}
       </legend>
       <div className="space-y-1.5">

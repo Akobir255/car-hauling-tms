@@ -160,7 +160,7 @@ export async function PipelineList({
       <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
         <table className="w-full border-collapse text-[15px]">
           <thead>
-            <tr className="border-b bg-muted/50 text-left text-[13px] font-medium uppercase tracking-wide text-muted-foreground">
+            <tr className="border-b bg-muted/50 text-left text-[13px] font-semibold uppercase tracking-wide text-muted-foreground">
               <th className="w-8 px-2 py-3"></th>
               <th className="px-3 py-3">ID</th>
               <th className="px-3 py-3">Converted</th>

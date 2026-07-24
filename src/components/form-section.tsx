@@ -1,9 +1,9 @@
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// msgplane-style grouped form sections, modernized: instead of the old
-// saturated header bands, a small brand-accent icon + title over a hairline
-// divider. The data stays the loudest thing on screen.
+// A grouped form section as a banded card: a tinted header bar (primary
+// accent + icon + title) over a bordered, padded body. The bar is what
+// visually separates one group of fields from the next.
 export function FormSection({
   icon: Icon,
   title,
@@ -18,18 +18,20 @@ export function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className={cn("space-y-4", className)}>
-      <div className="flex items-center gap-2 border-b pb-2">
-        <Icon className="size-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-        <h2 className="text-sm font-semibold">{title}</h2>
+    <section className={cn("overflow-hidden rounded-lg border bg-card shadow-sm", className)}>
+      <div className="flex items-center gap-2.5 border-b bg-muted/50 px-5 py-3">
+        <span className="h-4 w-1 rounded-full bg-primary" aria-hidden="true" />
+        <Icon className="size-4 text-primary" aria-hidden="true" />
+        <h2 className="text-sm font-semibold tracking-tight text-foreground">{title}</h2>
         {aside && <div className="ml-auto">{aside}</div>}
       </div>
-      {children}
+      <div className="p-5">{children}</div>
     </section>
   );
 }
 
-// Uppercase-tracked micro label; the field VALUE gets the visual weight.
+// Field label: uppercase, but big and bold enough to read at a glance —
+// 13px semibold, not the old 11px micro type that caused eye strain.
 export function FieldLabel({
   htmlFor,
   required,
@@ -45,7 +47,7 @@ export function FieldLabel({
     <label
       htmlFor={htmlFor}
       className={cn(
-        "block text-[11px] font-medium uppercase tracking-wider text-muted-foreground",
+        "block text-[13px] font-semibold uppercase tracking-wide text-muted-foreground",
         className
       )}
     >
