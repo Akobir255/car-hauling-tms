@@ -5,28 +5,19 @@ import type { Map as LeafletMap, Polyline, CircleMarker } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Button } from "@/components/ui/button";
 
-// Embedded route map with auto mileage — msgplane-style, but on the free
-// OpenStreetMap stack: Nominatim geocodes city/state/zip, OSRM's public
-// server returns the driving route. Both are keyless community services, so
-// every failure path degrades to "type the miles yourself" rather than
-// blocking the form.
+// Embedded route map with auto mileage — msgplane-style. Geocoding and
+// routing go through our own /api/geo/route (OpenRouteService server-side):
+// the public Nominatim/OSRM servers this first used throttle and block
+// anonymous browser traffic, which is exactly the "Couldn't locate the
+// origin" failure. Every failure path still degrades to "type the miles
+// yourself" rather than blocking the form.
 
 export type RouteEndpoint = { city: string; state: string; zip: string };
 
 type RouteResult = { miles: number; hours: number };
 
-async function geocode(p: RouteEndpoint): Promise<[number, number] | null> {
-  const params = new URLSearchParams({ format: "json", limit: "1", country: "USA" });
-  if (p.city) params.set("city", p.city);
-  if (p.state) params.set("state", p.state);
-  if (p.zip) params.set("postalcode", p.zip);
-  const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-    headers: { Accept: "application/json" },
-  });
-  if (!res.ok) return null;
-  const data = (await res.json()) as { lat: string; lon: string }[];
-  if (!data[0]) return null;
-  return [Number(data[0].lat), Number(data[0].lon)];
+function endpointText(p: RouteEndpoint): string {
+  return [[p.city, p.state].filter(Boolean).join(", "), p.zip].filter(Boolean).join(" ").trim();
 }
 
 export function RouteMap({
@@ -68,41 +59,42 @@ export function RouteMap({
       const map = mapRef.current;
       if (!map) return;
 
-      const [origin, dest] = await Promise.all([
-        geocode(endpoints.origin),
-        geocode(endpoints.destination),
-      ]);
-      if (!origin) throw new Error("Couldn't locate the origin — check city/state/ZIP.");
-      if (!dest) throw new Error("Couldn't locate the destination — check city/state/ZIP.");
-
-      const osrm = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${origin[1]},${origin[0]};${dest[1]},${dest[0]}?overview=full&geometries=geojson`
-      );
-      if (!osrm.ok) throw new Error("Route service is unavailable — enter miles manually.");
-      const route = await osrm.json();
-      const leg = route.routes?.[0];
-      if (!leg) throw new Error("No drivable route found between these points.");
+      const params = new URLSearchParams({
+        from: endpointText(endpoints.origin),
+        to: endpointText(endpoints.destination),
+      });
+      const res = await fetch(`/api/geo/route?${params.toString()}`);
+      if (!res.ok) {
+        const { error: code } = (await res.json().catch(() => ({ error: "" }))) as {
+          error?: string;
+        };
+        if (code === "ORIGIN_NOT_FOUND")
+          throw new Error("Couldn't locate the origin — check city/state/ZIP.");
+        if (code === "DEST_NOT_FOUND")
+          throw new Error("Couldn't locate the destination — check city/state/ZIP.");
+        if (code === "NOT_CONFIGURED")
+          throw new Error("Distance service isn't set up (ORS_KEY) — enter miles manually.");
+        if (code === "NO_ROUTE") throw new Error("No drivable route found between these points.");
+        throw new Error("Route service is unavailable — enter miles manually.");
+      }
+      const data = (await res.json()) as { miles: number; hours: number; coords: [number, number][] };
 
       for (const layer of layersRef.current) layer.remove();
       layersRef.current = [];
 
-      const coords = (leg.geometry.coordinates as [number, number][]).map(
-        ([lon, lat]) => [lat, lon] as [number, number]
-      );
+      const coords = data.coords;
       const line = L.polyline(coords, { color: "#2563eb", weight: 4, opacity: 0.85 }).addTo(map);
-      const originMarker = L.circleMarker(origin, {
+      const originMarker = L.circleMarker(coords[0], {
         radius: 7, color: "#2563eb", fillColor: "#ffffff", fillOpacity: 1, weight: 3,
       }).addTo(map);
-      const destMarker = L.circleMarker(dest, {
+      const destMarker = L.circleMarker(coords[coords.length - 1], {
         radius: 7, color: "#2563eb", fillColor: "#2563eb", fillOpacity: 1, weight: 3,
       }).addTo(map);
       layersRef.current = [line, originMarker, destMarker];
       map.fitBounds(line.getBounds(), { padding: [30, 30] });
 
-      const miles = Math.round(leg.distance / 1609.344);
-      const hours = leg.duration / 3600;
-      setResult({ miles, hours });
-      onMiles(miles);
+      setResult({ miles: data.miles, hours: data.hours });
+      onMiles(data.miles);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Route lookup failed — enter miles manually.");
     } finally {
