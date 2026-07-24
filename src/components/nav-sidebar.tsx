@@ -15,7 +15,7 @@ const NAV_ITEMS: { href: string; label: string; roles?: UserRole[] }[] = [
 ];
 
 // msgplane-style horizontal top nav: blue bar, white links, darker active tab.
-export function NavBar({ role }: { role: UserRole }) {
+export function NavBar({ role, unreadMessages = 0 }: { role: UserRole; unreadMessages?: number }) {
   const pathname = usePathname();
 
   return (
@@ -27,11 +27,19 @@ export function NavBar({ role }: { role: UserRole }) {
             key={item.href}
             href={item.href}
             className={cn(
-              "flex items-center px-4 text-sm font-medium text-white transition-colors",
+              "flex items-center gap-1.5 px-4 text-sm font-medium text-white transition-colors",
               active ? "bg-blue-900/60" : "hover:bg-blue-800/50"
             )}
           >
             {item.label}
+            {item.href === "/messages" && unreadMessages > 0 && (
+              <span
+                aria-label={`${unreadMessages} unread messages`}
+                className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
+              >
+                {unreadMessages > 99 ? "99+" : unreadMessages}
+              </span>
+            )}
           </Link>
         );
       })}

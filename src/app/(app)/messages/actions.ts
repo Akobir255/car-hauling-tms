@@ -6,7 +6,16 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth";
 import { buildContext, renderTemplate } from "@/lib/messaging/render";
-import { isSmsConfigured, sendSms, toE164 } from "@/lib/messaging/ringcentral";
+import {
+  INBOUND_SMS_EVENT_FILTER,
+  createInboundSubscription,
+  deleteSubscription,
+  getWebhookVerificationToken,
+  isSmsConfigured,
+  listSubscriptions,
+  sendSms,
+  toE164,
+} from "@/lib/messaging/ringcentral";
 import type { Customer, Load } from "@/types/database";
 
 export type MessageFormState = {
@@ -152,4 +161,148 @@ export async function sendBulk(
 
   revalidatePath("/messages");
   return { error: null, result: { sent, queued, skipped } };
+}
+
+// ---- Two-way SMS ----
+
+const replySchema = z.object({
+  body: z.string().trim().min(1, "Message is required").max(1600, "Message is too long"),
+});
+
+// Direct reply in a customer thread. Uses the session client on purpose:
+// RLS scopes which customers a sales rep can even fetch, so a rep can't
+// text someone else's customer by forging the id.
+export async function sendReply(
+  customerId: string,
+  _prevState: MessageFormState,
+  formData: FormData
+): Promise<MessageFormState> {
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const parsed = replySchema.safeParse({ body: formData.get("body") });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  const supabase = await createClient();
+  const { data: customerData } = await supabase
+    .from("customers")
+    .select("*")
+    .eq("id", customerId)
+    .single();
+  if (!customerData) return { error: "Customer not found." };
+  const customer = customerData as Customer;
+
+  if (customer.sms_opt_out) {
+    return { error: "This customer has opted out of SMS (replied STOP)." };
+  }
+  const to = toE164(customer.phone);
+  if (!to) return { error: "Customer has no valid US phone number." };
+  if (!isSmsConfigured()) return { error: "RingCentral is not connected." };
+
+  let providerMessageId: string | null = null;
+  try {
+    const result = await sendSms(to, parsed.data.body);
+    providerMessageId = result.providerMessageId;
+  } catch (err) {
+    console.error(`SMS reply to ${to} failed:`, err);
+    return { error: "Send failed — RingCentral rejected the message." };
+  }
+
+  const { error } = await supabase.from("messages").insert({
+    customer_id: customer.id,
+    channel: "sms",
+    direction: "outbound",
+    to_addr: to,
+    body: parsed.data.body,
+    provider_message_id: providerMessageId,
+    status: "sent",
+    sent_by: profile.id,
+  });
+  if (error) return { error: `Sent, but logging failed: ${error.message}` };
+
+  // Replying means the thread was seen — clear its unread flags.
+  await supabase
+    .from("messages")
+    .update({ read_at: new Date().toISOString() })
+    .eq("customer_id", customer.id)
+    .eq("direction", "inbound")
+    .is("read_at", null);
+
+  revalidatePath(`/customers/${customer.id}`);
+  revalidatePath("/messages");
+  revalidatePath("/", "layout");
+  return { error: null };
+}
+
+export async function markAllMessagesRead(): Promise<void> {
+  await requireRole("admin", "dispatcher", "sales");
+  const supabase = await createClient();
+  await supabase
+    .from("messages")
+    .update({ read_at: new Date().toISOString() })
+    .eq("direction", "inbound")
+    .is("read_at", null);
+  revalidatePath("/messages");
+  revalidatePath("/", "layout");
+}
+
+// ---- Inbound webhook registration (admin) ----
+
+function webhookAddress(): string | null {
+  const explicit = (process.env.NEXT_PUBLIC_APP_URL || "").trim().replace(/\/$/, "");
+  if (explicit) return `${explicit}/api/webhooks/ringcentral`;
+  const vercel = (process.env.VERCEL_PROJECT_PRODUCTION_URL || "").trim();
+  if (vercel) return `https://${vercel}/api/webhooks/ringcentral`;
+  return null;
+}
+
+export type WebhookSyncState = {
+  error: string | null;
+  status?: string | null;
+};
+
+// Registers (or repairs) the RingCentral subscription that pushes inbound
+// SMS to our webhook. Safe to click repeatedly — it converges on exactly one
+// active subscription for our address.
+export async function syncInboundWebhook(
+  _prevState: WebhookSyncState,
+  _formData: FormData
+): Promise<WebhookSyncState> {
+  await requireRole("admin");
+
+  if (!isSmsConfigured()) {
+    return { error: "RingCentral credentials are not configured." };
+  }
+  if (!getWebhookVerificationToken()) {
+    return { error: "Set RINGCENTRAL_WEBHOOK_TOKEN (any long random string) in the env first." };
+  }
+  const address = webhookAddress();
+  if (!address) {
+    return { error: "Set NEXT_PUBLIC_APP_URL so RingCentral knows where to deliver." };
+  }
+
+  try {
+    const subs = await listSubscriptions();
+    const ours = subs.filter(
+      (s) =>
+        s.deliveryMode?.transportType === "WebHook" &&
+        s.deliveryMode?.address === address &&
+        s.eventFilters?.includes(INBOUND_SMS_EVENT_FILTER)
+    );
+    const active = ours.find((s) => s.status === "Active");
+    // Clear out anything stale (blacklisted after delivery failures, etc.).
+    for (const sub of ours) {
+      if (sub !== active) await deleteSubscription(sub.id);
+    }
+    if (active) {
+      revalidatePath("/messages");
+      return { error: null, status: `Active — delivering to ${address}` };
+    }
+    const created = await createInboundSubscription(address);
+    revalidatePath("/messages");
+    return { error: null, status: `Created (${created.status}) — delivering to ${address}` };
+  } catch (err) {
+    console.error("Webhook sync failed:", err);
+    return { error: err instanceof Error ? err.message : "Webhook sync failed." };
+  }
 }

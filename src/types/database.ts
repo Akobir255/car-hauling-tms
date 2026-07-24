@@ -144,6 +144,7 @@ export interface Message {
   provider_message_id: string | null;
   status: MessageStatus;
   sent_by: string | null;
+  read_at: string | null;
   created_at: string;
 }
 

@@ -12,6 +12,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { isSmsConfigured } from "@/lib/messaging/ringcentral";
+import { markAllMessagesRead } from "./actions";
+import { WebhookSyncButton } from "./webhook-sync-button";
+import { cn } from "@/lib/utils";
 import type { Message } from "@/types/database";
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -22,7 +25,7 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
 };
 
 export default async function MessagesPage() {
-  await requireProfile();
+  const profile = await requireProfile();
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -31,6 +34,7 @@ export default async function MessagesPage() {
     .order("created_at", { ascending: false })
     .limit(200);
   const messages = (data ?? []) as Message[];
+  const unreadCount = messages.filter((m) => m.direction === "inbound" && !m.read_at).length;
 
   const customerIds = [...new Set(messages.map((m) => m.customer_id).filter(Boolean) as string[])];
   const { data: customers } = customerIds.length
@@ -40,7 +44,7 @@ export default async function MessagesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Messages</h1>
           <p className="text-sm text-muted-foreground">
@@ -49,7 +53,15 @@ export default async function MessagesPage() {
               : "RingCentral not connected yet — sends are logged as Queued until credentials are added."}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {unreadCount > 0 && (
+            <form action={markAllMessagesRead}>
+              <Button type="submit" variant="outline">
+                Mark all read ({unreadCount})
+              </Button>
+            </form>
+          )}
+          {profile.role === "admin" && <WebhookSyncButton />}
           <Button variant="outline" render={<Link href="/messages/templates" />}>
             Templates
           </Button>
@@ -63,42 +75,55 @@ export default async function MessagesPage() {
         <TableHeader>
           <TableRow>
             <TableHead>When</TableHead>
+            <TableHead>Direction</TableHead>
             <TableHead>Customer</TableHead>
-            <TableHead>To</TableHead>
+            <TableHead>Number</TableHead>
             <TableHead>Message</TableHead>
             <TableHead>Status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {messages.map((m) => (
-            <TableRow key={m.id}>
-              <TableCell className="whitespace-nowrap text-muted-foreground">
-                {new Date(m.created_at).toLocaleString("en-US", {
-                  dateStyle: "short",
-                  timeStyle: "short",
-                })}
-              </TableCell>
-              <TableCell>
-                {m.customer_id ? (
-                  <Link href={`/customers/${m.customer_id}`} className="hover:underline">
-                    {customerById.get(m.customer_id)?.contact_name ?? "—"}
-                  </Link>
-                ) : (
-                  "—"
-                )}
-              </TableCell>
-              <TableCell className="text-muted-foreground">{m.to_addr || "—"}</TableCell>
-              <TableCell className="max-w-md truncate text-muted-foreground" title={m.body}>
-                {m.body}
-              </TableCell>
-              <TableCell>
-                <Badge variant={STATUS_VARIANT[m.status] ?? "outline"}>{m.status}</Badge>
-              </TableCell>
-            </TableRow>
-          ))}
+          {messages.map((m) => {
+            const unread = m.direction === "inbound" && !m.read_at;
+            return (
+              <TableRow key={m.id} className={cn(unread && "bg-blue-500/5 font-medium")}>
+                <TableCell className="whitespace-nowrap text-muted-foreground">
+                  {new Date(m.created_at).toLocaleString("en-US", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                  })}
+                </TableCell>
+                <TableCell>
+                  {m.direction === "inbound" ? (
+                    <Badge variant="default">↓ In{unread ? " · new" : ""}</Badge>
+                  ) : (
+                    <Badge variant="outline">↑ Out</Badge>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {m.customer_id ? (
+                    <Link href={`/customers/${m.customer_id}`} className="hover:underline">
+                      {customerById.get(m.customer_id)?.contact_name ?? "—"}
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {(m.direction === "inbound" ? m.from_addr : m.to_addr) || "—"}
+                </TableCell>
+                <TableCell className="max-w-md truncate text-muted-foreground" title={m.body}>
+                  {m.body}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={STATUS_VARIANT[m.status] ?? "outline"}>{m.status}</Badge>
+                </TableCell>
+              </TableRow>
+            );
+          })}
           {messages.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
+              <TableCell colSpan={6} className="text-center text-muted-foreground">
                 No messages yet — send your first blast.
               </TableCell>
             </TableRow>

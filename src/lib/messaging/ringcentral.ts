@@ -73,3 +73,74 @@ export function toE164(value: string | null | undefined): string | null {
   if (d.length !== 10) return null;
   return `+1${d}`;
 }
+
+// ---- Inbound webhook subscription management ----
+// RingCentral pushes new-SMS notifications to our webhook once a subscription
+// exists. The verification token below is echoed back by RingCentral on every
+// notification so the webhook can prove the request really came from them.
+
+export const INBOUND_SMS_EVENT_FILTER =
+  "/restapi/v1.0/account/~/extension/~/message-store/instant?type=SMS";
+
+export function getWebhookVerificationToken(): string {
+  return (process.env.RINGCENTRAL_WEBHOOK_TOKEN || "").trim();
+}
+
+export type RcSubscription = {
+  id: string;
+  status: string;
+  eventFilters: string[];
+  expirationTime?: string;
+  deliveryMode: { transportType: string; address?: string };
+};
+
+export async function listSubscriptions(): Promise<RcSubscription[]> {
+  const token = await getAccessToken();
+  const res = await fetch(`${RC_SERVER}/restapi/v1.0/subscription`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error(`RingCentral list subscriptions failed (${res.status}): ${await res.text()}`);
+  }
+  const data = await res.json();
+  return (data.records ?? []) as RcSubscription[];
+}
+
+export async function createInboundSubscription(address: string): Promise<RcSubscription> {
+  const verificationToken = getWebhookVerificationToken();
+  if (!verificationToken) {
+    throw new Error("RINGCENTRAL_WEBHOOK_TOKEN is not set");
+  }
+  const token = await getAccessToken();
+  const res = await fetch(`${RC_SERVER}/restapi/v1.0/subscription`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      eventFilters: [INBOUND_SMS_EVENT_FILTER],
+      deliveryMode: {
+        transportType: "WebHook",
+        address,
+        verificationToken,
+      },
+      expiresIn: 630720000, // max — effectively permanent; the Connect button re-checks anyway
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`RingCentral create subscription failed (${res.status}): ${await res.text()}`);
+  }
+  return (await res.json()) as RcSubscription;
+}
+
+export async function deleteSubscription(id: string): Promise<void> {
+  const token = await getAccessToken();
+  const res = await fetch(`${RC_SERVER}/restapi/v1.0/subscription/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`RingCentral delete subscription failed (${res.status}): ${await res.text()}`);
+  }
+}
