@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Car, MapPin, User } from "lucide-react";
+import { Car, Mail, MapPin, Phone, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -157,20 +157,20 @@ export async function PipelineList({
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
 
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full border-collapse text-sm">
+      <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
+        <table className="w-full border-collapse text-[15px]">
           <thead>
-            <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
-              <th className="w-8 px-2 py-2"></th>
-              <th className="px-3 py-2 font-medium">ID</th>
-              <th className="px-3 py-2 font-medium">Converted</th>
-              <th className="px-3 py-2 font-medium">Notes</th>
-              <th className="px-3 py-2 font-medium">Assigned to</th>
-              <th className="px-3 py-2 font-medium">Shipper</th>
-              <th className="px-3 py-2 font-medium">Vehicles</th>
-              <th className="px-3 py-2 font-medium">Orig/Dest</th>
-              <th className="px-3 py-2 font-medium">1st Avail</th>
-              <th className="px-3 py-2 font-medium">Quote</th>
+            <tr className="border-b bg-muted/50 text-left text-[13px] font-medium uppercase tracking-wide text-muted-foreground">
+              <th className="w-8 px-2 py-3"></th>
+              <th className="px-3 py-3">ID</th>
+              <th className="px-3 py-3">Converted</th>
+              <th className="px-3 py-3">Notes</th>
+              <th className="px-3 py-3">Assigned to</th>
+              <th className="px-3 py-3">Shipper</th>
+              <th className="px-3 py-3">Vehicles</th>
+              <th className="px-3 py-3">Orig/Dest</th>
+              <th className="px-3 py-3">1st Avail</th>
+              <th className="px-3 py-3">Quote</th>
             </tr>
           </thead>
           <tbody>
@@ -180,65 +180,82 @@ export async function PipelineList({
               const loadVehicles = vehiclesByLoad.get(load.id) ?? [];
               const created = dateTime(load.created_at);
               return (
-                <tr key={load.id} className="border-b align-top last:border-b-0 hover:bg-muted/30">
-                  <td className="px-2 py-3">
-                    <input type="checkbox" aria-label={`Select ${load.load_number}`} className="mt-0.5" />
+                <tr key={load.id} className="border-b align-top last:border-b-0 hover:bg-muted/40">
+                  <td className="px-2 py-4">
+                    <input type="checkbox" aria-label={`Select ${load.load_number}`} className="mt-1" />
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-4">
                     <Link
                       href={`/loads/${load.id}`}
-                      className="font-medium tabular-nums text-blue-700 hover:underline dark:text-blue-400"
+                      className="font-semibold tabular-nums text-primary hover:underline"
                     >
                       {load.load_number}
                     </Link>
-                    <div className="mt-1">
+                    <div className="mt-1.5">
                       <StatusBadge status={load.status} />
                     </div>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">
-                    <p className="tabular-nums">{created.date}</p>
-                    <p className="text-xs tabular-nums">{created.time}</p>
+                  <td className="whitespace-nowrap px-3 py-4">
+                    <p className="tabular-nums text-foreground">{created.date}</p>
+                    <p className="text-[13px] tabular-nums text-muted-foreground">{created.time}</p>
                   </td>
-                  <td className="px-3 py-3">
-                    <span className="inline-flex min-w-6 justify-center rounded border px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
+                  <td className="px-3 py-4">
+                    <span className="inline-flex min-w-6 justify-center rounded border px-1.5 py-0.5 text-[13px] tabular-nums text-muted-foreground">
                       {load.notes || load.shipper_info ? 1 : 0}
                     </span>
                   </td>
-                  <td className="px-3 py-3">
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <User className="size-3.5" aria-hidden="true" />
+                  <td className="px-3 py-4">
+                    <span className="flex items-center gap-1.5 text-foreground">
+                      <User className="size-4 text-muted-foreground" aria-hidden="true" />
                       {rp ? rp.full_name || rp.email : "—"}
                     </span>
                   </td>
-                  <td className="px-3 py-3">
-                    <p className="font-medium">{customer?.contact_name ?? "—"}</p>
-                    {customer?.phone && <p className="tabular-nums text-muted-foreground">{customer.phone}</p>}
-                    {customer?.email && (
-                      <p className="max-w-44 truncate text-muted-foreground">{customer.email}</p>
-                    )}
-                    {customer && (
-                      <Link
-                        href={`/customers/${customer.id}`}
-                        className="text-xs text-blue-700 hover:underline dark:text-blue-400"
-                      >
-                        quick view
-                      </Link>
+                  <td className="px-3 py-4">
+                    {customer ? (
+                      <div className="space-y-1">
+                        <Link
+                          href={`/customers/${customer.id}`}
+                          className="flex items-center gap-1.5 font-semibold text-primary hover:underline"
+                        >
+                          <User className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                          {customer.contact_name}
+                        </Link>
+                        {customer.phone && (
+                          <p className="flex items-center gap-1.5 tabular-nums text-muted-foreground">
+                            <Phone className="size-3.5 shrink-0" aria-hidden="true" />
+                            {customer.phone}
+                          </p>
+                        )}
+                        {customer.email && (
+                          <p className="flex items-center gap-1.5 text-muted-foreground">
+                            <Mail className="size-3.5 shrink-0" aria-hidden="true" />
+                            <span className="max-w-44 truncate">{customer.email}</span>
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-3">
-                    <div className="space-y-1.5">
+                  <td className="px-3 py-4">
+                    <div className="space-y-2">
                       {loadVehicles.length === 0 && <span className="text-muted-foreground">—</span>}
                       {loadVehicles.map((v) => (
-                        <div key={v.id} className="flex items-center gap-2">
-                          <span className="flex size-8 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground">
-                            <Car className="size-4" aria-hidden="true" />
+                        <div key={v.id} className="flex items-center gap-2.5">
+                          <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                            <Car className="size-5" aria-hidden="true" />
                           </span>
                           <div className="leading-tight">
-                            <p>{[v.year, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}</p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="font-medium">
+                              {[v.year, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}
+                            </p>
+                            <p className="text-[13px] text-muted-foreground">
                               {v.vehicle_type}
                               {load.transport_type === "enclosed" ? (
-                                <span className="text-amber-600 dark:text-amber-400"> · enclosed</span>
+                                <span className="font-medium text-amber-600 dark:text-amber-400">
+                                  {" "}
+                                  · enclosed
+                                </span>
                               ) : null}
                             </p>
                           </div>
@@ -246,24 +263,33 @@ export async function PipelineList({
                       ))}
                     </div>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3">
-                    <p className="flex items-center gap-1">
-                      <MapPin className="size-3 text-green-600 dark:text-green-500" aria-hidden="true" />
+                  <td className="whitespace-nowrap px-3 py-4">
+                    <p className="flex items-center gap-1.5">
+                      <MapPin className="size-3.5 shrink-0 text-green-600 dark:text-green-500" aria-hidden="true" />
                       {load.pickup_city || "—"} {load.pickup_state || ""} {load.pickup_zip || ""}
                     </p>
-                    <p className="flex items-center gap-1">
-                      <MapPin className="size-3 text-red-600 dark:text-red-500" aria-hidden="true" />
+                    <p className="mt-1 flex items-center gap-1.5">
+                      <MapPin className="size-3.5 shrink-0 text-red-600 dark:text-red-500" aria-hidden="true" />
                       {load.delivery_city || "—"} {load.delivery_state || ""} {load.delivery_zip || ""}
                     </p>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3 tabular-nums text-muted-foreground">
+                  <td className="whitespace-nowrap px-3 py-4 tabular-nums text-foreground">
                     {formatDate(load.pickup_ready_date)}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-xs">
-                    <p>Tariff: {formatCurrency(load.customer_rate)}</p>
-                    <p className="text-muted-foreground">Deposit: {formatCurrency(load.deposit_amount)}</p>
+                  <td className="whitespace-nowrap px-3 py-4">
+                    <p>
+                      <span className="text-muted-foreground">Tariff: </span>
+                      <span className="font-semibold tabular-nums text-foreground">
+                        {formatCurrency(load.customer_rate)}
+                      </span>
+                    </p>
+                    <p className="text-[13px] tabular-nums text-muted-foreground">
+                      Deposit: {formatCurrency(load.deposit_amount)}
+                    </p>
                     {canSeeMargin && (
-                      <p className="text-muted-foreground">Carrier: {formatCurrency(load.carrier_pay)}</p>
+                      <p className="text-[13px] tabular-nums text-muted-foreground">
+                        Carrier: {formatCurrency(load.carrier_pay)}
+                      </p>
                     )}
                   </td>
                 </tr>
@@ -271,7 +297,7 @@ export async function PipelineList({
             })}
             {loads.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-3 py-6 text-center text-muted-foreground">
+                <td colSpan={10} className="px-3 py-10 text-center text-muted-foreground">
                   Nothing here yet.
                 </td>
               </tr>
