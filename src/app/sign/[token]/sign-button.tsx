@@ -1,13 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { signByToken, type SignState } from "./sign-actions";
 
-// The signature block: typed full name + explicit agreement checkbox. The
-// typed name is the electronic signature (stored with IP + timestamp).
+// The signature block: agreement checkbox + full name + email. The typed name
+// is the electronic signature (previewed live in script, stored with email,
+// IP, and timestamp).
 export function SignatureForm({
   token,
   alreadySigned,
@@ -23,15 +24,14 @@ export function SignatureForm({
     signed: alreadySigned,
     signedName,
   });
+  const [name, setName] = useState("");
 
   if (state.signed) {
     return (
       <div className="space-y-3">
         <div className="rounded-lg border border-green-600/30 bg-green-600/10 px-4 py-4 text-center text-green-700 dark:text-green-400">
           <p className="text-lg font-bold">Signed — thank you.</p>
-          {state.signedName && (
-            <p className="mt-1 font-[cursive] text-xl">{state.signedName}</p>
-          )}
+          {state.signedName && <p className="mt-1 font-[cursive] text-2xl">{state.signedName}</p>}
           <p className="mt-1 text-sm">
             Your agreement has been received. Keep a copy for your records.
           </p>
@@ -59,20 +59,47 @@ export function SignatureForm({
         </span>
       </label>
 
-      <div className="space-y-1.5">
-        <label htmlFor="full_name" className="text-sm font-semibold">
-          Type your full legal name as your signature
-        </label>
-        <Input
-          id="full_name"
-          name="full_name"
-          required
-          minLength={3}
-          maxLength={100}
-          placeholder="Full name"
-          autoComplete="name"
-          className="h-11 font-[cursive] text-lg"
-        />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label htmlFor="full_name" className="text-sm font-semibold">
+            Full legal name
+          </label>
+          <Input
+            id="full_name"
+            name="full_name"
+            required
+            minLength={3}
+            maxLength={100}
+            placeholder="Full name"
+            autoComplete="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="h-11"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="email" className="text-sm font-semibold">
+            Email address
+          </label>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            required
+            maxLength={200}
+            placeholder="you@email.com"
+            autoComplete="email"
+            className="h-11"
+          />
+        </div>
+      </div>
+
+      {/* Live signature preview — the typed name IS the signature. */}
+      <div className="rounded-md border border-dashed bg-muted/30 px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Signature
+        </p>
+        <p className="min-h-9 font-[cursive] text-2xl leading-snug">{name || " "}</p>
       </div>
 
       {state.error && <p className="text-sm text-destructive">{state.error}</p>}
@@ -81,7 +108,8 @@ export function SignatureForm({
         {pending ? "Submitting…" : "Agree & sign"}
       </Button>
       <p className="text-center text-xs text-muted-foreground">
-        Your typed name, the date, and your IP address are recorded as your electronic signature.
+        Your typed name, email, the date, and your IP address are recorded as your electronic
+        signature.
       </p>
     </form>
   );

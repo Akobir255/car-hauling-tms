@@ -10,6 +10,13 @@ export function formatDate(value: string | null | undefined): string {
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(d);
 }
 
+export function formatDateTime(value: string | null | undefined): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(d);
+}
+
 export function daysUntil(value: string | null | undefined): number | null {
   if (!value) return null;
   const target = new Date(value);

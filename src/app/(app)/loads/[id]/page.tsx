@@ -31,16 +31,23 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   if (!loadData) notFound();
   const load = loadData as Load;
 
-  const [{ data: customerData }, { data: vehiclesData }, { data: history }] = await Promise.all([
-    supabase.from("customers").select("*").eq("id", load.customer_id).single(),
-    supabase.from("load_vehicles").select("*").eq("load_id", id).order("created_at"),
-    supabase
-      .from("load_status_history")
-      .select("*")
-      .eq("load_id", id)
-      .order("created_at", { ascending: false })
-      .limit(12),
-  ]);
+  const [{ data: customerData }, { data: vehiclesData }, { data: history }, { data: contractEvents }] =
+    await Promise.all([
+      supabase.from("customers").select("*").eq("id", load.customer_id).single(),
+      supabase.from("load_vehicles").select("*").eq("load_id", id).order("created_at"),
+      supabase
+        .from("load_status_history")
+        .select("*")
+        .eq("load_id", id)
+        .order("created_at", { ascending: false })
+        .limit(12),
+      supabase
+        .from("contract_events")
+        .select("event, ip, created_at")
+        .eq("load_id", id)
+        .order("created_at", { ascending: false })
+        .limit(50),
+    ]);
   const customer = customerData as Customer | null;
   const vehicles = (vehiclesData ?? []) as LoadVehicle[];
   const historyRows = (history ?? []) as LoadStatusHistoryEntry[];
@@ -279,6 +286,8 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               canManage={canManageCarrier}
               signedName={load.contract_signed_name}
               signedIp={load.contract_signed_ip}
+              signedEmail={load.contract_signed_email}
+              events={contractEvents ?? []}
             />
           </SectionBand>
         </div>

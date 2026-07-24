@@ -119,6 +119,7 @@ export interface Load {
   contract_sent_at: string | null;
   contract_signed_ip: string | null;
   contract_signed_name: string | null;
+  contract_signed_email: string | null;
   dispatched_at: string | null;
   picked_up_at: string | null;
   delivered_at: string | null;

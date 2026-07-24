@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Truck } from "lucide-react";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -24,6 +25,15 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
 
   if (!loadData) notFound();
   const load = loadData as Load;
+
+  // Audit: log every open of the link (IP + user agent). Bots that scan SMS
+  // links get logged too — the user agent tells them apart.
+  const hdrs = await headers();
+  const viewIp = (hdrs.get("x-forwarded-for") || "").split(",")[0].trim() || null;
+  const viewUa = (hdrs.get("user-agent") || "").slice(0, 300) || null;
+  await supabase
+    .from("contract_events")
+    .insert({ load_id: load.id, event: "viewed", ip: viewIp, user_agent: viewUa });
 
   const [{ data: customer }, { data: vehiclesData }] = await Promise.all([
     supabase.from("customers").select("contact_name, company_name").eq("id", load.customer_id).single(),
