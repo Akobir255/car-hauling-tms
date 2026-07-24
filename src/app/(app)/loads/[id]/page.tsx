@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { StatusBadge } from "@/components/status-badge";
 import { DeleteButton } from "@/components/delete-button";
-import { SectionBand, BandRow } from "@/components/section-band";
+import { SectionBand, BandRow, Field } from "@/components/section-band";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { ACTIONS_BY_STATUS, stageOf } from "@/lib/order-status";
@@ -68,12 +68,15 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   const backPath = BACK_PATH[stageOf(load.status)];
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
-      {/* Header bar: ID · Status · Campaign · Loadboard + actions */}
-      <div className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-md border bg-card px-4 py-3">
+    <div className="mx-auto max-w-5xl space-y-5">
+      {/* Header: ID · Status · Campaign · Loadboard + actions */}
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-lg border bg-card px-5 py-4 shadow-sm">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">ID</p>
-          <Link href={backPath} className="font-semibold tabular-nums text-blue-700 hover:underline dark:text-blue-400">
+          <Link
+            href={backPath}
+            className="text-lg font-bold tabular-nums text-primary hover:underline"
+          >
             {load.load_number}
           </Link>
         </div>
@@ -83,11 +86,11 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
         </div>
         <div className="hidden sm:block">
           <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Campaign</p>
-          <p className="text-sm">{load.campaign || "—"}</p>
+          <p className="text-sm font-medium">{load.campaign || "—"}</p>
         </div>
         <div className="hidden sm:block">
           <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Loadboard</p>
-          <p className="text-sm">{loadboard}</p>
+          <p className="text-sm font-medium">{loadboard}</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <OrderActionBar loadId={load.id} actions={ACTIONS_BY_STATUS[load.status] ?? []} />
@@ -102,14 +105,16 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
       </div>
 
       <SectionBand title="E-Sign">
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <span className="text-muted-foreground">Customer Contract</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-medium">Customer Contract</span>
           {load.date_signed ? (
-            <span className="rounded-full bg-green-600/10 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
+            <span className="rounded-full bg-green-600/10 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
               Signed {formatDate(load.date_signed)}
             </span>
           ) : (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">Not signed</span>
+            <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+              Not signed
+            </span>
           )}
           <span className="ml-auto text-xs text-muted-foreground">
             e-sign sending arrives with the contract integration
@@ -118,62 +123,72 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
       </SectionBand>
 
       <SectionBand title="Order Information">
-        <div className="grid gap-6 md:grid-cols-3">
-          <div className="space-y-1 text-sm">
-            <p>
-              <span className="font-semibold">Assigned To:</span>{" "}
+        <div className="grid gap-8 md:grid-cols-3">
+          {/* Assigned + shipper */}
+          <div className="space-y-4">
+            <Field label="Assigned To">
               {assignedTo ? assignedTo.full_name || assignedTo.email : "—"}
-            </p>
-            <p className="font-semibold">Shipper:</p>
-            {customer ? (
-              <div className="space-y-0.5">
-                <Link href={`/customers/${customer.id}`} className="text-blue-700 hover:underline dark:text-blue-400">
-                  {customer.contact_name}
-                </Link>
-                {customer.phone && (
-                  <p className="tabular-nums text-muted-foreground">
-                    {customer.phone}{" "}
-                    <span className="rounded bg-muted px-1 text-[10px] uppercase">sms</span>
-                  </p>
-                )}
-                {customer.email && <p className="truncate text-muted-foreground">{customer.email}</p>}
-              </div>
-            ) : (
-              <p className="text-muted-foreground">—</p>
-            )}
+            </Field>
+            <Field label="Shipper">
+              {customer ? (
+                <div className="space-y-1">
+                  <Link
+                    href={`/customers/${customer.id}`}
+                    className="font-semibold text-primary hover:underline"
+                  >
+                    {customer.contact_name}
+                  </Link>
+                  {customer.phone && (
+                    <p className="flex items-center gap-1.5 text-sm tabular-nums text-muted-foreground">
+                      {customer.phone}
+                      <span className="rounded bg-muted px-1 py-0.5 text-[10px] font-medium uppercase">
+                        sms
+                      </span>
+                    </p>
+                  )}
+                  {customer.email && (
+                    <p className="truncate text-sm text-muted-foreground">{customer.email}</p>
+                  )}
+                </div>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
+            </Field>
           </div>
 
-          <div className="space-y-1 text-sm">
-            <p>
-              <span className="font-semibold">Origin:</span> {load.pickup_city || "—"}
+          {/* Route */}
+          <div className="space-y-4">
+            <Field label="Origin">
+              {load.pickup_city || "—"}
               {load.pickup_state ? `, ${load.pickup_state}` : ""} {load.pickup_zip || ""}
-            </p>
-            <p>
-              <span className="font-semibold">Destination:</span> {load.delivery_city || "—"}
+            </Field>
+            <Field label="Destination">
+              {load.delivery_city || "—"}
               {load.delivery_state ? `, ${load.delivery_state}` : ""} {load.delivery_zip || ""}
-            </p>
-            {load.distance_miles != null && (
-              <p className="text-muted-foreground">{load.distance_miles.toLocaleString()} mi</p>
-            )}
-            <p className="text-muted-foreground">
-              Transport: {load.transport_type}
-              {load.transport_type === "enclosed" ? " (enclosed)" : ""}
-            </p>
+            </Field>
+            <Field label="Transport">
+              <span className="capitalize">{load.transport_type}</span>
+              {load.distance_miles != null ? ` · ${load.distance_miles.toLocaleString()} mi` : ""}
+            </Field>
           </div>
 
-          <div className="space-y-2 text-sm">
-            {vehicles.length === 0 && <p className="text-muted-foreground">No vehicles.</p>}
+          {/* Vehicles */}
+          <div className="space-y-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Vehicles
+            </p>
+            {vehicles.length === 0 && <p className="text-sm text-muted-foreground">No vehicles.</p>}
             {vehicles.map((v) => (
-              <div key={v.id} className="flex items-center gap-2">
-                <span className="flex size-12 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground">
+              <div key={v.id} className="flex items-center gap-3">
+                <span className="flex size-12 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
                   <Car className="size-6" aria-hidden="true" />
                 </span>
                 <div>
-                  <p className="font-medium">
+                  <p className="text-[15px] font-medium">
                     {[v.year, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}
-                    <span className="ml-1 text-muted-foreground">({v.vehicle_type})</span>
+                    <span className="ml-1 text-sm text-muted-foreground">({v.vehicle_type})</span>
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     {v.condition === "non_running" ? "Non-running" : "Running"}
                     {v.tariff != null ? ` · ${formatCurrency(v.tariff)}` : ""}
                   </p>
@@ -185,7 +200,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
       </SectionBand>
 
       <SectionBand title="Payments & Dates">
-        <div className="grid gap-x-10 gap-y-4 md:grid-cols-2">
+        <div className="grid gap-x-12 gap-y-1 md:grid-cols-2">
           <div>
             <BandRow label="Tariff" value={formatCurrency(load.customer_rate)} />
             <BandRow label="Required Deposit" value={formatCurrency(load.deposit_amount)} />
@@ -208,7 +223,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
           </div>
         </div>
         {(load.cd_external_id || load.sd_external_id) && (
-          <p className="mt-3 border-t pt-3 text-sm">
+          <p className="mt-4 border-t pt-3 text-sm">
             <span className="font-semibold">Posted order ID: </span>
             {load.cd_external_id && <span>CD {load.cd_external_id}</span>}
             {load.cd_external_id && load.sd_external_id && " · "}
@@ -218,17 +233,13 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
       </SectionBand>
 
       <SectionBand title="Shipping Information">
-        <div className="grid gap-6 md:grid-cols-2">
-          <div>
-            <p className="mb-1 text-sm font-semibold">Information for shipper</p>
-            <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-              {load.shipper_info || "—"}
-            </p>
-          </div>
-          <div>
-            <p className="mb-1 text-sm font-semibold">Notes from shipper</p>
-            <p className="whitespace-pre-wrap text-sm text-muted-foreground">{load.notes || "—"}</p>
-          </div>
+        <div className="grid gap-8 md:grid-cols-2">
+          <Field label="Information for shipper">
+            <span className="whitespace-pre-wrap">{load.shipper_info || "—"}</span>
+          </Field>
+          <Field label="Notes from shipper">
+            <span className="whitespace-pre-wrap">{load.notes || "—"}</span>
+          </Field>
         </div>
       </SectionBand>
 
@@ -237,7 +248,10 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
           {historyRows.map((h) => {
             const who = h.changed_by ? profById.get(h.changed_by) : null;
             return (
-              <div key={h.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
+              <div
+                key={h.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3 text-sm"
+              >
                 <StatusBadge status={h.status} />
                 <span className="text-muted-foreground">
                   {who?.full_name || who?.email || "System"}
@@ -250,7 +264,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
             );
           })}
           {historyRows.length === 0 && (
-            <p className="px-4 py-3 text-sm text-muted-foreground">No history yet.</p>
+            <p className="px-5 py-4 text-sm text-muted-foreground">No history yet.</p>
           )}
         </div>
       </SectionBand>
