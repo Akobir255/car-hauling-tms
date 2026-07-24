@@ -70,6 +70,7 @@ export interface Customer {
   notes: string | null;
   sms_opt_out: boolean;
   email_opt_out: boolean;
+  blacklisted: boolean;
   created_at: string;
   updated_at: string;
 }

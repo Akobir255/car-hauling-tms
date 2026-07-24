@@ -9,15 +9,17 @@ export function SectionBand({
   className,
   bodyClassName,
   action,
+  id,
 }: {
   title: string;
   children: React.ReactNode;
   className?: string;
   bodyClassName?: string;
   action?: React.ReactNode;
+  id?: string;
 }) {
   return (
-    <section className={cn("overflow-hidden rounded-lg border bg-card shadow-sm", className)}>
+    <section id={id} className={cn("overflow-hidden rounded-lg border bg-card shadow-sm", className)}>
       <div className="flex items-center justify-between gap-3 border-b bg-muted/50 px-5 py-3">
         <h2 className="flex items-center gap-2.5 text-sm font-semibold tracking-tight text-foreground">
           <span className="h-4 w-1 rounded-full bg-primary" aria-hidden="true" />

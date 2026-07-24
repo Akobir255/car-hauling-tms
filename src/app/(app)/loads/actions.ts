@@ -778,6 +778,15 @@ export async function bulkSetFollowUp(loadIds: string[], preset: string): Promis
   revalidatePipeline();
 }
 
+// Flag/unflag a customer as blacklisted (from the order ⋯ menu).
+export async function toggleBlacklist(customerId: string, on: boolean): Promise<void> {
+  await requireRole("admin", "dispatcher");
+  const supabase = await createClient();
+  await supabase.from("customers").update({ blacklisted: on }).eq("id", customerId);
+  revalidatePipeline();
+  revalidatePath(`/customers/${customerId}`);
+}
+
 export async function bulkSms(
   loadIds: string[],
   body: string

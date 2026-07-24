@@ -12,7 +12,8 @@ import { ACTIONS_BY_STATUS, stageOf } from "@/lib/order-status";
 import type { Customer, Load, LoadStatusHistoryEntry, LoadVehicle, Profile } from "@/types/database";
 import { OrderActionBar } from "./order-action-bar";
 import { EsignPanel } from "./esign-panel";
-import { deleteLoad, duplicateLoad } from "../actions";
+import { OrderMoreMenu } from "./order-more-menu";
+import { deleteLoad } from "../actions";
 
 const BACK_PATH = { lead: "/leads", quote: "/quotes", order: "/orders" } as const;
 
@@ -65,7 +66,6 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
           : "—";
 
   const boundDelete = deleteLoad.bind(null, load.id);
-  const boundDuplicate = duplicateLoad.bind(null, load.id);
   const backPath = BACK_PATH[stageOf(load.status)];
 
   const origin = [load.pickup_city, load.pickup_state].filter(Boolean).join(", ") || "—";
@@ -85,6 +85,11 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                 {load.load_number}
               </Link>
               <StatusBadge status={load.status} size="lg" />
+              {customer?.blacklisted && (
+                <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800 ring-1 ring-inset ring-red-600/20 dark:bg-red-400/15 dark:text-red-300">
+                  Blacklisted
+                </span>
+              )}
             </div>
             <p className="text-sm text-muted-foreground">
               {origin} <span className="mx-1">→</span> {destination} · {vehicleSummary}
@@ -209,7 +214,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
             </div>
           </SectionBand>
 
-          <SectionBand title="History" bodyClassName="p-0">
+          <SectionBand title="History" bodyClassName="p-0" className="scroll-mt-4" id="history">
             <div className="divide-y">
               {historyRows.map((h) => {
                 const who = h.changed_by ? profById.get(h.changed_by) : null;
@@ -247,11 +252,14 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                 </Button>
               </div>
               <div className="flex items-center gap-2">
-                <form action={boundDuplicate} className="flex-1">
-                  <Button type="submit" variant="ghost" size="sm" className="w-full">
-                    Duplicate
-                  </Button>
-                </form>
+                <div className="flex-1">
+                  <OrderMoreMenu
+                    loadId={load.id}
+                    customerId={load.customer_id}
+                    blacklisted={customer?.blacklisted ?? false}
+                    canManage={canManageCarrier}
+                  />
+                </div>
                 {profile.role === "admin" && (
                   <DeleteButton
                     onDelete={boundDelete}
