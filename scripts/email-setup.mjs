@@ -43,25 +43,38 @@ if (!KEY || !FROM) {
 const res = await fetch("https://api.resend.com/domains", {
   headers: { Authorization: `Bearer ${KEY}` },
 });
-if (!res.ok) {
-  bad(`Resend rejected the key (${res.status}): ${(await res.text()).slice(0, 200)}`);
+let domains = [];
+if (res.status === 401) {
+  const body = await res.json().catch(() => ({}));
+  if (body?.name === "restricted_api_key") {
+    // A send-only key is the RIGHT key for production — it just can't read
+    // account metadata, so skip the domain audit and let the send prove it.
+    ok("key is send-only (restricted) — correct for production");
+    console.log("     (domain list needs a full-access key; skipping that check)");
+  } else {
+    bad(`Resend rejected the key (401): ${JSON.stringify(body).slice(0, 200)}`);
+    process.exit(1);
+  }
+} else if (!res.ok) {
+  bad(`Resend error (${res.status}): ${(await res.text()).slice(0, 200)}`);
   process.exit(1);
+} else {
+  ({ data: domains = [] } = await res.json());
 }
-const { data: domains = [] } = await res.json();
-console.log("\nDomains on this Resend account");
-if (domains.length === 0) bad("none — add one in Resend and verify its DNS records");
-for (const d of domains) {
-  const line = `${d.name} — ${d.status}`;
-  d.status === "verified" ? ok(line) : bad(line);
+if (domains.length > 0) {
+  console.log("\nDomains on this Resend account");
+  for (const d of domains) {
+    const line = `${d.name} — ${d.status}`;
+    d.status === "verified" ? ok(line) : bad(line);
+  }
+  // Does EMAIL_FROM actually use a verified domain?
+  const fromDomain = (FROM.match(/@([^>\s]+)/) ?? [])[1]?.toLowerCase();
+  const match = domains.find((d) => d.name.toLowerCase() === fromDomain);
+  console.log("");
+  if (!match) bad(`EMAIL_FROM uses @${fromDomain}, which is not on this account`);
+  else if (match.status !== "verified") bad(`@${fromDomain} is ${match.status}, not verified yet`);
+  else ok(`EMAIL_FROM domain @${fromDomain} is verified — ready to send`);
 }
-
-// Does EMAIL_FROM actually use a verified domain?
-const fromDomain = (FROM.match(/@([^>\s]+)/) ?? [])[1]?.toLowerCase();
-const match = domains.find((d) => d.name.toLowerCase() === fromDomain);
-console.log("");
-if (!match) bad(`EMAIL_FROM uses @${fromDomain}, which is not on this account`);
-else if (match.status !== "verified") bad(`@${fromDomain} is ${match.status}, not verified yet`);
-else ok(`EMAIL_FROM domain @${fromDomain} is verified — ready to send`);
 
 if (!to) {
   console.log("\nPass an address to send a live test:  node scripts/email-setup.mjs you@email.com\n");
