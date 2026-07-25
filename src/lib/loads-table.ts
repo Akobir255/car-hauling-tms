@@ -9,7 +9,6 @@
 // Until 0013 is applied, `loads_full` does not exist, so managers read the
 // base table (which still exposes every column to `authenticated`).
 //
-// >>> FLIP THIS TO "loads_full" IN THE SAME DEPLOY AS MIGRATION 0013. <<<
-// Pre-migration:  "loads"       — base table, all columns readable
-// Post-migration: "loads_full"  — required; base select("*") will 403
-export const MANAGER_LOADS_TABLE = "loads" as const;
+// Migration 0013 is APPLIED (2026-07-25), so this is "loads_full". Reverting
+// it to "loads" would 403 on the revoked carrier-money columns.
+export const MANAGER_LOADS_TABLE = "loads_full" as const;

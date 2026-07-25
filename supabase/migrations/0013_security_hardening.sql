@@ -306,6 +306,11 @@ create policy "payouts_select_admin_dispatcher"
 -- ============================================================
 -- 8. SMS dedupe: clean same-direction duplicates, then enforce
 -- ============================================================
+-- Snapshot first: this project has no automatic backups, and the DELETE below
+-- is irreversible. Drop this table once the dedupe is confirmed good:
+--   drop table messages_backup_pre_0013;
+create table if not exists messages_backup_pre_0013 as select * from messages;
+
 delete from messages m
 using messages k
 where m.provider_message_id = k.provider_message_id
