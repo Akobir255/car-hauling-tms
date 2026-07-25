@@ -10,6 +10,22 @@ export function formatDate(value: string | null | undefined): string {
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(d);
 }
 
+// Compact age for lists — "4m", "3h", "Tue", "Mar 4".
+export function formatRelativeTime(value: string | null | undefined): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+
+  const minutes = Math.floor((Date.now() - d.getTime()) / 60_000);
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)}h`;
+  if (minutes < 7 * 24 * 60) {
+    return new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(d);
+  }
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(d);
+}
+
 export function formatDateTime(value: string | null | undefined): string {
   if (!value) return "—";
   const d = new Date(value);

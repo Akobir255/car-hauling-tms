@@ -11,6 +11,7 @@ import {
   Menu,
   MessageSquare,
   Sparkles,
+  Ticket,
   Truck,
   UserCog,
   X,
@@ -28,6 +29,7 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; roles?: UserRo
   { href: "/orders", label: "Orders", icon: ClipboardList },
   { href: "/customers", label: "Customers", icon: Building2 },
   { href: "/messages", label: "Messages", icon: MessageSquare },
+  { href: "/tickets", label: "Tickets", icon: Ticket },
   { href: "/admin/users", label: "Users", icon: UserCog, roles: ["admin"] },
 ];
 

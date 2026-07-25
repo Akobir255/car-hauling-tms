@@ -169,11 +169,42 @@ export interface Message {
   direction: "inbound" | "outbound";
   from_addr: string | null;
   to_addr: string | null;
+  subject: string | null; // email only
   body: string;
   provider_message_id: string | null;
   status: MessageStatus;
   sent_by: string | null;
   read_at: string | null;
+  created_at: string;
+}
+
+export type TicketStatus = "open" | "pending" | "resolved" | "closed";
+export type TicketPriority = "low" | "normal" | "high" | "urgent";
+
+export const TICKET_STATUSES: TicketStatus[] = ["open", "pending", "resolved", "closed"];
+export const TICKET_PRIORITIES: TicketPriority[] = ["low", "normal", "high", "urgent"];
+
+export interface Ticket {
+  id: string;
+  ticket_number: number;
+  subject: string;
+  body: string | null;
+  status: TicketStatus;
+  priority: TicketPriority;
+  load_id: string | null;
+  customer_id: string | null;
+  assigned_to: string | null;
+  created_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TicketComment {
+  id: string;
+  ticket_id: string;
+  body: string;
+  author_id: string | null;
   created_at: string;
 }
 

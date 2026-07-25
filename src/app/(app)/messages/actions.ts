@@ -17,6 +17,7 @@ import {
   sendSms,
   toE164,
 } from "@/lib/messaging/ringcentral";
+import { isEmailConfigured, isPlausibleEmail, sendEmail } from "@/lib/messaging/email";
 import type { Customer, Load } from "@/types/database";
 
 export type MessageFormState = {
@@ -74,6 +75,10 @@ export async function deleteTemplate(id: string): Promise<void> {
 
 const BATCH_LIMIT = 100;
 
+// Carriers bill per 153-character segment, so a pasted email thread sent to
+// 100 customers is a real bill, not a typo. Email has no such limit.
+const MAX_SMS_LENGTH = 1600;
+
 export async function sendBulk(
   _prevState: MessageFormState,
   formData: FormData
@@ -82,6 +87,13 @@ export async function sendBulk(
 
   const body = (formData.get("body") || "").toString().trim();
   if (!body) return { error: "Message body is required." };
+
+  const isEmail = (formData.get("channel") || "sms").toString() === "email";
+  const subject = (formData.get("subject") || "").toString().trim();
+  if (isEmail && !subject) return { error: "Email needs a subject line." };
+  if (!isEmail && body.length > MAX_SMS_LENGTH) {
+    return { error: `Message is ${body.length} characters — keep it under ${MAX_SMS_LENGTH}.` };
+  }
 
   const customerIds = formData.getAll("customer_ids").map(String).filter(Boolean);
   if (customerIds.length === 0) return { error: "Pick at least one recipient." };
@@ -113,34 +125,43 @@ export async function sendBulk(
     }
   }
 
-  const smsReady = isSmsConfigured();
+  const ready = isEmail ? isEmailConfigured() : isSmsConfigured();
   let sent = 0;
   let queued = 0;
   let skipped = 0;
 
   for (const customer of customers) {
-    if (customer.sms_opt_out) {
+    // Per-channel opt-out is legally required for SMS and expected for email.
+    if (isEmail ? customer.email_opt_out : customer.sms_opt_out) {
       skipped++;
       continue;
     }
-    const to = toE164(customer.phone);
+    const to = isEmail
+      ? isPlausibleEmail(customer.email)
+        ? customer.email!.trim()
+        : null
+      : toE164(customer.phone);
     if (!to) {
       skipped++;
       continue;
     }
 
     const load = latestLoadByCustomer.get(customer.id) ?? null;
-    const text = renderTemplate(body, buildContext(customer, load));
+    const context = buildContext(customer, load);
+    const text = renderTemplate(body, context);
+    const renderedSubject = isEmail ? renderTemplate(subject, context) : "";
 
     let status = "queued";
     let providerMessageId: string | null = null;
-    if (smsReady) {
+    if (ready) {
       try {
-        const result = await sendSms(to, text);
+        const result = isEmail
+          ? await sendEmail(to, renderedSubject, text)
+          : await sendSms(to, text);
         providerMessageId = result.providerMessageId;
         status = "sent";
       } catch (err) {
-        console.error(`SMS to ${to} failed:`, err);
+        console.error(`${isEmail ? "Email" : "SMS"} to ${to} failed:`, err);
         status = "failed";
       }
     }
@@ -148,9 +169,10 @@ export async function sendBulk(
     await supabase.from("messages").insert({
       customer_id: customer.id,
       load_id: load?.id ?? null,
-      channel: "sms",
+      channel: isEmail ? "email" : "sms",
       direction: "outbound",
       to_addr: to,
+      subject: isEmail ? renderedSubject : null,
       body: text,
       provider_message_id: providerMessageId,
       status,

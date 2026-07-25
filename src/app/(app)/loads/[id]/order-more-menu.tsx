@@ -73,9 +73,15 @@ export function OrderMoreMenu({
         )}
 
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled>
+        <DropdownMenuItem
+          render={
+            <a
+              href={`/tickets/new?load=${loadId}${customerId ? `&customer=${customerId}` : ""}`}
+            />
+          }
+        >
           <Ticket />
-          Create ticket (soon)
+          Create ticket
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

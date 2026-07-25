@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { isSmsConfigured } from "@/lib/messaging/ringcentral";
+import { isEmailConfigured } from "@/lib/messaging/email";
 import type { Customer, MessageTemplate } from "@/types/database";
 import { BulkCompose } from "./bulk-compose";
 
@@ -28,6 +29,7 @@ export default async function NewBlastPage() {
       <BulkCompose
         customers={(customers ?? []) as Customer[]}
         templates={(templates ?? []) as MessageTemplate[]}
+        emailReady={isEmailConfigured()}
       />
     </div>
   );
