@@ -260,6 +260,15 @@ export async function updateLoad(
   }
 
   const supabase = await createClient();
+  // Pre-update snapshot: the pipeline rules below need to know what the
+  // status and carrier were BEFORE this save.
+  const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
+  const { data: prev } = await supabase
+    .from(table)
+    .select("status, carrier_id")
+    .eq("id", id)
+    .single();
+
   // Carrier/margin columns are not writable through the user client (column
   // grants) — manager updates go through the service role AFTER the
   // requireRole check above.
@@ -268,13 +277,32 @@ export async function updateLoad(
   if (error) return { error: error.message };
 
   // Pipeline rules on save (mirrors msgplane): pricing is what promotes a
-  // lead to a quote — automatically, not via a button — and only a priced
-  // QUOTE can convert to an order. Both re-checked here rather than trusting
-  // the UI.
-  const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
-  const { data: current } = await supabase.from(table).select("status").eq("id", id).single();
-  let status = current?.status as string | undefined;
+  // lead to a quote — automatically, not via a button — only a priced QUOTE
+  // converts to an order, and assigning a carrier to a POSTED order is what
+  // dispatches it. No button does any of this; the save does.
+  let status = prev?.status as string | undefined;
   const priced = parsedCore.data.customer_rate != null;
+
+  if (
+    isManager &&
+    values.carrier_id &&
+    !prev?.carrier_id &&
+    (status === "posted_cd" || status === "posted_sd" || status === "booked")
+  ) {
+    const { error: dispatchError } = await supabase
+      .from("loads")
+      .update({ status: "dispatched", dispatched_at: new Date().toISOString().slice(0, 10) })
+      .eq("id", id);
+    if (!dispatchError) {
+      await supabase.from("load_status_history").insert({
+        load_id: id,
+        status: "dispatched",
+        changed_by: profile.id,
+        note: "Dispatched — carrier assigned",
+      });
+      status = "dispatched";
+    }
+  }
 
   if (status === "lead" && priced) {
     const { error: quoteError } = await supabase.from("loads").update({ status: "quote" }).eq("id", id);
@@ -331,7 +359,6 @@ export async function updateLoad(
 
 type StaffRole = "admin" | "dispatcher" | "sales";
 const ALL_STAFF: StaffRole[] = ["admin", "dispatcher", "sales"];
-const DISPATCH_DESK: StaffRole[] = ["admin", "dispatcher"];
 
 async function transition(
   id: string,
@@ -405,6 +432,12 @@ export async function postOrder(id: string, board: "cd" | "sd" | "all"): Promise
   await transition(id, ["ready", "booked"], updates, toStatus, `Posted to ${label}`);
 }
 
+// There is deliberately no dispatchOrder / markPickedUp / markDelivered
+// action for ANYONE, admin included. Dispatched is set by updateLoad when a
+// carrier is assigned to a posted order, and picked-up / delivered /
+// cancelled-after-dispatch will be reported by the carrier through the
+// CD/SD integration (Phase 4) — exactly how msgplane behaves.
+
 export async function unpostOrder(id: string): Promise<{ ok: boolean; error?: string }> {
   const profile = await requireRole(...ALL_STAFF);
   const supabase = await createClient();
@@ -416,7 +449,7 @@ export async function unpostOrder(id: string): Promise<{ ok: boolean; error?: st
   if (current.status === "dispatched" && profile.role === "sales") {
     return { ok: false, error: "Only dispatch can unpost a dispatched order." };
   }
-  return transition(
+  const result = await transition(
     id,
     ["posted_cd", "posted_sd", "dispatched"],
     {
@@ -429,50 +462,16 @@ export async function unpostOrder(id: string): Promise<{ ok: boolean; error?: st
     "ready",
     "Unposted — back to Ready"
   );
-}
-
-// Dispatched means "a carrier has the load" — so it requires a posted order
-// AND an assigned carrier, and it's a dispatch-desk action. (When the CD/SD
-// APIs land, carrier acceptance will drive this automatically.)
-export async function dispatchOrder(id: string): Promise<{ ok: boolean; error?: string }> {
-  await requireRole(...DISPATCH_DESK);
-  const supabase = await createClient();
-  const { data } = await supabase.from("loads").select("carrier_id").eq("id", id).single();
-  if (data && !data.carrier_id) {
-    return { ok: false, error: "Assign a carrier first — dispatch means a carrier has the load." };
+  // Un-dispatching also releases the carrier, so re-assigning one later
+  // re-triggers the automatic dispatch. Carrier columns are only writable
+  // via the service role (column grants) — after the role check above.
+  if (result.ok && current.status === "dispatched") {
+    await createAdminClient()
+      .from("loads")
+      .update({ carrier_id: null, dispatcher_id: null })
+      .eq("id", id);
   }
-  return transition(
-    id,
-    ["posted_cd", "posted_sd", "booked"],
-    { dispatched_at: new Date().toISOString().slice(0, 10) },
-    "dispatched",
-    "Dispatched",
-    DISPATCH_DESK
-  );
-}
-
-// Picked-up / delivered mirror what the CARRIER reports — recorded by the
-// dispatch desk, never by sales, and never out of order.
-export async function markPickedUp(id: string): Promise<{ ok: boolean; error?: string }> {
-  return transition(
-    id,
-    ["dispatched", "in_transit"],
-    { picked_up_at: new Date().toISOString().slice(0, 10) },
-    "picked_up",
-    "Picked up",
-    DISPATCH_DESK
-  );
-}
-
-export async function markDelivered(id: string): Promise<{ ok: boolean; error?: string }> {
-  return transition(
-    id,
-    ["picked_up", "in_transit"],
-    { delivered_at: new Date().toISOString().slice(0, 10) },
-    "delivered",
-    "Delivered",
-    DISPATCH_DESK
-  );
+  return result;
 }
 
 export async function holdOrder(id: string): Promise<void> {

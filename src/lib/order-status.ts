@@ -114,25 +114,28 @@ export type OrderAction =
   | "post"
   | "unpost"
   | "resend"
-  | "dispatch"
-  | "mark_picked_up"
-  | "mark_delivered"
   | "mark_lost"
   | "record_payment"
   | "hold"
   | "archive"
   | "reactivate";
 
+// There is deliberately NO dispatch / picked-up / delivered button for ANY
+// role, admin included. Dispatched happens automatically when a carrier is
+// assigned to a posted order (updateLoad), and picked-up / delivered /
+// cancelled-after-dispatch mirror what the CARRIER reports — they'll be
+// driven by the CD/SD integration when it lands. Until then, orders rest at
+// Dispatched; that's the msgplane behavior the team already lives with.
 export const ACTIONS_BY_STATUS: Record<LoadStatus, OrderAction[]> = {
   lead: ["convert_to_quote", "mark_lost"],
   quote: ["convert_to_order", "record_payment", "mark_lost"],
   ready: ["post", "record_payment", "mark_lost", "hold"],
-  posted_cd: ["dispatch", "record_payment", "resend", "unpost"],
-  posted_sd: ["dispatch", "record_payment", "resend", "unpost"],
-  booked: ["post", "dispatch", "record_payment", "mark_lost"],
-  dispatched: ["mark_picked_up", "record_payment", "unpost"],
-  picked_up: ["mark_delivered", "record_payment"],
-  in_transit: ["mark_delivered", "record_payment"],
+  posted_cd: ["record_payment", "resend", "unpost"],
+  posted_sd: ["record_payment", "resend", "unpost"],
+  booked: ["post", "record_payment", "mark_lost"],
+  dispatched: ["record_payment", "unpost"],
+  picked_up: ["record_payment"],
+  in_transit: ["record_payment"],
   delivered: ["record_payment", "archive"],
   hold: ["reactivate", "mark_lost"],
   archived: ["reactivate"],
@@ -142,20 +145,9 @@ export const ACTIONS_BY_STATUS: Record<LoadStatus, OrderAction[]> = {
   cancelled: ["reactivate"],
 };
 
-// Dispatch / picked-up / delivered mirror what the carrier reports, so they
-// belong to the dispatch desk — sales never sees those buttons (and the
-// server actions enforce the same rule independently). Un-dispatching is
-// likewise desk-only; unposting a merely-posted order is fine for sales.
-export const DISPATCH_DESK_ACTIONS: OrderAction[] = [
-  "dispatch",
-  "mark_picked_up",
-  "mark_delivered",
-];
-
 export function actionsFor(status: LoadStatus, role: string): OrderAction[] {
   const base = ACTIONS_BY_STATUS[status] ?? [];
   if (role !== "sales") return base;
-  return base.filter(
-    (a) => !DISPATCH_DESK_ACTIONS.includes(a) && !(a === "unpost" && status === "dispatched")
-  );
+  // Un-dispatching reverses a carrier assignment — dispatch desk only.
+  return base.filter((a) => !(a === "unpost" && status === "dispatched"));
 }
