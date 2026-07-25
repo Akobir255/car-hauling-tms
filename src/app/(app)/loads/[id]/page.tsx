@@ -1,8 +1,8 @@
 import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Car } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { VehiclePhoto } from "@/components/vehicle-photo";
 import { requireProfile } from "@/lib/auth";
 import { StatusBadge } from "@/components/status-badge";
 import { DeleteButton } from "@/components/delete-button";
@@ -159,9 +159,13 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                 {vehicles.length === 0 && <p className="text-sm text-muted-foreground">No vehicles.</p>}
                 {vehicles.map((v) => (
                   <div key={v.id} className="flex items-center gap-3">
-                    <span className="flex size-12 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                      <Car className="size-6" aria-hidden="true" />
-                    </span>
+                    <VehiclePhoto
+                      year={v.year}
+                      make={v.make}
+                      model={v.model}
+                      type={v.vehicle_type}
+                      className="h-12 w-[4.5rem] rounded-md"
+                    />
                     <div>
                       <p className="text-[15px] font-medium">
                         {[v.year, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}

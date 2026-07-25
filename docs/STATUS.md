@@ -78,7 +78,10 @@ inbound webhook + STOP handling) · e-sign (real US Star contract text in
 `src/lib/esign-terms.ts`, typed-name signature, 14-day link expiry, token
 rotation on void, per-open IP audit) · tickets with comment threads · email
 blasts (Resend) · smart intake (ZIP→city autofill, suggested pricing, NHTSA
-make/model) · security headers.
+make/model) · security headers · vehicle photos (`/api/vehicles/image`
+resolves make/model to a Wikipedia page image server-side and streams it from
+our origin — no CSP changes; misses fall back to the type silhouette in
+`vehicle-thumb.tsx`).
 
 ## Integrations
 

@@ -1,7 +1,7 @@
 import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import Link from "next/link";
 import { CalendarCheck2, Inbox, Mail, MapPin, Phone, User } from "lucide-react";
-import { VehicleThumb } from "@/components/vehicle-thumb";
+import { VehiclePhoto } from "@/components/vehicle-photo";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -307,7 +307,12 @@ export async function PipelineList({
                       {loadVehicles.length === 0 && <span className="text-muted-foreground">—</span>}
                       {loadVehicles.map((v) => (
                         <div key={v.id} className="flex items-center gap-2.5">
-                          <VehicleThumb type={v.vehicle_type} />
+                          <VehiclePhoto
+                            year={v.year}
+                            make={v.make}
+                            model={v.model}
+                            type={v.vehicle_type}
+                          />
                           <div className="leading-tight">
                             <p className="font-medium">
                               {[v.year, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}
