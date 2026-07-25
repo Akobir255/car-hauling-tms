@@ -9,10 +9,24 @@ import { Textarea } from "@/components/ui/textarea";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Badge } from "@/components/ui/badge";
 import { TEMPLATE_VARIABLES } from "@/lib/messaging/render";
+import { SMS_BLAST_MAX, SMS_CHUNK_MAX } from "@/lib/messaging/sms-bulk";
 import type { Customer, MessageTemplate } from "@/types/database";
-import { sendBulk, type MessageFormState } from "../actions";
+import { sendBulk, sendSmsBulkChunk, type MessageFormState } from "../actions";
 
 const initialState: MessageFormState = { error: null };
+
+// Progress of a chunked SMS blast. `done` counts attempted recipients (sent,
+// queued, failed, or skipped) out of `total` selected.
+type SmsProgress = {
+  done: number;
+  total: number;
+  sent: number;
+  queued: number;
+  skipped: number;
+  failed: number;
+  waiting: boolean;
+  finished: boolean;
+};
 
 export function BulkCompose({
   customers,
@@ -29,6 +43,8 @@ export function BulkCompose({
   const [body, setBody] = useState("");
   const [channel, setChannel] = useState<"sms" | "email">("sms");
   const [subject, setSubject] = useState("");
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsProgress, setSmsProgress] = useState<SmsProgress | null>(null);
   const isEmail = channel === "email";
 
   useEffect(() => {
@@ -38,6 +54,15 @@ export function BulkCompose({
       toast.success(`Done: ${sent} sent, ${queued} queued, ${skipped} skipped.`);
     }
   }, [state]);
+
+  // A blast survives a closed tab only up to the current chunk — warn before
+  // the operator walks away from an in-flight send.
+  useEffect(() => {
+    if (!smsSending) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [smsSending]);
 
   // Eligibility follows the channel: a customer with no email can't receive an
   // email blast, and each channel has its own opt-out flag.
@@ -90,10 +115,93 @@ export function BulkCompose({
     });
   }
 
+  // Chunked SMS send: one server call per SMS_CHUNK_MAX recipients. The server
+  // paces individual sends under RingCentral's 40/min limit and hands back any
+  // rate-limited tail, which we resume after the suggested wait. Each chunk is
+  // logged server-side as it completes, so progress is durable.
+  async function runSmsBlast() {
+    const total = effectiveSelected.length;
+    if (total === 0) return;
+    if (total > SMS_BLAST_MAX) {
+      toast.error(`Max ${SMS_BLAST_MAX} recipients per send — narrow the selection.`);
+      return;
+    }
+    if (!body.trim()) {
+      toast.error("Message body is required.");
+      return;
+    }
+
+    setSmsSending(true);
+    const tally = { done: 0, sent: 0, queued: 0, skipped: 0, failed: 0 };
+    const show = (waiting: boolean, finished = false) =>
+      setSmsProgress({ ...tally, total, waiting, finished });
+    show(false);
+
+    try {
+      let pendingIds = [...effectiveSelected];
+      let stalls = 0;
+      while (pendingIds.length > 0) {
+        const chunk = pendingIds.slice(0, SMS_CHUNK_MAX);
+        const res = await sendSmsBulkChunk({ body, customerIds: chunk });
+        if (res.error) {
+          toast.error(res.error);
+          show(false, true);
+          return;
+        }
+        tally.sent += res.sent;
+        tally.queued += res.queued;
+        tally.skipped += res.skipped;
+        tally.failed += res.failed;
+        const attempted = chunk.length - res.unprocessedIds.length;
+        tally.done += attempted;
+        pendingIds = [...res.unprocessedIds, ...pendingIds.slice(chunk.length)];
+
+        // Rate-limited with zero progress several times in a row means
+        // RingCentral isn't letting up — stop rather than spin forever.
+        stalls = attempted === 0 ? stalls + 1 : 0;
+        if (stalls >= 3) {
+          toast.error(
+            `RingCentral keeps rate-limiting — stopped with ${pendingIds.length} unsent. Try again in a few minutes.`
+          );
+          show(false, true);
+          return;
+        }
+
+        if (pendingIds.length > 0 && res.retryAfterMs) {
+          show(true);
+          await new Promise((resolve) => setTimeout(resolve, res.retryAfterMs ?? 1000));
+        }
+        show(false, pendingIds.length === 0);
+      }
+      toast.success(
+        `Done: ${tally.sent} sent, ${tally.queued} queued, ${tally.skipped} skipped` +
+          (tally.failed > 0 ? `, ${tally.failed} failed.` : ".")
+      );
+    } catch (err) {
+      console.error("SMS blast stopped:", err);
+      toast.error(
+        `Send interrupted after ${tally.done} of ${total} — check Messages for what went out, then resend to the rest.`
+      );
+      show(false, true);
+    } finally {
+      setSmsSending(false);
+    }
+  }
+
   const optedOut = customers.length - eligible.length;
+  const busy = pending || smsSending;
 
   return (
-    <form action={formAction} className="grid gap-6 lg:grid-cols-2">
+    <form
+      action={formAction}
+      onSubmit={(e) => {
+        if (!isEmail) {
+          e.preventDefault();
+          if (!smsSending) void runSmsBlast();
+        }
+      }}
+      className="grid gap-6 lg:grid-cols-2"
+    >
       {effectiveSelected.map((id) => (
         <input key={id} type="hidden" name="customer_ids" value={id} />
       ))}
@@ -153,6 +261,7 @@ export function BulkCompose({
             <button
               key={c}
               type="button"
+              disabled={smsSending}
               onClick={() => setChannel(c)}
               className={
                 channel === c
@@ -245,13 +354,37 @@ export function BulkCompose({
             </Badge>
           ))}
         </div>
-        <Button type="submit" disabled={pending || effectiveSelected.length === 0}>
-          {pending
+        <Button type="submit" disabled={busy || effectiveSelected.length === 0}>
+          {busy
             ? "Sending..."
             : `Send to ${effectiveSelected.length} recipient${effectiveSelected.length === 1 ? "" : "s"}`}
         </Button>
+
+        {!isEmail && smsProgress && (
+          <div className="space-y-1.5 rounded-md border px-3 py-2">
+            <div className="h-2 w-full overflow-hidden rounded bg-muted">
+              <div
+                className="h-full rounded bg-primary transition-all"
+                style={{
+                  width: `${smsProgress.total ? Math.round((smsProgress.done / smsProgress.total) * 100) : 0}%`,
+                }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {smsProgress.finished
+                ? `Finished: ${smsProgress.sent} sent, ${smsProgress.queued} queued, ${smsProgress.skipped} skipped` +
+                  (smsProgress.failed > 0 ? `, ${smsProgress.failed} failed` : "")
+                : smsProgress.waiting
+                  ? `Rate-limited — pausing before the next batch... (${smsProgress.done} of ${smsProgress.total} done)`
+                  : `Sending ${smsProgress.done} of ${smsProgress.total} — texts go out ~1.7s apart to stay under RingCentral's limit`}
+            </p>
+          </div>
+        )}
+
         <p className="text-xs text-muted-foreground">
           Variables fill in per customer from their latest load. Opted-out numbers are always excluded.
+          {!isEmail &&
+            " Carrier note: local numbers are limited to ~200 unique recipients and ~1,000 texts per day — beyond that, carriers filter silently."}
         </p>
       </section>
     </form>

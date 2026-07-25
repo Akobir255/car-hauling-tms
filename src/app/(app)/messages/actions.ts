@@ -18,6 +18,7 @@ import {
   toE164,
 } from "@/lib/messaging/ringcentral";
 import { isEmailConfigured, isPlausibleEmail, sendEmailBatch } from "@/lib/messaging/email";
+import { SMS_CHUNK_MAX, runSmsChunk } from "@/lib/messaging/sms-bulk";
 import type { Customer, Load } from "@/types/database";
 
 export type MessageFormState = {
@@ -69,9 +70,13 @@ export async function deleteTemplate(id: string): Promise<void> {
 }
 
 // ---- Bulk send ----
-// Renders the template per recipient, logs every message, and sends via
-// RingCentral when configured. Without credentials the rows stay `queued`
-// so nothing is lost — they can be retried once RingCentral is connected.
+// Renders the template per recipient, logs every message, and sends when the
+// channel's provider is configured. Without credentials the rows stay `queued`
+// so nothing is lost — they can be retried once the provider is connected.
+//
+// Email goes out as ONE Resend batch request. SMS has no batch endpoint and
+// RingCentral rate-limits at 40 sends/minute, so the client submits SMS in
+// chunks via sendSmsBulkChunk below — never in one long invocation.
 
 const BATCH_LIMIT = 100;
 
@@ -79,29 +84,27 @@ const BATCH_LIMIT = 100;
 // 100 customers is a real bill, not a typo. Email has no such limit.
 const MAX_SMS_LENGTH = 1600;
 
-export async function sendBulk(
-  _prevState: MessageFormState,
-  formData: FormData
-): Promise<MessageFormState> {
-  const profile = await requireRole("admin", "dispatcher", "sales");
+type Recipient = {
+  customerId: string;
+  loadId: string | null;
+  to: string;
+  text: string;
+  subject: string;
+};
 
-  const body = (formData.get("body") || "").toString().trim();
-  if (!body) return { error: "Message body is required." };
-
-  const isEmail = (formData.get("channel") || "sms").toString() === "email";
-  const subject = (formData.get("subject") || "").toString().trim();
-  if (isEmail && !subject) return { error: "Email needs a subject line." };
-  if (!isEmail && body.length > MAX_SMS_LENGTH) {
-    return { error: `Message is ${body.length} characters — keep it under ${MAX_SMS_LENGTH}.` };
-  }
-
-  const customerIds = formData.getAll("customer_ids").map(String).filter(Boolean);
-  if (customerIds.length === 0) return { error: "Pick at least one recipient." };
-  if (customerIds.length > BATCH_LIMIT) {
-    return { error: `Max ${BATCH_LIMIT} recipients per send — narrow the selection.` };
-  }
-
-  const supabase = await createClient();
+// Fetch the requested customers (RLS decides which are visible), drop anyone
+// who can't receive this channel, and render the template per recipient.
+// `skipped` includes ids RLS filtered out, so counts always reconcile with
+// what the operator selected.
+async function resolveRecipients(opts: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  role: string;
+  customerIds: string[];
+  isEmail: boolean;
+  body: string;
+  subject: string;
+}): Promise<{ recipients: Recipient[]; skipped: number } | { error: string }> {
+  const { supabase, role, customerIds, isEmail, body, subject } = opts;
 
   const { data: customersData, error: customersError } = await supabase
     .from("customers")
@@ -114,7 +117,7 @@ export async function sendBulk(
   // Views, not the base table: select("*") there would hit the revoked margin
   // columns, and sales must read through the safe view anyway.
   const { data: loadsData } = await supabase
-    .from(profile.role === "sales" ? "loads_sales_safe" : MANAGER_LOADS_TABLE)
+    .from(role === "sales" ? "loads_sales_safe" : MANAGER_LOADS_TABLE)
     .select("*")
     .in("customer_id", customerIds)
     .order("created_at", { ascending: false });
@@ -125,19 +128,7 @@ export async function sendBulk(
     }
   }
 
-  const ready = isEmail ? isEmailConfigured() : isSmsConfigured();
-  let sent = 0;
-  let queued = 0;
-  let skipped = 0;
-
-  // Render everything first, dropping anyone who can't receive this channel.
-  type Recipient = {
-    customerId: string;
-    loadId: string | null;
-    to: string;
-    text: string;
-    subject: string;
-  };
+  let skipped = customerIds.length - customers.length;
   const recipients: Recipient[] = [];
   for (const customer of customers) {
     // Per-channel opt-out is legally required for SMS and expected for email.
@@ -164,70 +155,199 @@ export async function sendBulk(
       subject: isEmail ? renderTemplate(subject, context) : "",
     });
   }
+  return { recipients, skipped };
+}
 
-  // Email goes out as ONE batch request; SMS still loops because RingCentral
-  // has no batch endpoint. Statuses are collected per recipient either way.
+function logBlastRows(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  recipients: Recipient[],
+  statuses: { status: string; providerMessageId: string | null }[],
+  isEmail: boolean,
+  sentBy: string
+) {
+  if (recipients.length === 0) return Promise.resolve({ error: null });
+  // One insert for the whole batch instead of N round-trips.
+  return supabase.from("messages").insert(
+    recipients.map((r, i) => ({
+      customer_id: r.customerId,
+      load_id: r.loadId,
+      channel: isEmail ? "email" : "sms",
+      direction: "outbound",
+      to_addr: r.to,
+      subject: isEmail ? r.subject : null,
+      body: r.text,
+      provider_message_id: statuses[i].providerMessageId,
+      status: statuses[i].status,
+      sent_by: sentBy,
+    }))
+  );
+}
+
+export async function sendBulk(
+  _prevState: MessageFormState,
+  formData: FormData
+): Promise<MessageFormState> {
+  const profile = await requireRole("admin", "dispatcher", "sales");
+
+  const body = (formData.get("body") || "").toString().trim();
+  if (!body) return { error: "Message body is required." };
+
+  const isEmail = (formData.get("channel") || "sms").toString() === "email";
+  if (!isEmail) {
+    // SMS is chunked client-side through sendSmsBulkChunk; only a stale tab
+    // still submits the whole blast here.
+    return { error: "This page has been updated — refresh and send again." };
+  }
+  const subject = (formData.get("subject") || "").toString().trim();
+  if (!subject) return { error: "Email needs a subject line." };
+
+  const customerIds = formData.getAll("customer_ids").map(String).filter(Boolean);
+  if (customerIds.length === 0) return { error: "Pick at least one recipient." };
+  if (customerIds.length > BATCH_LIMIT) {
+    return { error: `Max ${BATCH_LIMIT} recipients per send — narrow the selection.` };
+  }
+
+  const supabase = await createClient();
+  const resolved = await resolveRecipients({
+    supabase,
+    role: profile.role,
+    customerIds,
+    isEmail: true,
+    body,
+    subject,
+  });
+  if ("error" in resolved) return { error: resolved.error };
+  const { recipients } = resolved;
+  let { skipped } = resolved;
+
   const statuses: { status: string; providerMessageId: string | null }[] = [];
-
-  if (isEmail) {
-    if (!ready) {
-      recipients.forEach(() => statuses.push({ status: "queued", providerMessageId: null }));
-    } else {
-      const result = await sendEmailBatch(
-        recipients.map((r) => ({ to: r.to, subject: r.subject, text: r.text }))
-      );
-      if (result.ok) {
-        result.ids.forEach((id) => statuses.push({ status: "sent", providerMessageId: id }));
-      } else {
-        // The whole batch failed as one request — mark them all failed and
-        // surface why, rather than leaving the operator guessing.
-        console.error("Email batch failed:", result.error);
-        recipients.forEach(() => statuses.push({ status: "failed", providerMessageId: null }));
-      }
-    }
+  if (!isEmailConfigured()) {
+    recipients.forEach(() => statuses.push({ status: "queued", providerMessageId: null }));
   } else {
-    for (const r of recipients) {
-      if (!ready) {
-        statuses.push({ status: "queued", providerMessageId: null });
-        continue;
-      }
-      try {
-        const result = await sendSms(r.to, r.text);
-        statuses.push({ status: "sent", providerMessageId: result.providerMessageId });
-      } catch (err) {
-        console.error(`SMS to ${r.to} failed:`, err);
-        statuses.push({ status: "failed", providerMessageId: null });
-      }
+    const result = await sendEmailBatch(
+      recipients.map((r) => ({ to: r.to, subject: r.subject, text: r.text }))
+    );
+    if (result.ok) {
+      result.ids.forEach((id) => statuses.push({ status: "sent", providerMessageId: id }));
+    } else {
+      // The whole batch failed as one request — mark them all failed and
+      // surface why, rather than leaving the operator guessing.
+      console.error("Email batch failed:", result.error);
+      recipients.forEach(() => statuses.push({ status: "failed", providerMessageId: null }));
     }
   }
 
-  // One insert for the whole blast instead of N round-trips.
-  if (recipients.length > 0) {
-    const { error: logError } = await supabase.from("messages").insert(
-      recipients.map((r, i) => ({
-        customer_id: r.customerId,
-        load_id: r.loadId,
-        channel: isEmail ? "email" : "sms",
-        direction: "outbound",
-        to_addr: r.to,
-        subject: isEmail ? r.subject : null,
-        body: r.text,
-        provider_message_id: statuses[i].providerMessageId,
-        status: statuses[i].status,
-        sent_by: profile.id,
-      }))
-    );
-    if (logError) console.error("Logging the blast failed:", logError);
+  const { error: logError } = await logBlastRows(supabase, recipients, statuses, true, profile.id);
+  if (logError) console.error("Logging the blast failed:", logError);
 
-    for (const s of statuses) {
-      if (s.status === "sent") sent++;
-      else if (s.status === "queued") queued++;
-      else skipped++;
-    }
+  let sent = 0;
+  let queued = 0;
+  for (const s of statuses) {
+    if (s.status === "sent") sent++;
+    else if (s.status === "queued") queued++;
+    else skipped++;
   }
 
   revalidatePath("/messages");
   return { error: null, result: { sent, queued, skipped } };
+}
+
+// ---- Chunked SMS send ----
+// The compose page splits an SMS blast into chunks of SMS_CHUNK_MAX and calls
+// this once per chunk. Each invocation paces its sends (~1.7s apart) to stay
+// under RingCentral's 40/minute limit and returns within seconds, so no
+// single request can hit the function timeout. On persistent rate limiting
+// the unattempted tail comes back in `unprocessedIds` for the client to
+// resume after `retryAfterMs`. Rows are logged per chunk — closing the tab
+// mid-blast loses nothing that was already attempted.
+
+const smsChunkSchema = z.object({
+  body: z
+    .string()
+    .trim()
+    .min(1, "Message body is required.")
+    .max(MAX_SMS_LENGTH, `Keep the message under ${MAX_SMS_LENGTH} characters.`),
+  customerIds: z.array(z.string().min(1)).min(1).max(SMS_CHUNK_MAX),
+});
+
+export type SmsChunkResult = {
+  error: string | null;
+  sent: number;
+  queued: number;
+  skipped: number;
+  failed: number;
+  unprocessedIds: string[];
+  retryAfterMs: number | null;
+};
+
+const emptySmsChunk = (error: string): SmsChunkResult => ({
+  error,
+  sent: 0,
+  queued: 0,
+  skipped: 0,
+  failed: 0,
+  unprocessedIds: [],
+  retryAfterMs: null,
+});
+
+export async function sendSmsBulkChunk(input: {
+  body: string;
+  customerIds: string[];
+}): Promise<SmsChunkResult> {
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const parsed = smsChunkSchema.safeParse(input);
+  if (!parsed.success) {
+    return emptySmsChunk(parsed.error.issues[0]?.message ?? "Invalid input");
+  }
+
+  const supabase = await createClient();
+  const resolved = await resolveRecipients({
+    supabase,
+    role: profile.role,
+    customerIds: parsed.data.customerIds,
+    isEmail: false,
+    body: parsed.data.body,
+    subject: "",
+  });
+  if ("error" in resolved) return emptySmsChunk(resolved.error);
+  const { recipients, skipped } = resolved;
+
+  const run = await runSmsChunk(recipients, {
+    ready: isSmsConfigured(),
+    send: sendSms,
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    now: Date.now,
+  });
+
+  const attempted = recipients.slice(0, run.outcomes.length);
+  const { error: logError } = await logBlastRows(
+    supabase,
+    attempted,
+    run.outcomes,
+    false,
+    profile.id
+  );
+  if (logError) console.error("Logging the blast failed:", logError);
+
+  let sent = 0;
+  let queued = 0;
+  let failed = 0;
+  for (const o of run.outcomes) {
+    if (o.status === "sent") sent++;
+    else if (o.status === "queued") queued++;
+    else failed++;
+  }
+
+  revalidatePath("/messages");
+  return {
+    error: null,
+    sent,
+    queued,
+    skipped,
+    failed,
+    unprocessedIds: recipients.slice(run.outcomes.length).map((r) => r.customerId),
+    retryAfterMs: run.retryAfterMs,
+  };
 }
 
 // ---- Two-way SMS ----

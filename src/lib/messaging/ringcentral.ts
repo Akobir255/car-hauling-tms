@@ -3,6 +3,8 @@
 // four RINGCENTRAL_* env vars are set; until then isConfigured() is false
 // and bulk sends stay logged as `queued` for a later retry.
 
+import { SmsRateLimitError } from "@/lib/messaging/sms-bulk";
+
 const RC_SERVER = (process.env.RINGCENTRAL_SERVER_URL || "https://platform.ringcentral.com").trim();
 const RC_CLIENT_ID = (process.env.RINGCENTRAL_CLIENT_ID || "").trim();
 const RC_CLIENT_SECRET = (process.env.RINGCENTRAL_CLIENT_SECRET || "").trim();
@@ -58,6 +60,13 @@ export async function sendSms(to: string, text: string): Promise<{ providerMessa
       text,
     }),
   });
+  if (res.status === 429) {
+    // Retry-After is seconds; the bulk engine paces around it. Body drained
+    // so the connection can be reused.
+    await res.text().catch(() => {});
+    const seconds = Number.parseInt(res.headers.get("Retry-After") ?? "", 10);
+    throw new SmsRateLimitError(Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : null);
+  }
   if (!res.ok) {
     throw new Error(`RingCentral send failed (${res.status}): ${await res.text()}`);
   }
