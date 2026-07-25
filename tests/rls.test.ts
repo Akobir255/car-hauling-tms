@@ -19,14 +19,31 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const enabled = process.env.RUN_RLS_TESTS === "1";
 const d = enabled ? describe : describe.skip;
 
+// Local runs read .env.local; CI has no such file and provides the values as
+// real environment variables instead. process.env wins when both exist.
 function env(): Record<string, string> {
-  const file = path.resolve(__dirname, "../.env.local");
-  return Object.fromEntries(
-    readFileSync(file, "utf8")
-      .split(/\r?\n/)
-      .filter((l) => l.includes("=") && !l.trim().startsWith("#"))
-      .map((l) => [l.slice(0, l.indexOf("=")).trim(), l.slice(l.indexOf("=") + 1).trim()])
-  );
+  let fromFile: Record<string, string> = {};
+  try {
+    const file = path.resolve(__dirname, "../.env.local");
+    fromFile = Object.fromEntries(
+      readFileSync(file, "utf8")
+        .split(/\r?\n/)
+        .filter((l) => l.includes("=") && !l.trim().startsWith("#"))
+        .map((l) => [l.slice(0, l.indexOf("=")).trim(), l.slice(l.indexOf("=") + 1).trim()])
+    );
+  } catch {
+    // No .env.local (CI) — rely on process.env entirely.
+  }
+  const overlay: Record<string, string> = {};
+  for (const key of [
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+  ]) {
+    const value = (process.env[key] || "").trim();
+    if (value) overlay[key] = value;
+  }
+  return { ...fromFile, ...overlay };
 }
 
 const PERMISSION_DENIED = "42501";

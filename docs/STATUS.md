@@ -100,7 +100,12 @@ space before `~all`, making the include unresolvable. Registrar is Squarespace.)
 - DMARC record for the sending domain.
 - Base UI logs "expected a native `<button>`" on the dashboard and new-load
   form — a `render` prop misuse, accessibility only.
-- No CI. Tests exist but nothing runs them automatically.
+- CI exists (.github/workflows/ci.yml): typecheck + lint + unit tests + build
+  on every push/PR. The RLS job SKIPS until the three Supabase secrets are
+  added to the repo (Settings → Secrets → Actions): NEXT_PUBLIC_SUPABASE_URL,
+  NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
+- The GitHub repo is PUBLIC. Decide if that's intended before adding secrets
+  or treating the contract text / schema as private.
 - SMS blast caps are per-send and client-enforced (100/blast); nothing tracks
   cumulative daily volume against the ~200-recipient carrier norm, and two
   operators blasting simultaneously share the 40/min limit (the 429 handling
