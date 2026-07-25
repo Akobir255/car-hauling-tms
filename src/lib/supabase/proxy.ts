@@ -1,12 +1,48 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { buildCsp } from "@/lib/security-headers";
 
 // /sign/<token> is the customer-facing contract page — no login, reached from
 // an SMS/email link. It authenticates by the unguessable token, not a session.
 const PUBLIC_PATHS = ["/login", "/set-password", "/sign"];
 
+// Telephony endpoints authenticate themselves (carrier signature / shared
+// token) and must never be redirected to /login — a carrier that follows a
+// 307 to an HTML page records the delivery as failed and eventually disables
+// the webhook. NOTE: this bypass is prefix-based, so anything added under
+// /api/telephony must do its own authentication.
+const SELF_AUTHENTICATING_PREFIXES = ["/api/telephony"];
+
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+  const pathname = request.nextUrl.pathname;
+
+  // One nonce per request. Setting the CSP on the REQUEST headers is what lets
+  // Next.js find the nonce and stamp it onto its inline hydration scripts;
+  // setting it on the response is what makes the browser enforce it.
+  const nonce = crypto.randomUUID().replace(/-/g, "");
+  const csp = buildCsp(nonce, process.env.NODE_ENV === "development");
+
+  const withCspRequestHeaders = (req: NextRequest) => {
+    const headers = new Headers(req.headers);
+    headers.set("x-nonce", nonce);
+    headers.set("content-security-policy", csp);
+    return headers;
+  };
+
+  const applyCsp = (res: NextResponse) => {
+    res.headers.set("content-security-policy", csp);
+    return res;
+  };
+
+  if (SELF_AUTHENTICATING_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    // No CSP on machine-to-machine endpoints: it protects browsers, and these
+    // are never rendered in one.
+    return NextResponse.next({ request });
+  }
+
+  let supabaseResponse = NextResponse.next({
+    request: { headers: withCspRequestHeaders(request) },
+  });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,7 +54,9 @@ export async function updateSession(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          supabaseResponse = NextResponse.next({ request });
+          supabaseResponse = NextResponse.next({
+            request: { headers: withCspRequestHeaders(request) },
+          });
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           );
@@ -32,22 +70,21 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const path = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
+  const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("next", path);
-    return NextResponse.redirect(url);
+    url.searchParams.set("next", pathname);
+    return applyCsp(NextResponse.redirect(url));
   }
 
-  if (user && path === "/login") {
+  if (user && pathname === "/login") {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     url.search = "";
-    return NextResponse.redirect(url);
+    return applyCsp(NextResponse.redirect(url));
   }
 
-  return supabaseResponse;
+  return applyCsp(supabaseResponse);
 }
