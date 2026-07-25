@@ -10,7 +10,15 @@ import { SectionBand, BandRow, Field } from "@/components/section-band";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate, formatPhone } from "@/lib/format";
 import { ACTIONS_BY_STATUS, stageOf } from "@/lib/order-status";
-import type { Customer, Load, LoadStatusHistoryEntry, LoadVehicle, Profile } from "@/types/database";
+import { ArrowDownLeft, ArrowUpRight, Mail, MessageSquareText } from "lucide-react";
+import type {
+  Customer,
+  Load,
+  LoadStatusHistoryEntry,
+  LoadVehicle,
+  Message,
+  Profile,
+} from "@/types/database";
 import { OrderActionBar } from "./order-action-bar";
 import { EsignPanel } from "./esign-panel";
 import { OrderMoreMenu } from "./order-more-menu";
@@ -32,30 +40,50 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   if (!loadData) notFound();
   const load = loadData as Load;
 
-  const [{ data: customerData }, { data: vehiclesData }, { data: history }, { data: contractEvents }] =
-    await Promise.all([
-      supabase.from("customers").select("*").eq("id", load.customer_id).single(),
-      supabase.from("load_vehicles").select("*").eq("load_id", id).order("created_at"),
-      supabase
-        .from("load_status_history")
-        .select("*")
-        .eq("load_id", id)
-        .order("created_at", { ascending: false })
-        .limit(12),
-      supabase
-        .from("contract_events")
-        .select("event, ip, created_at")
-        .eq("load_id", id)
-        .order("created_at", { ascending: false })
-        .limit(50),
-    ]);
+  const [
+    { data: customerData },
+    { data: vehiclesData },
+    { data: history },
+    { data: contractEvents },
+    { data: messagesData },
+  ] = await Promise.all([
+    supabase.from("customers").select("*").eq("id", load.customer_id).single(),
+    supabase.from("load_vehicles").select("*").eq("load_id", id).order("created_at"),
+    supabase
+      .from("load_status_history")
+      .select("*")
+      .eq("load_id", id)
+      .order("created_at", { ascending: false })
+      .limit(12),
+    supabase
+      .from("contract_events")
+      .select("event, ip, created_at")
+      .eq("load_id", id)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    // Customer-scoped, not load-scoped: inbound SMS has no load_id, and the
+    // dispatcher wants the whole conversation context msgplane shows on a
+    // record — messages tied to THIS order get a chip below.
+    supabase
+      .from("messages")
+      .select("*")
+      .eq("customer_id", load.customer_id)
+      .in("channel", ["sms", "email"])
+      .order("created_at", { ascending: false })
+      .limit(30),
+  ]);
   const customer = customerData as Customer | null;
   const vehicles = (vehiclesData ?? []) as LoadVehicle[];
   const historyRows = (history ?? []) as LoadStatusHistoryEntry[];
+  const messages = (messagesData ?? []) as Message[];
 
   const profileIds = [
     ...new Set(
-      [load.sales_owner_id, ...historyRows.map((h) => h.changed_by)].filter(Boolean) as string[]
+      [
+        load.sales_owner_id,
+        ...historyRows.map((h) => h.changed_by),
+        ...messages.map((m) => m.sent_by),
+      ].filter(Boolean) as string[]
     ),
   ];
   const { data: profs } = profileIds.length
@@ -223,6 +251,87 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               <Field label="Notes from shipper">
                 <span className="whitespace-pre-wrap">{load.notes || "—"}</span>
               </Field>
+            </div>
+          </SectionBand>
+
+          <SectionBand title="Messages" bodyClassName="p-0">
+            <div className="divide-y">
+              {messages.map((m) => {
+                const sender =
+                  m.direction === "inbound"
+                    ? customer?.contact_name || "Customer"
+                    : (m.sent_by && (profById.get(m.sent_by)?.full_name || profById.get(m.sent_by)?.email)) ||
+                      "System";
+                return (
+                  <div key={m.id} className="flex gap-3 px-5 py-3 text-sm">
+                    <span
+                      className={
+                        m.direction === "inbound"
+                          ? "mt-0.5 text-emerald-600 dark:text-emerald-400"
+                          : "mt-0.5 text-muted-foreground"
+                      }
+                    >
+                      {m.direction === "inbound" ? (
+                        <ArrowDownLeft className="size-4" aria-label="Inbound" />
+                      ) : (
+                        <ArrowUpRight className="size-4" aria-label="Outbound" />
+                      )}
+                    </span>
+                    <span className="mt-0.5 text-muted-foreground">
+                      {m.channel === "email" ? (
+                        <Mail className="size-4" aria-label="Email" />
+                      ) : (
+                        <MessageSquareText className="size-4" aria-label="SMS" />
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span className="font-medium">{sender}</span>
+                        {m.direction === "inbound" && !m.read_at && (
+                          <span className="rounded bg-blue-100 px-1.5 text-xs font-medium text-blue-800 dark:bg-blue-950 dark:text-blue-200">
+                            unread
+                          </span>
+                        )}
+                        {m.load_id === load.id && (
+                          <span className="rounded bg-muted px-1.5 text-xs text-muted-foreground">
+                            this order
+                          </span>
+                        )}
+                        {m.status === "failed" && (
+                          <span className="rounded bg-red-100 px-1.5 text-xs font-medium text-red-800 dark:bg-red-950 dark:text-red-200">
+                            failed
+                          </span>
+                        )}
+                        {m.status === "queued" && (
+                          <span className="rounded bg-amber-100 px-1.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                            queued
+                          </span>
+                        )}
+                        <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">
+                          {formatDate(m.created_at)}
+                        </span>
+                      </div>
+                      {m.subject && <p className="truncate font-medium">{m.subject}</p>}
+                      <p className="line-clamp-2 whitespace-pre-wrap break-words text-muted-foreground">
+                        {m.body}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+              {messages.length === 0 && (
+                <p className="px-5 py-4 text-sm text-muted-foreground">
+                  No messages with this customer yet.
+                </p>
+              )}
+            </div>
+            <div className="border-t px-5 py-3">
+              <Link
+                href={`/messages/thread/${load.customer_id}`}
+                className="text-sm font-medium text-primary hover:underline"
+              >
+                Open conversation →
+              </Link>
             </div>
           </SectionBand>
 

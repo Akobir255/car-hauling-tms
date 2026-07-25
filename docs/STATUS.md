@@ -81,7 +81,9 @@ blasts (Resend) · smart intake (ZIP→city autofill, suggested pricing, NHTSA
 make/model) · security headers · vehicle photos (`/api/vehicles/image`
 resolves make/model to a Wikipedia page image server-side and streams it from
 our origin — no CSP changes; misses fall back to the type silhouette in
-`vehicle-thumb.tsx`).
+`vehicle-thumb.tsx`) · per-order message timeline (order detail shows the
+customer's last 30 SMS/emails, msgplane-style; rows tied to that order get a
+"this order" chip; RLS-scoped like everything else).
 
 ## Integrations
 
