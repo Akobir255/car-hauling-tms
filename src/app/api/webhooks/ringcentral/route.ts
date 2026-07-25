@@ -236,6 +236,19 @@ export async function POST(request: NextRequest) {
     read_at: isInbound ? null : new Date().toISOString(),
   });
   if (insertError) {
+    // 23505 = the unique index on inbound provider_message_id caught a
+    // concurrent duplicate that slipped past the read-check race — the
+    // message is already stored, so this delivery succeeded.
+    if ((insertError as { code?: string }).code === "23505") {
+      await logEvent(supabase, {
+        outcome: "duplicate",
+        token_ok: true,
+        event_type: eventType,
+        direction,
+        from_addr: fromNumber,
+      });
+      return NextResponse.json({ ok: true, duplicate: true });
+    }
     console.error("Inbound SMS insert failed:", insertError);
     await logEvent(supabase, {
       outcome: "error_insert",

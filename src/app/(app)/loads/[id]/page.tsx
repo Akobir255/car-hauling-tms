@@ -24,7 +24,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   const supabase = await createClient();
 
   const { data: loadData } = await supabase
-    .from(canManageCarrier ? "loads" : "loads_sales_safe")
+    .from(canManageCarrier ? "loads_full" : "loads_sales_safe")
     .select("*")
     .eq("id", id)
     .single();

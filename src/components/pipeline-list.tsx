@@ -44,7 +44,9 @@ export async function PipelineList({
   const profile = await requireProfile();
   const supabase = await createClient();
   const canSeeMargin = profile.role === "admin" || profile.role === "dispatcher";
-  const table = canSeeMargin ? "loads" : "loads_sales_safe";
+  // Both are views: base-table select("*") would hit the revoked margin
+  // columns; loads_full carries them for managers, the safe view hides them.
+  const table = canSeeMargin ? "loads_full" : "loads_sales_safe";
 
   const stageStatuses: LoadStatus[] =
     stage === "lead" ? LEAD_STATUSES : stage === "quote" ? QUOTE_STATUSES : ORDER_STATUSES;

@@ -97,9 +97,11 @@ export async function sendBulk(
   if (customersError) return { error: customersError.message };
   const customers = (customersData ?? []) as Customer[];
 
-  // Latest load per customer for template variables ({{route}}, {{quote_price}}...)
+  // Latest load per customer for template variables ({{route}}, {{quote_price}}...).
+  // Views, not the base table: select("*") there would hit the revoked margin
+  // columns, and sales must read through the safe view anyway.
   const { data: loadsData } = await supabase
-    .from("loads")
+    .from(profile.role === "sales" ? "loads_sales_safe" : "loads_full")
     .select("*")
     .in("customer_id", customerIds)
     .order("created_at", { ascending: false });

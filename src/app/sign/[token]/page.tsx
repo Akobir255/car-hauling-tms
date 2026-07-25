@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { TERMS_SECTIONS } from "@/lib/esign-terms";
+import { TERMS_SECTIONS, isContractLinkExpired } from "@/lib/esign-terms";
 import type { Load, LoadVehicle } from "@/types/database";
 import { SignatureForm } from "./sign-button";
 
@@ -34,6 +34,24 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
   await supabase
     .from("contract_events")
     .insert({ load_id: load.id, event: "viewed", ip: viewIp, user_agent: viewUa });
+
+  // Expired link: keep the audit log entry above, show nothing signable.
+  if (isContractLinkExpired(load.contract_sent_at, load.date_signed)) {
+    return (
+      <div className="mx-auto max-w-lg space-y-6 px-4 py-16 text-center">
+        <span className="mx-auto flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+          <Truck className="size-6" aria-hidden="true" />
+        </span>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight">This signing link has expired</h1>
+          <p className="text-muted-foreground">
+            For your security, contract links stop working after a while. Please contact your
+            agent at US Star Trucking and they&apos;ll send you a fresh one.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const [{ data: customer }, { data: vehiclesData }] = await Promise.all([
     supabase.from("customers").select("contact_name, company_name").eq("id", load.customer_id).single(),
@@ -102,11 +120,20 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
         ))}
       </div>
 
-      <SignatureForm
-        token={token}
-        alreadySigned={Boolean(load.date_signed)}
-        signedName={load.contract_signed_name}
-      />
+      {load.contract_sent_at || load.date_signed ? (
+        <SignatureForm
+          token={token}
+          alreadySigned={Boolean(load.date_signed)}
+          signedName={load.contract_signed_name}
+        />
+      ) : (
+        // Not formally sent yet (e.g. a staff preview): show the agreement,
+        // but signing stays locked until "Send for signature" stamps it.
+        <div className="rounded-lg border border-dashed bg-muted/40 px-4 py-3 text-center text-sm text-muted-foreground">
+          This contract hasn&apos;t been sent for signature yet. Your agent will send you an
+          active signing link.
+        </div>
+      )}
 
       {load.date_signed && (
         <p className="text-center text-xs text-muted-foreground">

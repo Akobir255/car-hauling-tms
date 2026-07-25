@@ -8,6 +8,18 @@
 
 export const TERMS_VERSION = "2026-07-24";
 
+// Signing links stop working this many days after the contract was last
+// sent; resending refreshes the window.
+export const CONTRACT_LINK_EXPIRY_DAYS = 14;
+
+export function isContractLinkExpired(
+  sentAt: string | null,
+  signedAt: string | null
+): boolean {
+  if (signedAt || !sentAt) return false;
+  return Date.now() - new Date(sentAt).getTime() > CONTRACT_LINK_EXPIRY_DAYS * 86_400_000;
+}
+
 export type TermsSection = {
   heading: string;
   intro?: string;

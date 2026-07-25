@@ -37,11 +37,24 @@ export async function inviteUser(
       : "http://localhost:3000");
 
   const admin = createAdminClient();
-  const { error } = await admin.auth.admin.inviteUserByEmail(email, {
-    data: { full_name, role },
+  const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
+    data: { full_name },
     redirectTo: `${origin}/set-password`,
   });
   if (error) return { error: error.message };
+
+  // The signup trigger deliberately ignores any role in user metadata (it
+  // always creates 'sales'), so the invited role is applied here, by trusted
+  // admin-only code through the service role.
+  if (role !== "sales" && data.user) {
+    const { error: roleError } = await admin
+      .from("profiles")
+      .update({ role })
+      .eq("id", data.user.id);
+    if (roleError) {
+      return { error: `Invite sent, but setting the role failed: ${roleError.message}` };
+    }
+  }
 
   revalidatePath("/admin/users");
   return { error: null, success: `Invite sent to ${email}.` };

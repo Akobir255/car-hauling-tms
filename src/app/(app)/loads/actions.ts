@@ -170,11 +170,13 @@ export async function createLoad(
   const derivedCarrierPay =
     totalRate != null ? Math.max(0, Math.round((totalRate - (reservationFee ?? 0)) * 100) / 100) : null;
 
+  // carrier_pay deliberately NOT in this payload: that column's INSERT is
+  // revoked for the user client (margin protection) — it's written below via
+  // the service role.
   const payload = {
     ...coreValues(parsedCore.data),
     customer_id,
     status: initialStatus,
-    carrier_pay: derivedCarrierPay,
     sales_owner_id: profile.role === "sales" ? profile.id : null,
   };
 
@@ -183,13 +185,24 @@ export async function createLoad(
     return { error: "Could not generate a load number — is migration 0004 applied?" };
   }
 
-  const { data: load, error: insertError } = await supabase
+  // Id generated here instead of RETURNING: `.select()` after insert would
+  // try to return the margin columns, which the user client can't read.
+  const loadId = crypto.randomUUID();
+  const { error: insertError } = await supabase
     .from("loads")
-    .insert({ ...payload, load_number: `${seq}-US` })
-    .select()
-    .single();
-  if (!load) {
-    return { error: insertError?.message ?? "Could not create load — try again." };
+    .insert({ ...payload, id: loadId, load_number: `${seq}-US` });
+  if (insertError) {
+    console.error("Load insert failed:", insertError);
+    return { error: "Could not create load — try again." };
+  }
+  const load = { id: loadId };
+
+  if (derivedCarrierPay != null) {
+    const { error: cpError } = await createAdminClient()
+      .from("loads")
+      .update({ carrier_pay: derivedCarrierPay })
+      .eq("id", loadId);
+    if (cpError) console.error("Setting derived carrier_pay failed:", cpError);
   }
 
   const { error: vehiclesError } = await supabase.from("load_vehicles").insert(
@@ -236,7 +249,8 @@ export async function updateLoad(
   // Only admin/dispatcher may assign a carrier or set carrier pay — never
   // trust these fields from a sales-submitted form, regardless of what a
   // client sends, since that's how broker margin stays hidden from sales.
-  if (profile.role === "admin" || profile.role === "dispatcher") {
+  const isManager = profile.role === "admin" || profile.role === "dispatcher";
+  if (isManager) {
     const carrier_id = (formData.get("carrier_id") || "").toString();
     values.carrier_id = carrier_id || null;
     values.carrier_pay = numeric.parse(formData.get("carrier_pay")?.toString());
@@ -244,7 +258,11 @@ export async function updateLoad(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.from("loads").update(values).eq("id", id);
+  // Carrier/margin columns are not writable through the user client (column
+  // grants) — manager updates go through the service role AFTER the
+  // requireRole check above.
+  const writer = isManager ? createAdminClient() : supabase;
+  const { error } = await writer.from("loads").update(values).eq("id", id);
   if (error) return { error: error.message };
 
   // "Save and convert to order" — only from lead/quote, re-checked here
@@ -552,7 +570,9 @@ export async function duplicateLoad(id: string): Promise<void> {
 
   // Sales reps read via the safe view, so a sales-made duplicate simply
   // won't carry carrier_pay — consistent with what they're allowed to see.
-  const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
+  // Managers read loads_full (base-table select("*") would hit the revoked
+  // margin columns).
+  const table = profile.role === "sales" ? "loads_sales_safe" : "loads_full";
   const { data: source } = await supabase.from(table).select("*").eq("id", id).single();
   if (!source) return;
 
@@ -565,13 +585,28 @@ export async function duplicateLoad(id: string): Promise<void> {
   delete copy.load_number;
   delete copy.created_at;
   delete copy.updated_at;
+  // A duplicate is a NEW deal: it must not inherit the source's signature or
+  // its signing token (contract_token is UNIQUE — copying it fails the insert).
+  delete copy.contract_token;
+  delete copy.contract_sent_at;
+  delete copy.contract_signed_ip;
+  delete copy.contract_signed_name;
+  delete copy.contract_signed_email;
+  delete copy.date_signed;
 
-  const { data: newLoad, error } = await supabase
+  // Service role: an admin's copy carries carrier_pay (column-revoked for the
+  // user client), and sales need the RETURNING row despite having no SELECT
+  // policy on the base table. Role check happened above; sales copies come
+  // from the safe view, so they can't smuggle margin fields in.
+  const { data: newLoad, error } = await createAdminClient()
     .from("loads")
     .insert({ ...copy, load_number: `${seq}US` })
     .select()
     .single();
-  if (error || !newLoad) return;
+  if (error || !newLoad) {
+    console.error("Duplicate load failed:", error);
+    return;
+  }
 
   const { data: vehicles } = await supabase
     .from("load_vehicles")
@@ -691,13 +726,21 @@ export async function markContractSigned(loadId: string): Promise<void> {
   revalidatePath(`/loads/${loadId}`);
 }
 
-// Clear a signature (e.g. sent in error), so it can be re-sent.
+// Clear a signature (e.g. sent in error), so it can be re-sent. Rotates the
+// signing token so any previously shared link stops working.
 export async function voidSignature(loadId: string): Promise<void> {
   const profile = await requireRole("admin", "dispatcher");
   const supabase = await createClient();
   const { error } = await supabase
     .from("loads")
-    .update({ date_signed: null, contract_signed_ip: null })
+    .update({
+      date_signed: null,
+      contract_signed_ip: null,
+      contract_signed_name: null,
+      contract_signed_email: null,
+      contract_sent_at: null,
+      contract_token: crypto.randomUUID(),
+    })
     .eq("id", loadId);
   if (error) return;
   await supabase.from("load_status_history").insert({

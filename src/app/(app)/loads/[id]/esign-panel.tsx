@@ -97,7 +97,9 @@ export function EsignPanel({
             size="sm"
             variant="ghost"
             onClick={() => {
-              const url = state.link ?? `${window.location.origin}${signHref}`;
+              // Always derive from the CURRENT token — after "Void signature"
+              // rotates it, the stale action-state link would be a dead URL.
+              const url = `${window.location.origin}${signHref}`;
               navigator.clipboard?.writeText(url);
               setCopied(true);
               setTimeout(() => setCopied(false), 1500);

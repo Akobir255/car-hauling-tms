@@ -30,7 +30,7 @@ export default async function LoadsPage({
   const profile = await requireProfile();
   const supabase = await createClient();
   const canSeeMargin = profile.role === "admin" || profile.role === "dispatcher";
-  const table = canSeeMargin ? "loads" : "loads_sales_safe";
+  const table = canSeeMargin ? "loads_full" : "loads_sales_safe";
 
   const statusFilter = LOAD_STATUSES.includes(statusParam as LoadStatus)
     ? (statusParam as LoadStatus)
