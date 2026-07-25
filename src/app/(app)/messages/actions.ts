@@ -327,7 +327,6 @@ export async function sendSmsBulkChunk(input: {
     false,
     profile.id
   );
-  if (logError) console.error("Logging the blast failed:", logError);
 
   let sent = 0;
   let queued = 0;
@@ -338,9 +337,27 @@ export async function sendSmsBulkChunk(input: {
     else failed++;
   }
 
-  revalidatePath("/messages");
+  // Texts that went out but couldn't be logged are the one state the operator
+  // must hear about loudly: the Messages page won't show them, so a naive
+  // resend would double-text real customers. sendReply handles this the same
+  // way. A provider outage likewise surfaces as an error so the client stops
+  // instead of grinding every recipient into a "failed" row.
+  let error: string | null = null;
+  if (logError && sent > 0) {
+    console.error("Logging the blast failed:", logError);
+    error = `${sent} text(s) were SENT but could not be logged (${logError.message}). Do not resend to this selection until Messages is checked.`;
+  } else if (logError) {
+    console.error("Logging the blast failed:", logError);
+    error = `Logging failed: ${logError.message}`;
+  } else if (run.providerError) {
+    error = `RingCentral problem — blast stopped: ${run.providerError}`;
+  }
+
+  // No revalidatePath here: refreshing /messages once per chunk would re-run
+  // its queries up to 10 times per blast. The client calls finalizeSmsBlast()
+  // when the blast ends (or aborts) instead.
   return {
-    error: null,
+    error,
     sent,
     queued,
     skipped,
@@ -348,6 +365,13 @@ export async function sendSmsBulkChunk(input: {
     unprocessedIds: recipients.slice(run.outcomes.length).map((r) => r.customerId),
     retryAfterMs: run.retryAfterMs,
   };
+}
+
+// One cheap revalidation at the end of a chunked blast (success or abort),
+// instead of one per chunk.
+export async function finalizeSmsBlast(): Promise<void> {
+  await requireRole("admin", "dispatcher", "sales");
+  revalidatePath("/messages");
 }
 
 // ---- Two-way SMS ----

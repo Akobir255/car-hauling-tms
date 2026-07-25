@@ -42,6 +42,18 @@ export class SmsRateLimitError extends Error {
   }
 }
 
+// Thrown when the PROVIDER is the problem (auth endpoint down or rejecting,
+// network unreachable, request timed out) rather than one recipient's number.
+// Distinguishing matters: a provider outage must stop the chunk — otherwise
+// every remaining recipient gets a permanent "failed" row in the log for what
+// was a transient hiccup, with no way to tell them apart from bad numbers.
+export class SmsProviderOutageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SmsProviderOutageError";
+  }
+}
+
 export type SmsOutcome = {
   status: "sent" | "queued" | "failed";
   providerMessageId: string | null;
@@ -49,11 +61,14 @@ export type SmsOutcome = {
 
 export type SmsChunkRun = {
   // One entry per ATTEMPTED recipient, in input order. Shorter than the
-  // input when a rate-limit stop left a tail unattempted.
+  // input when a rate-limit or outage stop left a tail unattempted.
   outcomes: SmsOutcome[];
   // How long the caller should wait before resuming the unattempted tail.
   // Null when everything was attempted.
   retryAfterMs: number | null;
+  // Set when the provider itself failed (auth, network, timeout) — the tail
+  // was not attempted and retrying immediately is pointless.
+  providerError: string | null;
 };
 
 export type SmsChunkDeps = {
@@ -77,7 +92,7 @@ export async function runSmsChunk(
 
   if (!deps.ready) {
     for (const _ of recipients) outcomes.push({ status: "queued", providerMessageId: null });
-    return { outcomes, retryAfterMs: null };
+    return { outcomes, retryAfterMs: null, providerError: null };
   }
 
   const startedAt = deps.now();
@@ -86,7 +101,7 @@ export async function runSmsChunk(
 
   for (const r of recipients) {
     if (!withinBudget(SMS_SEND_INTERVAL_MS)) {
-      return { outcomes, retryAfterMs: 1000 };
+      return { outcomes, retryAfterMs: 1000, providerError: null };
     }
     await deps.sleep(SMS_SEND_INTERVAL_MS);
 
@@ -102,11 +117,16 @@ export async function runSmsChunk(
           if (retried || !withinBudget(wait)) {
             // Persistent rate limiting — stop here; the unattempted tail
             // (including this recipient) goes back to the caller untouched.
-            return { outcomes, retryAfterMs: wait };
+            return { outcomes, retryAfterMs: wait, providerError: null };
           }
           retried = true;
           await deps.sleep(wait);
           continue;
+        }
+        if (err instanceof SmsProviderOutageError) {
+          // The provider is down, not this number — stop instead of marking
+          // every remaining recipient permanently "failed".
+          return { outcomes, retryAfterMs: null, providerError: err.message };
         }
         // A real send failure for THIS number (bad number, blocked, etc.) —
         // record it and keep going; one dud must not sink the blast.
@@ -117,7 +137,7 @@ export async function runSmsChunk(
     }
   }
 
-  return { outcomes, retryAfterMs: null };
+  return { outcomes, retryAfterMs: null, providerError: null };
 }
 
 // Split ids into chunk-action-sized groups. Lives here (not in the client)

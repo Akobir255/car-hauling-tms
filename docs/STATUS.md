@@ -52,10 +52,19 @@ login role, so no database password is needed.
    component). Anything new the browser must call has to be added to
    `connect-src`. `/api/telephony/*` is exempt (carriers aren't browsers).
 
-4. **Bulk sends must not loop per recipient.** Email uses Resend's batch
-   endpoint (100 per call) plus one bulk insert, because a loop hits both the
-   provider rate limit and Vercel's function timeout. **SMS still loops —
-   large SMS blasts carry that timeout risk and need the same treatment.**
+4. **Bulk sends must not loop unpaced per recipient.** Email uses Resend's
+   batch endpoint (100 per call) plus one bulk insert. SMS has no batch
+   endpoint and RingCentral allows only **40 sends/minute** (429 + Retry-After
+   beyond that), so SMS blasts are CHUNKED: the client (compose page and the
+   pipeline bulk bar) calls a chunk action per `SMS_CHUNK_MAX` recipients, and
+   `runSmsChunk` in `src/lib/messaging/sms-bulk.ts` paces sends 1.7s apart,
+   retries once per message on 429, and hands any rate-limited/outage tail
+   back for the client to resume. Rows are logged once per chunk. Any NEW
+   SMS-sending path must go through `runSmsChunk` — never call `sendSms` in a
+   loop. Carrier norms still apply on top: local 10DLC numbers max out around
+   ~200 unique recipients / ~1,000 texts per day, silently filtered beyond
+   that. (RingCentral's High Volume SMS API would lift this but requires
+   support-provisioned A2P permission and makes the number app-SMS-only.)
 
 5. **Lint rules `react-hooks/set-state-in-effect` and `react-hooks/refs` are
    errors and fail the build.** Defer setState into timers/callbacks; update
@@ -88,8 +97,11 @@ space before `~all`, making the include unresolvable. Registrar is Squarespace.)
 
 - Supabase dashboard: password policy (min length 12, complexity, secure
   password change) — no API for it.
-- SMS bulk send timeout (see #4 above).
 - DMARC record for the sending domain.
 - Base UI logs "expected a native `<button>`" on the dashboard and new-load
   form — a `render` prop misuse, accessibility only.
 - No CI. Tests exist but nothing runs them automatically.
+- SMS blast caps are per-send and client-enforced (100/blast); nothing tracks
+  cumulative daily volume against the ~200-recipient carrier norm, and two
+  operators blasting simultaneously share the 40/min limit (the 429 handling
+  absorbs it, but sends slow down).

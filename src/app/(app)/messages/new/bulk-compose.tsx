@@ -11,7 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { TEMPLATE_VARIABLES } from "@/lib/messaging/render";
 import { SMS_BLAST_MAX, SMS_CHUNK_MAX } from "@/lib/messaging/sms-bulk";
 import type { Customer, MessageTemplate } from "@/types/database";
-import { sendBulk, sendSmsBulkChunk, type MessageFormState } from "../actions";
+import {
+  finalizeSmsBlast,
+  sendBulk,
+  sendSmsBulkChunk,
+  type MessageFormState,
+} from "../actions";
 
 const initialState: MessageFormState = { error: null };
 
@@ -137,31 +142,55 @@ export function BulkCompose({
       setSmsProgress({ ...tally, total, waiting, finished });
     show(false);
 
+    let pendingIds = [...effectiveSelected];
+    // After any abort, the selection becomes exactly the unsent remainder, so
+    // pressing Send again RESUMES the blast instead of double-texting the
+    // customers who already got it.
+    const keepRemainder = () => setSelected(new Set(pendingIds));
+
     try {
-      let pendingIds = [...effectiveSelected];
       let stalls = 0;
       while (pendingIds.length > 0) {
         const chunk = pendingIds.slice(0, SMS_CHUNK_MAX);
         const res = await sendSmsBulkChunk({ body, customerIds: chunk });
-        if (res.error) {
-          toast.error(res.error);
-          show(false, true);
-          return;
-        }
+
         tally.sent += res.sent;
         tally.queued += res.queued;
         tally.skipped += res.skipped;
         tally.failed += res.failed;
-        const attempted = chunk.length - res.unprocessedIds.length;
+        // A chunk that was rejected whole (validation, bad session) attempted
+        // nothing, even though unprocessedIds is empty — keep it pending.
+        const nothingHappened =
+          res.error !== null &&
+          res.unprocessedIds.length === 0 &&
+          res.sent + res.queued + res.skipped + res.failed === 0;
+        const attempted = nothingHappened ? 0 : chunk.length - res.unprocessedIds.length;
         tally.done += attempted;
-        pendingIds = [...res.unprocessedIds, ...pendingIds.slice(chunk.length)];
+        pendingIds = nothingHappened
+          ? pendingIds
+          : [...res.unprocessedIds, ...pendingIds.slice(chunk.length)];
 
-        // Rate-limited with zero progress several times in a row means
-        // RingCentral isn't letting up — stop rather than spin forever.
-        stalls = attempted === 0 ? stalls + 1 : 0;
-        if (stalls >= 3) {
+        if (res.error) {
+          keepRemainder();
           toast.error(
-            `RingCentral keeps rate-limiting — stopped with ${pendingIds.length} unsent. Try again in a few minutes.`
+            res.error +
+              (pendingIds.length > 0
+                ? ` The selection now holds the ${pendingIds.length} unsent recipient${pendingIds.length === 1 ? "" : "s"}.`
+                : "")
+          );
+          show(false, true);
+          return;
+        }
+
+        // Only genuine send stalls count: a rate-limit stop with zero texts
+        // delivered. Skipped (opted-out) recipients are not progress, but
+        // they also must not mask a hard 429 wall.
+        stalls =
+          res.unprocessedIds.length > 0 && res.sent + res.failed === 0 ? stalls + 1 : 0;
+        if (stalls >= 3) {
+          keepRemainder();
+          toast.error(
+            `RingCentral keeps rate-limiting — stopped with ${pendingIds.length} unsent (kept in the selection). Try again in a few minutes.`
           );
           show(false, true);
           return;
@@ -173,18 +202,23 @@ export function BulkCompose({
         }
         show(false, pendingIds.length === 0);
       }
+      // Done — clear the selection so a second click can't repeat the blast.
+      setSelected(new Set());
       toast.success(
         `Done: ${tally.sent} sent, ${tally.queued} queued, ${tally.skipped} skipped` +
           (tally.failed > 0 ? `, ${tally.failed} failed.` : ".")
       );
     } catch (err) {
       console.error("SMS blast stopped:", err);
+      keepRemainder();
       toast.error(
-        `Send interrupted after ${tally.done} of ${total} — check Messages for what went out, then resend to the rest.`
+        `Send interrupted after ${tally.done} of ${total} — the selection now holds only the unsent recipients. Press Send to resume.`
       );
       show(false, true);
     } finally {
       setSmsSending(false);
+      // Refresh the Messages screens once per blast, not once per chunk.
+      finalizeSmsBlast().catch(() => {});
     }
   }
 
@@ -372,7 +406,8 @@ export function BulkCompose({
             </div>
             <p className="text-xs text-muted-foreground">
               {smsProgress.finished
-                ? `Finished: ${smsProgress.sent} sent, ${smsProgress.queued} queued, ${smsProgress.skipped} skipped` +
+                ? `${smsProgress.done < smsProgress.total ? `Stopped at ${smsProgress.done} of ${smsProgress.total}` : "Finished"}: ` +
+                  `${smsProgress.sent} sent, ${smsProgress.queued} queued, ${smsProgress.skipped} skipped` +
                   (smsProgress.failed > 0 ? `, ${smsProgress.failed} failed` : "")
                 : smsProgress.waiting
                   ? `Rate-limited — pausing before the next batch... (${smsProgress.done} of ${smsProgress.total} done)`

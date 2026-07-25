@@ -5,6 +5,7 @@ import {
   SMS_RETRY_CAP_MS,
   SMS_RETRY_FALLBACK_MS,
   SMS_SEND_INTERVAL_MS,
+  SmsProviderOutageError,
   SmsRateLimitError,
   chunkIds,
   runSmsChunk,
@@ -109,6 +110,20 @@ describe("runSmsChunk failure handling", () => {
     await runSmsChunk(recipients(1), deps);
     expect(sleeps).toContain(SMS_RETRY_CAP_MS);
     expect(sleeps).not.toContain(600_000);
+  });
+
+  it("stops on a provider outage instead of failing every remaining recipient", async () => {
+    // An auth-endpoint failure used to grind all 100 recipients into
+    // permanent "failed" rows for a transient hiccup — it must stop the
+    // chunk instead, leaving the tail unattempted and resumable.
+    const { deps } = harness((to) =>
+      to.endsWith("1") ? new SmsProviderOutageError("auth down") : "ok"
+    );
+    const run = await runSmsChunk(recipients(4), deps);
+
+    expect(run.outcomes.map((o) => o.status)).toEqual(["sent"]);
+    expect(run.providerError).toBe("auth down");
+    expect(run.retryAfterMs).toBeNull();
   });
 
   it("stops on persistent rate limiting and returns the unattempted tail", async () => {

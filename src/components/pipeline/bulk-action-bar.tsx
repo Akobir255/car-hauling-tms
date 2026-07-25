@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useSelection } from "./selection-context";
-import { bulkReassign, bulkSetFollowUp, bulkSms } from "@/app/(app)/loads/actions";
+import { bulkReassign, bulkSetFollowUp, bulkSmsChunk } from "@/app/(app)/loads/actions";
+import { finalizeSmsBlast } from "@/app/(app)/messages/actions";
+import { SMS_CHUNK_MAX } from "@/lib/messaging/sms-bulk";
 
 type Rep = { id: string; name: string };
 type Panel = "reassign" | "followup" | "sms" | null;
@@ -23,7 +25,7 @@ const FOLLOW_UP_PRESETS: { key: string; label: string }[] = [
 // actions. Reassign / SMS / Next Follow Up work today; Email is stubbed until
 // an email provider is wired.
 export function BulkActionBar({ reps, canReassign }: { reps: Rep[]; canReassign: boolean }) {
-  const { selected, clear } = useSelection();
+  const { selected, setMany, clear } = useSelection();
   const [panel, setPanel] = useState<Panel>(null);
   const [pending, start] = useTransition();
   const [repId, setRepId] = useState("");
@@ -103,9 +105,61 @@ export function BulkActionBar({ reps, canReassign }: { reps: Rep[]; canReassign:
                 size="sm"
                 disabled={pending || !smsBody.trim()}
                 onClick={() => start(async () => {
-                  const r = await bulkSms(ids, smsBody);
-                  done(`SMS: ${r.sent} sent, ${r.failed} failed, ${r.skipped} skipped.`);
-                  setSmsBody("");
+                  // Chunked like the compose page: paced server-side, resumed
+                  // after rate-limit stops, and on any abort the processed
+                  // loads are DESELECTED so retrying only hits the unsent.
+                  const tally = { sent: 0, queued: 0, skipped: 0, failed: 0 };
+                  let pendingIds = [...ids];
+                  let stalls = 0;
+                  try {
+                    while (pendingIds.length > 0) {
+                      const chunk = pendingIds.slice(0, SMS_CHUNK_MAX);
+                      const r = await bulkSmsChunk(chunk, smsBody);
+                      tally.sent += r.sent;
+                      tally.queued += r.queued;
+                      tally.skipped += r.skipped;
+                      tally.failed += r.failed;
+                      const nothingHappened =
+                        r.error !== null &&
+                        r.unprocessedLoadIds.length === 0 &&
+                        r.sent + r.queued + r.skipped + r.failed === 0;
+                      const next = nothingHappened
+                        ? pendingIds
+                        : [...r.unprocessedLoadIds, ...pendingIds.slice(chunk.length)];
+                      const consumed = pendingIds.filter((id) => !next.includes(id));
+                      setMany(consumed, false);
+                      pendingIds = next;
+
+                      if (r.error) {
+                        toast.error(
+                          r.error +
+                            (pendingIds.length > 0
+                              ? ` The ${pendingIds.length} unsent stay selected.`
+                              : "")
+                        );
+                        return;
+                      }
+                      stalls =
+                        r.unprocessedLoadIds.length > 0 && r.sent + r.failed === 0
+                          ? stalls + 1
+                          : 0;
+                      if (stalls >= 3) {
+                        toast.error(
+                          `RingCentral keeps rate-limiting — stopped with ${pendingIds.length} unsent (still selected). Try again in a few minutes.`
+                        );
+                        return;
+                      }
+                      if (pendingIds.length > 0 && r.retryAfterMs) {
+                        await new Promise((resolve) => setTimeout(resolve, r.retryAfterMs ?? 1000));
+                      }
+                    }
+                    done(
+                      `SMS: ${tally.sent} sent, ${tally.queued} queued, ${tally.failed} failed, ${tally.skipped} skipped.`
+                    );
+                    setSmsBody("");
+                  } finally {
+                    finalizeSmsBlast().catch(() => {});
+                  }
                 })}
               >
                 Send to {ids.length}

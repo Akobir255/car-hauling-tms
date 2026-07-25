@@ -3,7 +3,12 @@
 // four RINGCENTRAL_* env vars are set; until then isConfigured() is false
 // and bulk sends stay logged as `queued` for a later retry.
 
-import { SmsRateLimitError } from "@/lib/messaging/sms-bulk";
+import { SmsProviderOutageError, SmsRateLimitError } from "@/lib/messaging/sms-bulk";
+
+function parseRetryAfterMs(res: Response): number | null {
+  const seconds = Number.parseInt(res.headers.get("Retry-After") ?? "", 10);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : null;
+}
 
 const RC_SERVER = (process.env.RINGCENTRAL_SERVER_URL || "https://platform.ringcentral.com").trim();
 const RC_CLIENT_ID = (process.env.RINGCENTRAL_CLIENT_ID || "").trim();
@@ -21,19 +26,35 @@ async function getAccessToken(): Promise<string> {
   if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) {
     return cachedToken.token;
   }
-  const res = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${RC_CLIENT_ID}:${RC_CLIENT_SECRET}`).toString("base64")}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion: RC_JWT,
-    }),
-  });
+  // Auth failing is a PROVIDER problem, never a recipient problem: typed so
+  // the bulk engine stops the chunk instead of logging every remaining
+  // recipient as permanently "failed" (and instead of re-hitting the token
+  // endpoint per recipient — RingCentral's Auth group allows only 5/min).
+  let res: Response;
+  try {
+    res = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${RC_CLIENT_ID}:${RC_CLIENT_SECRET}`).toString("base64")}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion: RC_JWT,
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (err) {
+    throw new SmsProviderOutageError(
+      `RingCentral auth unreachable: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+  if (res.status === 429) {
+    await res.text().catch(() => {});
+    throw new SmsRateLimitError(parseRetryAfterMs(res));
+  }
   if (!res.ok) {
-    throw new Error(`RingCentral auth failed (${res.status}): ${await res.text()}`);
+    throw new SmsProviderOutageError(`RingCentral auth failed (${res.status}): ${await res.text()}`);
   }
   const data = await res.json();
   cachedToken = {
@@ -48,24 +69,37 @@ export async function sendSms(to: string, text: string): Promise<{ providerMessa
     throw new Error("RingCentral is not configured");
   }
   const token = await getAccessToken();
-  const res = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/sms`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: { phoneNumber: RC_FROM_NUMBER },
-      to: [{ phoneNumber: to }],
-      text,
-    }),
-  });
+  // Network failure or a hung socket is a provider problem (typed so bulk
+  // chunks stop cleanly); a non-ok response other than 429 is a problem with
+  // THIS message only. The timeout keeps one stalled request from eating the
+  // chunk budget — without it, already-sent texts could die unlogged when
+  // Vercel kills the invocation.
+  let res: Response;
+  try {
+    res = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/sms`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: { phoneNumber: RC_FROM_NUMBER },
+        to: [{ phoneNumber: to }],
+        text,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (err) {
+    if (err instanceof SmsProviderOutageError) throw err;
+    throw new SmsProviderOutageError(
+      `RingCentral unreachable: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
   if (res.status === 429) {
     // Retry-After is seconds; the bulk engine paces around it. Body drained
     // so the connection can be reused.
     await res.text().catch(() => {});
-    const seconds = Number.parseInt(res.headers.get("Retry-After") ?? "", 10);
-    throw new SmsRateLimitError(Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : null);
+    throw new SmsRateLimitError(parseRetryAfterMs(res));
   }
   if (!res.ok) {
     throw new Error(`RingCentral send failed (${res.status}): ${await res.text()}`);

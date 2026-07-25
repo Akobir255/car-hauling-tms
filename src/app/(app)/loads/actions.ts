@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
 import { isSmsConfigured, sendSms, toE164 } from "@/lib/messaging/ringcentral";
+import { SMS_CHUNK_MAX, runSmsChunk } from "@/lib/messaging/sms-bulk";
 import { LOAD_STATUSES, type LoadStatus } from "@/types/database";
 
 export type LoadFormState = { error: string | null };
@@ -883,55 +884,123 @@ export async function toggleBlacklist(customerId: string, on: boolean): Promise<
   revalidatePath(`/customers/${customerId}`);
 }
 
-export async function bulkSms(
-  loadIds: string[],
-  body: string
-): Promise<{ sent: number; failed: number; skipped: number }> {
+// One paced chunk of a pipeline SMS blast. The bulk bar splits its selection
+// into chunks of SMS_CHUNK_MAX and calls this per chunk — same contract as
+// the compose page's sendSmsBulkChunk: pacing under RingCentral's 40/min
+// limit happens in runSmsChunk, a rate-limit or provider stop returns the
+// unattempted tail in unprocessedLoadIds, and rows are logged per chunk in
+// one insert. Unconfigured sends log as "queued" (they used to vanish as
+// "skipped" here, unlike every other send path).
+export type BulkSmsChunkResult = {
+  error: string | null;
+  sent: number;
+  queued: number;
+  skipped: number;
+  failed: number;
+  unprocessedLoadIds: string[];
+  retryAfterMs: number | null;
+};
+
+export async function bulkSmsChunk(loadIds: string[], body: string): Promise<BulkSmsChunkResult> {
+  const empty = (error: string | null): BulkSmsChunkResult => ({
+    error,
+    sent: 0,
+    queued: 0,
+    skipped: 0,
+    failed: 0,
+    unprocessedLoadIds: [],
+    retryAfterMs: null,
+  });
+
   const profile = await requireRole("admin", "dispatcher", "sales");
   const text = body.trim();
-  if (loadIds.length === 0 || !text) return { sent: 0, failed: 0, skipped: 0 };
+  if (loadIds.length === 0) return empty(null);
+  if (!text) return empty("Message is required.");
+  if (text.length > 1600) return empty("Keep the message under 1600 characters.");
+  if (loadIds.length > SMS_CHUNK_MAX) {
+    return empty(`Max ${SMS_CHUNK_MAX} loads per chunk — this is a client bug.`);
+  }
 
   const supabase = await createClient();
-  const { data: loads } = await supabase.from("loads").select("id, customer_id").in("id", loadIds);
+  // Role-appropriate view, not the base table — the standing rule for every
+  // loads read, even though only id/customer_id are selected here.
+  const { data: loads, error: loadsError } = await supabase
+    .from(profile.role === "sales" ? "loads_sales_safe" : MANAGER_LOADS_TABLE)
+    .select("id, customer_id")
+    .in("id", loadIds);
+  if (loadsError) return empty(loadsError.message);
+
   const customerIds = [...new Set((loads ?? []).map((l) => l.customer_id).filter(Boolean))];
   const { data: customers } = customerIds.length
     ? await supabase.from("customers").select("id, phone, sms_opt_out").in("id", customerIds)
     : { data: [] as { id: string; phone: string | null; sms_opt_out: boolean }[] };
   const custById = new Map((customers ?? []).map((c) => [c.id, c]));
 
-  const ready = isSmsConfigured();
-  let sent = 0;
-  let failed = 0;
-  let skipped = 0;
-
+  // RLS-hidden loads count as skipped so the operator's totals reconcile.
+  let skipped = loadIds.length - (loads ?? []).length;
+  const recipients: { loadId: string; customerId: string; to: string; text: string }[] = [];
   for (const l of loads ?? []) {
     const c = custById.get(l.customer_id);
     const to = toE164(c?.phone);
-    if (!c || c.sms_opt_out || !to || !ready) {
+    if (!c || c.sms_opt_out || !to) {
       skipped++;
       continue;
     }
-    let status = "sent";
-    try {
-      await sendSms(to, text);
-      sent++;
-    } catch (err) {
-      console.error(`Bulk SMS to ${to} failed:`, err);
-      status = "failed";
-      failed++;
-    }
-    await supabase.from("messages").insert({
-      customer_id: c.id,
-      load_id: l.id,
-      channel: "sms",
-      direction: "outbound",
-      to_addr: to,
-      body: text,
-      status,
-      sent_by: profile.id,
-    });
+    recipients.push({ loadId: l.id, customerId: c.id, to, text });
   }
 
-  revalidatePath("/messages");
-  return { sent, failed, skipped };
+  const run = await runSmsChunk(recipients, {
+    ready: isSmsConfigured(),
+    send: sendSms,
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    now: Date.now,
+  });
+
+  const attempted = recipients.slice(0, run.outcomes.length);
+  const { error: logError } =
+    attempted.length === 0
+      ? { error: null }
+      : await supabase.from("messages").insert(
+          attempted.map((r, i) => ({
+            customer_id: r.customerId,
+            load_id: r.loadId,
+            channel: "sms",
+            direction: "outbound",
+            to_addr: r.to,
+            body: r.text,
+            provider_message_id: run.outcomes[i].providerMessageId,
+            status: run.outcomes[i].status,
+            sent_by: profile.id,
+          }))
+        );
+
+  let sent = 0;
+  let queued = 0;
+  let failed = 0;
+  for (const o of run.outcomes) {
+    if (o.status === "sent") sent++;
+    else if (o.status === "queued") queued++;
+    else failed++;
+  }
+
+  let error: string | null = null;
+  if (logError && sent > 0) {
+    console.error("Logging the bulk SMS failed:", logError);
+    error = `${sent} text(s) were SENT but could not be logged (${logError.message}). Do not resend to this selection until Messages is checked.`;
+  } else if (logError) {
+    console.error("Logging the bulk SMS failed:", logError);
+    error = `Logging failed: ${logError.message}`;
+  } else if (run.providerError) {
+    error = `RingCentral problem — blast stopped: ${run.providerError}`;
+  }
+
+  return {
+    error,
+    sent,
+    queued,
+    skipped,
+    failed,
+    unprocessedLoadIds: recipients.slice(run.outcomes.length).map((r) => r.loadId),
+    retryAfterMs: run.retryAfterMs,
+  };
 }
