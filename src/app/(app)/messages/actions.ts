@@ -17,7 +17,7 @@ import {
   sendSms,
   toE164,
 } from "@/lib/messaging/ringcentral";
-import { isEmailConfigured, isPlausibleEmail, sendEmail } from "@/lib/messaging/email";
+import { isEmailConfigured, isPlausibleEmail, sendEmailBatch } from "@/lib/messaging/email";
 import type { Customer, Load } from "@/types/database";
 
 export type MessageFormState = {
@@ -130,6 +130,15 @@ export async function sendBulk(
   let queued = 0;
   let skipped = 0;
 
+  // Render everything first, dropping anyone who can't receive this channel.
+  type Recipient = {
+    customerId: string;
+    loadId: string | null;
+    to: string;
+    text: string;
+    subject: string;
+  };
+  const recipients: Recipient[] = [];
   for (const customer of customers) {
     // Per-channel opt-out is legally required for SMS and expected for email.
     if (isEmail ? customer.email_opt_out : customer.sms_opt_out) {
@@ -145,43 +154,76 @@ export async function sendBulk(
       skipped++;
       continue;
     }
-
     const load = latestLoadByCustomer.get(customer.id) ?? null;
     const context = buildContext(customer, load);
-    const text = renderTemplate(body, context);
-    const renderedSubject = isEmail ? renderTemplate(subject, context) : "";
+    recipients.push({
+      customerId: customer.id,
+      loadId: load?.id ?? null,
+      to,
+      text: renderTemplate(body, context),
+      subject: isEmail ? renderTemplate(subject, context) : "",
+    });
+  }
 
-    let status = "queued";
-    let providerMessageId: string | null = null;
-    if (ready) {
-      try {
-        const result = isEmail
-          ? await sendEmail(to, renderedSubject, text)
-          : await sendSms(to, text);
-        providerMessageId = result.providerMessageId;
-        status = "sent";
-      } catch (err) {
-        console.error(`${isEmail ? "Email" : "SMS"} to ${to} failed:`, err);
-        status = "failed";
+  // Email goes out as ONE batch request; SMS still loops because RingCentral
+  // has no batch endpoint. Statuses are collected per recipient either way.
+  const statuses: { status: string; providerMessageId: string | null }[] = [];
+
+  if (isEmail) {
+    if (!ready) {
+      recipients.forEach(() => statuses.push({ status: "queued", providerMessageId: null }));
+    } else {
+      const result = await sendEmailBatch(
+        recipients.map((r) => ({ to: r.to, subject: r.subject, text: r.text }))
+      );
+      if (result.ok) {
+        result.ids.forEach((id) => statuses.push({ status: "sent", providerMessageId: id }));
+      } else {
+        // The whole batch failed as one request — mark them all failed and
+        // surface why, rather than leaving the operator guessing.
+        console.error("Email batch failed:", result.error);
+        recipients.forEach(() => statuses.push({ status: "failed", providerMessageId: null }));
       }
     }
+  } else {
+    for (const r of recipients) {
+      if (!ready) {
+        statuses.push({ status: "queued", providerMessageId: null });
+        continue;
+      }
+      try {
+        const result = await sendSms(r.to, r.text);
+        statuses.push({ status: "sent", providerMessageId: result.providerMessageId });
+      } catch (err) {
+        console.error(`SMS to ${r.to} failed:`, err);
+        statuses.push({ status: "failed", providerMessageId: null });
+      }
+    }
+  }
 
-    await supabase.from("messages").insert({
-      customer_id: customer.id,
-      load_id: load?.id ?? null,
-      channel: isEmail ? "email" : "sms",
-      direction: "outbound",
-      to_addr: to,
-      subject: isEmail ? renderedSubject : null,
-      body: text,
-      provider_message_id: providerMessageId,
-      status,
-      sent_by: profile.id,
-    });
+  // One insert for the whole blast instead of N round-trips.
+  if (recipients.length > 0) {
+    const { error: logError } = await supabase.from("messages").insert(
+      recipients.map((r, i) => ({
+        customer_id: r.customerId,
+        load_id: r.loadId,
+        channel: isEmail ? "email" : "sms",
+        direction: "outbound",
+        to_addr: r.to,
+        subject: isEmail ? r.subject : null,
+        body: r.text,
+        provider_message_id: statuses[i].providerMessageId,
+        status: statuses[i].status,
+        sent_by: profile.id,
+      }))
+    );
+    if (logError) console.error("Logging the blast failed:", logError);
 
-    if (status === "sent") sent++;
-    else if (status === "queued") queued++;
-    else skipped++;
+    for (const s of statuses) {
+      if (s.status === "sent") sent++;
+      else if (s.status === "queued") queued++;
+      else skipped++;
+    }
   }
 
   revalidatePath("/messages");

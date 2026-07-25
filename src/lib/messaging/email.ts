@@ -73,3 +73,63 @@ export function isPlausibleEmail(value: string | null | undefined): boolean {
   const v = (value || "").trim();
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v) && v.length <= 254;
 }
+
+// ---- Bulk send ----
+// A blast MUST NOT be a loop of single sends: Resend rate-limits to a couple
+// of requests per second, and a Vercel server action would hit its execution
+// timeout long before 100 sequential round-trips finished. The batch endpoint
+// sends up to 100 personalised emails in ONE request instead.
+
+const BATCH_URL = "https://api.resend.com/emails/batch";
+export const EMAIL_BATCH_MAX = 100;
+
+export type BulkEmail = { to: string; subject: string; text: string };
+export type BulkEmailResult =
+  | { ok: true; ids: (string | null)[] }
+  | { ok: false; error: string };
+
+// Returns one entry per input email, in order — ids[i] belongs to emails[i].
+export async function sendEmailBatch(emails: BulkEmail[]): Promise<BulkEmailResult> {
+  // Validate the request before the environment: "send zero emails" is
+  // trivially successful (it happens when every recipient is opted out), and
+  // an oversized batch is a caller bug worth naming even if no key is set.
+  if (emails.length === 0) return { ok: true, ids: [] };
+  if (emails.length > EMAIL_BATCH_MAX) {
+    return { ok: false, error: `Batch is capped at ${EMAIL_BATCH_MAX} emails` };
+  }
+  if (!isEmailConfigured()) return { ok: false, error: "Email is not configured" };
+
+  const payload = emails.map((e) => ({
+    from: FROM,
+    to: [e.to],
+    subject: e.subject,
+    text: e.text,
+    html: textToHtml(e.text),
+    ...(REPLY_TO ? { reply_to: REPLY_TO } : {}),
+  }));
+
+  try {
+    const res = await fetch(BATCH_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(20_000),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      // 429 is the one an operator can act on, so name it plainly.
+      const hint = res.status === 429 ? " (rate limited — wait a moment and retry)" : "";
+      return { ok: false, error: `Resend batch failed (${res.status})${hint}: ${body.slice(0, 300)}` };
+    }
+
+    const data = await res.json();
+    const rows: { id?: string }[] = Array.isArray(data?.data) ? data.data : [];
+    return { ok: true, ids: emails.map((_, i) => rows[i]?.id ?? null) };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Email batch failed" };
+  }
+}
