@@ -141,3 +141,21 @@ export const ACTIONS_BY_STATUS: Record<LoadStatus, OrderAction[]> = {
   paid: ["archive"],
   cancelled: ["reactivate"],
 };
+
+// Dispatch / picked-up / delivered mirror what the carrier reports, so they
+// belong to the dispatch desk — sales never sees those buttons (and the
+// server actions enforce the same rule independently). Un-dispatching is
+// likewise desk-only; unposting a merely-posted order is fine for sales.
+export const DISPATCH_DESK_ACTIONS: OrderAction[] = [
+  "dispatch",
+  "mark_picked_up",
+  "mark_delivered",
+];
+
+export function actionsFor(status: LoadStatus, role: string): OrderAction[] {
+  const base = ACTIONS_BY_STATUS[status] ?? [];
+  if (role !== "sales") return base;
+  return base.filter(
+    (a) => !DISPATCH_DESK_ACTIONS.includes(a) && !(a === "unpost" && status === "dispatched")
+  );
+}

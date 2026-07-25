@@ -9,7 +9,7 @@ import { DeleteButton } from "@/components/delete-button";
 import { SectionBand, BandRow, Field } from "@/components/section-band";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate, formatPhone } from "@/lib/format";
-import { ACTIONS_BY_STATUS, stageOf } from "@/lib/order-status";
+import { actionsFor, stageOf } from "@/lib/order-status";
 import { ArrowDownLeft, ArrowUpRight, Mail, MessageSquareText } from "lucide-react";
 import type {
   Customer,
@@ -366,7 +366,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
         <div className="space-y-5 lg:sticky lg:top-4 lg:self-start">
           <SectionBand title="Actions">
             <div className="space-y-3">
-              <OrderActionBar loadId={load.id} actions={ACTIONS_BY_STATUS[load.status] ?? []} stack />
+              <OrderActionBar loadId={load.id} actions={actionsFor(load.status, profile.role)} stack />
               <div className="border-t pt-3">
                 <Button variant="outline" className="w-full" render={<Link href={`/loads/${load.id}/edit`} />}>
                   Edit

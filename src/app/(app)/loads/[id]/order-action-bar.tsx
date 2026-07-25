@@ -27,8 +27,11 @@ import {
 const initialState: LoadFormState = { error: null };
 
 // Actions that run immediately (no extra input). Post / Create Payment /
-// Mark Lost need a small form, so they open a disclosure instead.
-const INLINE: Partial<Record<OrderAction, (id: string) => Promise<void>>> = {
+// Mark Lost need a small form, so they open a disclosure instead. Actions
+// may return a result — a guard failure ("assign a carrier first") must
+// reach the operator as an error toast, not a false "Done."
+type ActionResult = { ok: boolean; error?: string } | void;
+const INLINE: Partial<Record<OrderAction, (id: string) => Promise<ActionResult>>> = {
   convert_to_quote: convertToQuote,
   convert_to_order: convertToOrder,
   dispatch: dispatchOrder,
@@ -82,8 +85,9 @@ export function OrderActionBar({
     if (!fn) return;
     if (CONFIRM[a] && !confirm(CONFIRM[a])) return;
     start(async () => {
-      await fn(loadId);
-      toast.success("Done.");
+      const result = await fn(loadId);
+      if (result && !result.ok) toast.error(result.error ?? "Couldn't do that.");
+      else toast.success("Done.");
     });
   };
 

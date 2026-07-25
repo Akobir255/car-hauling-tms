@@ -83,7 +83,12 @@ resolves make/model to a Wikipedia page image server-side and streams it from
 our origin — no CSP changes; misses fall back to the type silhouette in
 `vehicle-thumb.tsx`) · per-order message timeline (order detail shows the
 customer's last 30 SMS/emails, msgplane-style; rows tied to that order get a
-"this order" chip; RLS-scoped like everything else).
+"this order" chip; RLS-scoped like everything else) · strict pipeline state
+machine (lead→quote happens by PRICING, quote→order by convert, dispatch
+requires a posted order AND an assigned carrier, picked-up→delivered can't
+skip stages; dispatch/picked-up/delivered/un-dispatch are dispatch-desk
+actions hidden from sales AND enforced server-side in `transition()` —
+they mirror what the carrier reports until the CD/SD APIs land).
 
 ## Integrations
 

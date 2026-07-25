@@ -267,24 +267,51 @@ export async function updateLoad(
   const { error } = await writer.from("loads").update(values).eq("id", id);
   if (error) return { error: error.message };
 
-  // "Save and convert to order" — only from lead/quote, re-checked here
-  // rather than trusting the button's presence in the UI.
+  // Pipeline rules on save (mirrors msgplane): pricing is what promotes a
+  // lead to a quote — automatically, not via a button — and only a priced
+  // QUOTE can convert to an order. Both re-checked here rather than trusting
+  // the UI.
+  const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
+  const { data: current } = await supabase.from(table).select("status").eq("id", id).single();
+  let status = current?.status as string | undefined;
+  const priced = parsedCore.data.customer_rate != null;
+
+  if (status === "lead" && priced) {
+    const { error: quoteError } = await supabase.from("loads").update({ status: "quote" }).eq("id", id);
+    if (!quoteError) {
+      await supabase.from("load_status_history").insert({
+        load_id: id,
+        status: "quote",
+        changed_by: profile.id,
+        note: "Priced — moved to Quotes",
+      });
+      status = "quote";
+    }
+  }
+
   if (formData.get("convert") === "1") {
-    const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
-    const { data: current } = await supabase.from(table).select("status").eq("id", id).single();
-    if (current?.status === "quote" || current?.status === "lead") {
-      const { error: convertError } = await supabase
-        .from("loads")
-        .update({ status: "ready" })
-        .eq("id", id);
-      if (!convertError) {
-        await supabase.from("load_status_history").insert({
-          load_id: id,
-          status: "ready",
-          changed_by: profile.id,
-          note: "Converted to order",
-        });
-      }
+    if (status !== "quote") {
+      return {
+        error:
+          status === "lead"
+            ? "Add a price first — a priced lead becomes a quote, and quotes convert to orders."
+            : `Can't convert to order from ${status ?? "unknown"}.`,
+      };
+    }
+    if (!priced) {
+      return { error: "Add a price first — an order needs a tariff." };
+    }
+    const { error: convertError } = await supabase
+      .from("loads")
+      .update({ status: "ready" })
+      .eq("id", id);
+    if (!convertError) {
+      await supabase.from("load_status_history").insert({
+        load_id: id,
+        status: "ready",
+        changed_by: profile.id,
+        note: "Converted to order",
+      });
     }
   }
 
@@ -296,15 +323,25 @@ export async function updateLoad(
 // ---- Pipeline transitions ----
 // Each re-reads the current status server-side and only advances from a
 // permitted state, so a stale/forged button can't drive an invalid move.
+// The pipeline is deliberately strict, mirroring how the business runs:
+// lead --(price)--> quote --(convert)--> ready --(post)--> posted_cd/sd
+// --(assign carrier + dispatch)--> dispatched --> picked_up --> delivered.
+// No skipping stages, and the post-dispatch statuses belong to the dispatch
+// desk (they mirror what the carrier reports), never to sales.
+
+type StaffRole = "admin" | "dispatcher" | "sales";
+const ALL_STAFF: StaffRole[] = ["admin", "dispatcher", "sales"];
+const DISPATCH_DESK: StaffRole[] = ["admin", "dispatcher"];
 
 async function transition(
   id: string,
   allowedFrom: LoadStatus[],
   updates: Record<string, unknown>,
   toStatus: LoadStatus,
-  note: string
+  note: string,
+  roles: StaffRole[] = ALL_STAFF
 ): Promise<{ ok: boolean; error?: string }> {
-  const profile = await requireRole("admin", "dispatcher", "sales");
+  const profile = await requireRole(...roles);
   const supabase = await createClient();
   const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
   const { data: current } = await supabase.from(table).select("status").eq("id", id).single();
@@ -330,14 +367,23 @@ async function transition(
   return { ok: true };
 }
 
-export async function convertToQuote(id: string): Promise<void> {
-  await transition(id, ["lead"], {}, "quote", "Priced — moved to Quotes");
+// A lead becomes a quote by being PRICED — the button is just a shortcut, so
+// it refuses until a price exists.
+export async function convertToQuote(id: string): Promise<{ ok: boolean; error?: string }> {
+  const profile = await requireRole(...ALL_STAFF);
+  const supabase = await createClient();
+  const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
+  const { data } = await supabase.from(table).select("customer_rate").eq("id", id).single();
+  if (data && data.customer_rate == null) {
+    return { ok: false, error: "Add a price first — a priced lead becomes a quote." };
+  }
+  return transition(id, ["lead"], {}, "quote", "Priced — moved to Quotes");
 }
 
 // Standalone quote → order (the header button), separate from the edit-form
-// convert path above.
-export async function convertToOrder(id: string): Promise<void> {
-  await transition(id, ["lead", "quote"], {}, "ready", "Converted to order");
+// convert path above. Only from QUOTE — a lead has to be priced first.
+export async function convertToOrder(id: string): Promise<{ ok: boolean; error?: string }> {
+  return transition(id, ["quote"], {}, "ready", "Converted to order");
 }
 
 export async function postOrder(id: string, board: "cd" | "sd" | "all"): Promise<void> {
@@ -359,8 +405,18 @@ export async function postOrder(id: string, board: "cd" | "sd" | "all"): Promise
   await transition(id, ["ready", "booked"], updates, toStatus, `Posted to ${label}`);
 }
 
-export async function unpostOrder(id: string): Promise<void> {
-  await transition(
+export async function unpostOrder(id: string): Promise<{ ok: boolean; error?: string }> {
+  const profile = await requireRole(...ALL_STAFF);
+  const supabase = await createClient();
+  const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
+  const { data: current } = await supabase.from(table).select("status").eq("id", id).single();
+  if (!current) return { ok: false, error: "Not found." };
+
+  // Reversing a dispatch undoes a carrier assignment — dispatch desk only.
+  if (current.status === "dispatched" && profile.role === "sales") {
+    return { ok: false, error: "Only dispatch can unpost a dispatched order." };
+  }
+  return transition(
     id,
     ["posted_cd", "posted_sd", "dispatched"],
     {
@@ -368,39 +424,54 @@ export async function unpostOrder(id: string): Promise<void> {
       posted_to_super_dispatch_at: null,
       cd_external_id: null,
       sd_external_id: null,
+      dispatched_at: null,
     },
     "ready",
     "Unposted — back to Ready"
   );
 }
 
-export async function dispatchOrder(id: string): Promise<void> {
-  await transition(
+// Dispatched means "a carrier has the load" — so it requires a posted order
+// AND an assigned carrier, and it's a dispatch-desk action. (When the CD/SD
+// APIs land, carrier acceptance will drive this automatically.)
+export async function dispatchOrder(id: string): Promise<{ ok: boolean; error?: string }> {
+  await requireRole(...DISPATCH_DESK);
+  const supabase = await createClient();
+  const { data } = await supabase.from("loads").select("carrier_id").eq("id", id).single();
+  if (data && !data.carrier_id) {
+    return { ok: false, error: "Assign a carrier first — dispatch means a carrier has the load." };
+  }
+  return transition(
     id,
-    ["posted_cd", "posted_sd", "ready", "booked"],
+    ["posted_cd", "posted_sd", "booked"],
     { dispatched_at: new Date().toISOString().slice(0, 10) },
     "dispatched",
-    "Dispatched"
+    "Dispatched",
+    DISPATCH_DESK
   );
 }
 
-export async function markPickedUp(id: string): Promise<void> {
-  await transition(
+// Picked-up / delivered mirror what the CARRIER reports — recorded by the
+// dispatch desk, never by sales, and never out of order.
+export async function markPickedUp(id: string): Promise<{ ok: boolean; error?: string }> {
+  return transition(
     id,
     ["dispatched", "in_transit"],
     { picked_up_at: new Date().toISOString().slice(0, 10) },
     "picked_up",
-    "Picked up"
+    "Picked up",
+    DISPATCH_DESK
   );
 }
 
-export async function markDelivered(id: string): Promise<void> {
-  await transition(
+export async function markDelivered(id: string): Promise<{ ok: boolean; error?: string }> {
+  return transition(
     id,
-    ["picked_up", "in_transit", "dispatched"],
+    ["picked_up", "in_transit"],
     { delivered_at: new Date().toISOString().slice(0, 10) },
     "delivered",
-    "Delivered"
+    "Delivered",
+    DISPATCH_DESK
   );
 }
 
