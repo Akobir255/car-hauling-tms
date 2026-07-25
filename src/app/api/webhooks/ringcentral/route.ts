@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getWebhookVerificationToken, toE164 } from "@/lib/messaging/ringcentral";
+import { optKeyword } from "@/lib/messaging/opt-keywords";
 
 // Public endpoint — RingCentral POSTs here for every new SMS on our number.
 // Auth model: no user session; instead every notification must carry the
@@ -79,16 +80,6 @@ const notificationSchema = z.object({
     })
     .optional(),
 });
-
-const STOP_WORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT", "REVOKE", "OPTOUT"]);
-const START_WORDS = new Set(["START", "UNSTOP", "YES", "CONTINUE"]);
-
-function optKeyword(text: string): "stop" | "start" | null {
-  const word = text.trim().toUpperCase().replace(/[.!]+$/, "");
-  if (STOP_WORDS.has(word)) return "stop";
-  if (START_WORDS.has(word)) return "start";
-  return null;
-}
 
 export async function POST(request: NextRequest) {
   const ip = (request.headers.get("x-forwarded-for") || "unknown").split(",")[0].trim();
