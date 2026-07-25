@@ -1,5 +1,6 @@
 "use server";
 
+import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -572,7 +573,7 @@ export async function duplicateLoad(id: string): Promise<void> {
   // won't carry carrier_pay — consistent with what they're allowed to see.
   // Managers read loads_full (base-table select("*") would hit the revoked
   // margin columns).
-  const table = profile.role === "sales" ? "loads_sales_safe" : "loads_full";
+  const table = profile.role === "sales" ? "loads_sales_safe" : MANAGER_LOADS_TABLE;
   const { data: source } = await supabase.from(table).select("*").eq("id", id).single();
   if (!source) return;
 

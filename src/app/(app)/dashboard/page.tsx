@@ -1,3 +1,4 @@
+import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -64,7 +65,7 @@ function daysAgo(n: number): Date {
 export default async function DashboardPage() {
   const profile = await requireProfile();
   const canSeeMargin = profile.role === "admin" || profile.role === "dispatcher";
-  const loadsTable = canSeeMargin ? "loads_full" : "loads_sales_safe";
+  const loadsTable = canSeeMargin ? MANAGER_LOADS_TABLE : "loads_sales_safe";
   const supabase = await createClient();
 
   const since60 = daysAgo(60).toISOString();

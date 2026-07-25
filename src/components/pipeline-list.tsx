@@ -1,3 +1,4 @@
+import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import Link from "next/link";
 import { CalendarCheck2, Inbox, Mail, MapPin, Phone, User } from "lucide-react";
 import { VehicleThumb } from "@/components/vehicle-thumb";
@@ -46,7 +47,7 @@ export async function PipelineList({
   const canSeeMargin = profile.role === "admin" || profile.role === "dispatcher";
   // Both are views: base-table select("*") would hit the revoked margin
   // columns; loads_full carries them for managers, the safe view hides them.
-  const table = canSeeMargin ? "loads_full" : "loads_sales_safe";
+  const table = canSeeMargin ? MANAGER_LOADS_TABLE : "loads_sales_safe";
 
   const stageStatuses: LoadStatus[] =
     stage === "lead" ? LEAD_STATUSES : stage === "quote" ? QUOTE_STATUSES : ORDER_STATUSES;

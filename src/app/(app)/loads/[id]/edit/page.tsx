@@ -1,3 +1,4 @@
+import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
@@ -27,7 +28,7 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
   const supabase = await createClient();
 
   const { data: loadData } = await supabase
-    .from(canManageCarrier ? "loads_full" : "loads_sales_safe")
+    .from(canManageCarrier ? MANAGER_LOADS_TABLE : "loads_sales_safe")
     .select("*")
     .eq("id", id)
     .single();

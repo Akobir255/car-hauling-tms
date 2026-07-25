@@ -1,5 +1,6 @@
 "use server";
 
+import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -101,7 +102,7 @@ export async function sendBulk(
   // Views, not the base table: select("*") there would hit the revoked margin
   // columns, and sales must read through the safe view anyway.
   const { data: loadsData } = await supabase
-    .from(profile.role === "sales" ? "loads_sales_safe" : "loads_full")
+    .from(profile.role === "sales" ? "loads_sales_safe" : MANAGER_LOADS_TABLE)
     .select("*")
     .in("customer_id", customerIds)
     .order("created_at", { ascending: false });

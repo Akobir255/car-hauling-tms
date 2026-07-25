@@ -1,3 +1,4 @@
+import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
@@ -30,7 +31,7 @@ export default async function LoadsPage({
   const profile = await requireProfile();
   const supabase = await createClient();
   const canSeeMargin = profile.role === "admin" || profile.role === "dispatcher";
-  const table = canSeeMargin ? "loads_full" : "loads_sales_safe";
+  const table = canSeeMargin ? MANAGER_LOADS_TABLE : "loads_sales_safe";
 
   const statusFilter = LOAD_STATUSES.includes(statusParam as LoadStatus)
     ? (statusParam as LoadStatus)
