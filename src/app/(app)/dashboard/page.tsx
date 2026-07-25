@@ -1,4 +1,3 @@
-import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -65,7 +64,7 @@ function daysAgo(n: number): Date {
 export default async function DashboardPage() {
   const profile = await requireProfile();
   const canSeeMargin = profile.role === "admin" || profile.role === "dispatcher";
-  const loadsTable = canSeeMargin ? MANAGER_LOADS_TABLE : "loads_sales_safe";
+  const loadsTable = canSeeMargin ? "loads_full" : "loads_sales_safe";
   const supabase = await createClient();
 
   const since60 = daysAgo(60).toISOString();
@@ -100,13 +99,19 @@ export default async function DashboardPage() {
       .in("status", ACTIVE_STATUSES)
       .order("follow_up_at", { ascending: true })
       .limit(6),
-    supabase
-      .from(loadsTable)
-      .select("*")
-      .is("carrier_id", null)
-      .in("status", ACTIVE_STATUSES)
-      .order("created_at", { ascending: true })
-      .limit(6),
+    // carrier_id is revoked from `authenticated` by migration 0013 and is not
+    // in loads_sales_safe, so this filter is only valid for managers reading
+    // loads_full. For sales it would return 42703, and the ignored error would
+    // silently render an empty "Needs a carrier" card forever.
+    canSeeMargin
+      ? supabase
+          .from(loadsTable)
+          .select("*")
+          .is("carrier_id", null)
+          .in("status", ACTIVE_STATUSES)
+          .order("created_at", { ascending: true })
+          .limit(6)
+      : Promise.resolve({ data: [] as Load[] }),
     supabase
       .from("carriers")
       .select("*")
@@ -362,27 +367,29 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center gap-2">
-              <Truck className="size-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-              <CardTitle>Needs a carrier</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1.5">
-              {unassigned.map((l) => (
-                <Link
-                  key={l.id}
-                  href={`/loads/${l.id}`}
-                  className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60"
-                >
-                  <span className="font-medium tabular-nums">{l.load_number}</span>
-                  <StatusBadge status={l.status} />
-                </Link>
-              ))}
-              {unassigned.length === 0 && (
-                <p className="text-sm text-muted-foreground">Nothing waiting on a carrier.</p>
-              )}
-            </CardContent>
-          </Card>
+          {canSeeMargin && (
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <Truck className="size-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                <CardTitle>Needs a carrier</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1.5">
+                {unassigned.map((l) => (
+                  <Link
+                    key={l.id}
+                    href={`/loads/${l.id}`}
+                    className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60"
+                  >
+                    <span className="font-medium tabular-nums">{l.load_number}</span>
+                    <StatusBadge status={l.status} />
+                  </Link>
+                ))}
+                {unassigned.length === 0 && (
+                  <p className="text-sm text-muted-foreground">Nothing waiting on a carrier.</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader className="flex flex-row items-center gap-2">
