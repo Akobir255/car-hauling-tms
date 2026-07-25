@@ -134,19 +134,30 @@ create policy "loads_delete_admin"
 -- 4. Column-scoped grants: the five margin columns vanish for the
 --    user client (select, insert, and update alike)
 -- ============================================================
+-- SELECT hides only the MONEY columns — sales legitimately see which carrier
+-- hauls their load (dashboard/list filters use carrier_id), just never what
+-- it pays. Writes are blocked on all five so assignment can't be tampered
+-- with either; managers write them through the service role.
 do $$
-declare cols text;
+declare sel_cols text; write_cols text;
 begin
   select string_agg(quote_ident(column_name), ', ')
-    into cols
+    into sel_cols
+  from information_schema.columns
+  where table_schema = 'public' and table_name = 'loads'
+    and column_name not in ('carrier_pay', 'carrier_received', 'cod_to_carrier');
+
+  select string_agg(quote_ident(column_name), ', ')
+    into write_cols
   from information_schema.columns
   where table_schema = 'public' and table_name = 'loads'
     and column_name not in
       ('carrier_pay', 'carrier_received', 'cod_to_carrier', 'carrier_id', 'dispatcher_id');
+
   execute 'revoke select, insert, update on table public.loads from anon, authenticated';
   execute format(
     'grant select (%s), insert (%s), update (%s) on table public.loads to authenticated',
-    cols, cols, cols
+    sel_cols, write_cols, write_cols
   );
 end $$;
 
@@ -160,7 +171,7 @@ drop view if exists loads_sales_safe;
 create view loads_sales_safe
   with (security_invoker = on) as
 select
-  id, load_number, customer_id, status,
+  id, load_number, customer_id, carrier_id, dispatcher_id, status,
   pickup_address, pickup_city, pickup_state, pickup_zip,
   pickup_contact_name, pickup_contact_phone, pickup_company, pickup_contact_cell,
   pickup_ready_date,
