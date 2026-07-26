@@ -1,6 +1,6 @@
 import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import Link from "next/link";
-import { CalendarCheck2, Inbox, Mail, MapPin, Phone, User } from "lucide-react";
+import { CalendarCheck2, Inbox, Mail, MapPin, Phone, Plus, User } from "lucide-react";
 import { VehiclePhoto } from "@/components/vehicle-photo";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
@@ -104,17 +104,28 @@ export async function PipelineList({
   const loadIds = loads.map((l) => l.id);
   const customerIds = [...new Set(loads.map((l) => l.customer_id).filter(Boolean))];
 
-  const [{ data: customers }, { data: reps }, { data: vehicles }] = await Promise.all([
-    customerIds.length
-      ? supabase.from("customers").select("id, contact_name, phone, email").in("id", customerIds)
-      : Promise.resolve({
-          data: [] as { id: string; contact_name: string; phone: string | null; email: string | null }[],
-        }),
-    supabase.from("profiles").select("id, full_name, email").order("full_name"),
-    loadIds.length
-      ? supabase.from("load_vehicles").select("*").in("load_id", loadIds)
-      : Promise.resolve({ data: [] as LoadVehicle[] }),
-  ]);
+  const [{ data: customers }, { data: reps }, { data: vehicles }, { data: unreadRows }] =
+    await Promise.all([
+      customerIds.length
+        ? supabase.from("customers").select("id, contact_name, phone, email").in("id", customerIds)
+        : Promise.resolve({
+            data: [] as { id: string; contact_name: string; phone: string | null; email: string | null }[],
+          }),
+      supabase.from("profiles").select("id, full_name, email").order("full_name"),
+      loadIds.length
+        ? supabase.from("load_vehicles").select("*").in("load_id", loadIds)
+        : Promise.resolve({ data: [] as LoadVehicle[] }),
+      // Unread inbound per customer — msgplane's per-row message badge. Only
+      // unread rows are fetched, so this stays tiny.
+      customerIds.length
+        ? supabase
+            .from("messages")
+            .select("customer_id")
+            .eq("direction", "inbound")
+            .is("read_at", null)
+            .in("customer_id", customerIds)
+        : Promise.resolve({ data: [] as { customer_id: string | null }[] }),
+    ]);
 
   const customerById = new Map((customers ?? []).map((c) => [c.id, c]));
   const repById = new Map(
@@ -125,6 +136,11 @@ export async function PipelineList({
     const list = vehiclesByLoad.get(v.load_id) ?? [];
     list.push(v);
     vehiclesByLoad.set(v.load_id, list);
+  }
+  const unreadByCustomer = new Map<string, number>();
+  for (const row of unreadRows ?? []) {
+    if (!row.customer_id) continue;
+    unreadByCustomer.set(row.customer_id, (unreadByCustomer.get(row.customer_id) ?? 0) + 1);
   }
 
   const basePath = stage === "lead" ? "/leads" : stage === "quote" ? "/quotes" : "/orders";
@@ -265,9 +281,27 @@ export async function PipelineList({
                     <p className="text-[13px] tabular-nums text-muted-foreground">{created.time}</p>
                   </td>
                   <td className="px-3 py-4">
-                    <span className="inline-flex min-w-6 justify-center rounded border px-1.5 py-0.5 text-[13px] tabular-nums text-muted-foreground">
-                      {load.notes || load.shipper_info ? 1 : 0}
-                    </span>
+                    {/* Stacked counters, msgplane-style: notes, then unread
+                        inbound messages (red when attention is needed). */}
+                    <div className="flex flex-col items-start gap-1">
+                      <span
+                        title="Notes on this record"
+                        className="inline-flex min-w-6 justify-center rounded border px-1.5 py-0.5 text-[13px] tabular-nums text-muted-foreground"
+                      >
+                        {load.notes || load.shipper_info ? 1 : 0}
+                      </span>
+                      <span
+                        title="Unread messages from this customer"
+                        className={cn(
+                          "inline-flex min-w-6 justify-center rounded border px-1.5 py-0.5 text-[13px] tabular-nums",
+                          (unreadByCustomer.get(load.customer_id) ?? 0) > 0
+                            ? "border-red-300 bg-red-50 font-semibold text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
+                            : "text-muted-foreground"
+                        )}
+                      >
+                        {unreadByCustomer.get(load.customer_id) ?? 0}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-3 py-4">
                     <span className="flex items-center gap-1.5 text-foreground">
@@ -392,6 +426,17 @@ export async function PipelineList({
       </div>
 
       <BulkActionBar reps={repsForBar} canReassign={canSeeMargin} />
+
+      {/* msgplane's floating quick-create — always reachable, even mid-scroll.
+          z-30 keeps it under the bulk bar (z-40) when a selection is active. */}
+      <Link
+        href="/loads/new"
+        aria-label={`New ${stage}`}
+        title={`New ${stage}`}
+        className="fixed bottom-6 right-6 z-30 flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105"
+      >
+        <Plus className="size-6" aria-hidden="true" />
+      </Link>
     </div>
     </SelectionProvider>
   );

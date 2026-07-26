@@ -91,7 +91,12 @@ sets Dispatched, in `updateLoad`; picked-up/delivered/cancelled-after-
 dispatch mirror what the CARRIER reports and will be driven by the CD/SD
 integration — until then orders rest at Dispatched, which is the intended
 msgplane behavior; un-dispatch = "Unpost" on a dispatched order, dispatch
-desk only, and it releases the carrier so re-assignment re-dispatches).
+desk only, and it releases the carrier so re-assignment re-dispatches) ·
+pipeline-list msgplane parity (per-row unread-message badges — red when >0,
+notes counter, floating "+" quick-create) · follow-up quick-note buttons
+("Left message" / "Spoke to someone") on the edit page's follow-up section.
+Parity items deliberately still open: row quick-view popup, vehicle-photo
+override editor, Loadboard/Campaign selects on the edit header.
 
 ## Integrations
 

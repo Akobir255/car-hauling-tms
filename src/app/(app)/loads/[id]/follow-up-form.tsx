@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,7 @@ export function FollowUpForm({
 }) {
   const [state, formAction, pending] = useActionState(action, initialState);
   const [clearing, startClearing] = useTransition();
+  const [note, setNote] = useState("");
 
   useEffect(() => {
     if (state.error) toast.error(state.error);
@@ -82,7 +83,27 @@ export function FollowUpForm({
         </div>
         <div className="flex-1 space-y-1">
           <FieldLabel>Note (optional)</FieldLabel>
-          <Input name="follow_up_note" placeholder="Left message / spoke to someone..." />
+          <Input
+            name="follow_up_note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Left message / spoke to someone..."
+          />
+          {/* msgplane's one-tap call outcomes — they prefill the note. */}
+          <div className="flex gap-1.5 pt-1">
+            {["Left message", "Spoke to someone"].map((quick) => (
+              <Button
+                key={quick}
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs text-muted-foreground"
+                onClick={() => setNote(quick)}
+              >
+                {quick}
+              </Button>
+            ))}
+          </div>
         </div>
         <Button type="submit" size="sm" disabled={pending}>
           {pending ? "Saving..." : "Set follow-up"}
