@@ -12,6 +12,11 @@ export type TemplateContext = {
   delivery_city: string;
   quote_price: string;
   pickup_date: string;
+  // The sending rep's name and the latest load's first vehicle — the two
+  // variables the msgplane template library leans on ("Hi {{agent}} with
+  // US Star Trucking…", "We can ship your {{vehicle}} for {{quote_price}}").
+  agent: string;
+  vehicle: string;
 };
 
 export const TEMPLATE_VARIABLES: (keyof TemplateContext)[] = [
@@ -24,9 +29,15 @@ export const TEMPLATE_VARIABLES: (keyof TemplateContext)[] = [
   "delivery_city",
   "quote_price",
   "pickup_date",
+  "agent",
+  "vehicle",
 ];
 
-export function buildContext(customer: Customer, load?: Load | null): TemplateContext {
+export function buildContext(
+  customer: Customer,
+  load?: Load | null,
+  extras?: { agent?: string; vehicle?: string }
+): TemplateContext {
   const name = customer.contact_name || "";
   const route =
     load && (load.pickup_city || load.delivery_city)
@@ -42,6 +53,8 @@ export function buildContext(customer: Customer, load?: Load | null): TemplateCo
     delivery_city: load?.delivery_city ?? "",
     quote_price: load?.customer_rate != null ? `$${load.customer_rate}` : "",
     pickup_date: load?.pickup_ready_date ?? "",
+    agent: extras?.agent ?? "",
+    vehicle: extras?.vehicle ?? "",
   };
 }
 

@@ -99,12 +99,13 @@ type Recipient = {
 async function resolveRecipients(opts: {
   supabase: Awaited<ReturnType<typeof createClient>>;
   role: string;
+  agent: string;
   customerIds: string[];
   isEmail: boolean;
   body: string;
   subject: string;
 }): Promise<{ recipients: Recipient[]; skipped: number } | { error: string }> {
-  const { supabase, role, customerIds, isEmail, body, subject } = opts;
+  const { supabase, role, agent, customerIds, isEmail, body, subject } = opts;
 
   const { data: customersData, error: customersError } = await supabase
     .from("customers")
@@ -128,6 +129,22 @@ async function resolveRecipients(opts: {
     }
   }
 
+  // First vehicle of each latest load, for the {{vehicle}} variable.
+  const latestLoadIds = [...latestLoadByCustomer.values()].map((l) => l.id);
+  const { data: vehicleRows } = latestLoadIds.length
+    ? await supabase
+        .from("load_vehicles")
+        .select("load_id, year, make, model")
+        .in("load_id", latestLoadIds)
+        .order("created_at")
+    : { data: [] as { load_id: string; year: number | null; make: string | null; model: string | null }[] };
+  const vehicleByLoad = new Map<string, string>();
+  for (const v of vehicleRows ?? []) {
+    if (!vehicleByLoad.has(v.load_id)) {
+      vehicleByLoad.set(v.load_id, [v.year, v.make, v.model].filter(Boolean).join(" "));
+    }
+  }
+
   let skipped = customerIds.length - customers.length;
   const recipients: Recipient[] = [];
   for (const customer of customers) {
@@ -146,7 +163,10 @@ async function resolveRecipients(opts: {
       continue;
     }
     const load = latestLoadByCustomer.get(customer.id) ?? null;
-    const context = buildContext(customer, load);
+    const context = buildContext(customer, load, {
+      agent,
+      vehicle: load ? (vehicleByLoad.get(load.id) ?? "") : "",
+    });
     recipients.push({
       customerId: customer.id,
       loadId: load?.id ?? null,
@@ -211,6 +231,7 @@ export async function sendBulk(
   const resolved = await resolveRecipients({
     supabase,
     role: profile.role,
+    agent: profile.full_name || profile.email || "",
     customerIds,
     isEmail: true,
     body,
@@ -304,6 +325,7 @@ export async function sendSmsBulkChunk(input: {
   const resolved = await resolveRecipients({
     supabase,
     role: profile.role,
+    agent: profile.full_name || profile.email || "",
     customerIds: parsed.data.customerIds,
     isEmail: false,
     body: parsed.data.body,

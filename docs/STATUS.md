@@ -95,6 +95,12 @@ desk only, and it releases the carrier so re-assignment re-dispatches) ·
 pipeline-list msgplane parity (per-row unread-message badges — red when >0,
 notes counter, floating "+" quick-create) · follow-up quick-note buttons
 ("Left message" / "Spoke to someone") on the edit page's follow-up section.
+· the msgplane SMS template library (all 34 canned texts imported into
+message_templates via scripts/seed-msgplane-templates.mjs — idempotent;
+they use the new {{agent}} and {{vehicle}} variables, which render from
+the sending rep's name and the latest load's first vehicle; msgplane's
+EMAIL templates were not reachable from the sales role — needs an admin
+login or a forwarded sample to port)
 · contract auto-send (converting a quote to an order automatically EMAILS
 the customer their signing link — msgplane's generate_and_send; failure is
 advisory, logged to history + the order's message timeline, never blocks
