@@ -162,7 +162,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
     "No vehicles";
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
+    <div className="mx-auto max-w-7xl space-y-5">
       {/* Record header, laid out like the system this replaces: the ID/Status/
           Campaign/Loadboard facts on the left, the lifecycle actions as a row
           of buttons on the right. */}
@@ -206,9 +206,23 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
         </p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
-        {/* Main content */}
-        <div className="space-y-5 lg:col-span-2">
+      {/* Single full-width column, msgplane-style: E-Sign directly under the
+          header, then the banded sections stacked. */}
+      <div className="space-y-5">
+          <SectionBand title="E-Sign">
+            <EsignPanel
+              loadId={load.id}
+              token={load.contract_token}
+              signedAt={load.date_signed}
+              sentAt={load.contract_sent_at}
+              canManage={canManageCarrier}
+              signedName={load.contract_signed_name}
+              signedIp={load.contract_signed_ip}
+              signedEmail={load.contract_signed_email}
+              events={contractEvents ?? []}
+            />
+          </SectionBand>
+
           <SectionBand title="Order Information">
             <div className="grid gap-8 sm:grid-cols-2">
               <div className="space-y-4">
@@ -425,48 +439,24 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               )}
             </div>
           </SectionBand>
-        </div>
-
-        {/* Sticky sidebar: E-Sign + the secondary menu. The primary lifecycle
-            actions moved up into the record header. */}
-        <div className="space-y-5 lg:sticky lg:top-16 lg:self-start">
-          <SectionBand title="E-Sign">
-            <EsignPanel
-              loadId={load.id}
-              token={load.contract_token}
-              signedAt={load.date_signed}
-              sentAt={load.contract_sent_at}
-              canManage={canManageCarrier}
-              signedName={load.contract_signed_name}
-              signedIp={load.contract_signed_ip}
-              signedEmail={load.contract_signed_email}
-              events={contractEvents ?? []}
-            />
-          </SectionBand>
-
-          <SectionBand title="More">
-            <div className="flex items-center gap-2">
-              <div className="flex-1">
-                <OrderMoreMenu
-                  loadId={load.id}
-                  customerId={load.customer_id}
-                  blacklisted={customer?.blacklisted ?? false}
-                  canManage={canManageCarrier}
-                />
-              </div>
-              {profile.role === "admin" && (
-                <DeleteButton
-                  onDelete={boundDelete}
-                  confirmMessage={`Delete ${load.load_number}? This cannot be undone.`}
-                />
-              )}
-            </div>
-          </SectionBand>
-        </div>
       </div>
 
-      {/* Record footer, as in the old system: back to the list on the right. */}
-      <div className="flex justify-end border-t pt-3">
+      {/* Record footer, as in the old system: more options on the left,
+          back to the list on the right. */}
+      <div className="flex items-center gap-2 border-t pt-3">
+        <OrderMoreMenu
+          loadId={load.id}
+          customerId={load.customer_id}
+          blacklisted={customer?.blacklisted ?? false}
+          canManage={canManageCarrier}
+        />
+        {profile.role === "admin" && (
+          <DeleteButton
+            onDelete={boundDelete}
+            confirmMessage={`Delete ${load.load_number}? This cannot be undone.`}
+          />
+        )}
+        <span className="ml-auto" />
         <Button variant="secondary" size="sm" render={<Link href={backPath} />}>
           Back to list
         </Button>

@@ -5,6 +5,8 @@ import type { Carrier } from "@/types/database";
 import { CarrierForm } from "../carrier-form";
 import { updateCarrier, deleteCarrier } from "../actions";
 import { DeleteButton } from "@/components/delete-button";
+import { SectionBand } from "@/components/section-band";
+import { CarrierDocs, type CarrierDoc } from "../carrier-docs";
 
 export default async function EditCarrierPage({
   params,
@@ -14,7 +16,15 @@ export default async function EditCarrierPage({
   const { id } = await params;
   const profile = await requireProfile();
   const supabase = await createClient();
-  const { data } = await supabase.from("carriers").select("*").eq("id", id).single();
+  const [{ data }, { data: docRows }] = await Promise.all([
+    supabase.from("carriers").select("*").eq("id", id).single(),
+    supabase
+      .from("documents")
+      .select("id, doc_type, file_name, expires_at, created_at")
+      .eq("entity_type", "carrier")
+      .eq("entity_id", id)
+      .order("created_at", { ascending: false }),
+  ]);
 
   if (!data) notFound();
   const carrier = data as Carrier;
@@ -33,6 +43,14 @@ export default async function EditCarrierPage({
           />
         )}
       </div>
+      <SectionBand title="Documents — COI, W-9, authority">
+        <CarrierDocs
+          carrierId={carrier.id}
+          docs={(docRows ?? []) as CarrierDoc[]}
+          canManage={canManage}
+        />
+      </SectionBand>
+
       {canManage ? (
         <CarrierForm action={boundUpdate} carrier={carrier} />
       ) : (

@@ -1,133 +1,43 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Search, Truck, User } from "lucide-react";
-import { cn } from "@/lib/utils";
-import type { SearchHit } from "@/app/api/search/route";
+import { Search } from "lucide-react";
 
-const ICON = { customer: User, carrier: Building2, load: Truck } as const;
-
-// Sidebar omnibox: find a shipper by name/email/phone, a carrier company, or
-// an order by its number. Debounced; results come from /api/search, which is
-// RLS-scoped to the signed-in rep.
+// Top-bar search, msgplane-style: nothing happens while typing — press Enter
+// (or click the icon) and land on /search, which lists every matching order,
+// shipper and carrier.
 export function GlobalSearch({ onNavigate }: { onNavigate?: () => void }) {
   const router = useRouter();
   const [term, setTerm] = useState("");
-  const [hits, setHits] = useState<SearchHit[]>([]);
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const boxRef = useRef<HTMLDivElement>(null);
 
-  // All state updates are deferred into the debounce timer / promise
-  // callbacks — never called straight from the effect body, which the repo's
-  // react-hooks/set-state-in-effect rule (a build error) forbids.
-  useEffect(() => {
+  const go = () => {
     const q = term.trim();
-    const controller = new AbortController();
-    if (q.length < 2) {
-      const clear = setTimeout(() => {
-        setHits([]);
-        setBusy(false);
-      }, 0);
-      return () => clearTimeout(clear);
-    }
-    const timer = setTimeout(async () => {
-      setBusy(true);
-      try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
-          signal: controller.signal,
-        });
-        if (!res.ok) throw new Error(String(res.status));
-        const data = (await res.json()) as { hits: SearchHit[] };
-        setHits(data.hits ?? []);
-        setOpen(true);
-      } catch (err) {
-        if ((err as Error).name !== "AbortError") setHits([]);
-      } finally {
-        setBusy(false);
-      }
-    }, 250);
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, [term]);
-
-  // Click-away closes the result list.
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
-
-  const go = (hit: SearchHit) => {
-    setOpen(false);
-    setTerm("");
+    if (q.length < 2) return;
     onNavigate?.();
-    router.push(hit.href);
+    router.push(`/search?q=${encodeURIComponent(q)}`);
   };
 
   return (
-    <div ref={boxRef} className="relative">
-      <div className="relative">
-        <Search
-          className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-blue-200"
-          aria-hidden="true"
-        />
-        <input
-          value={term}
-          onChange={(e) => setTerm(e.target.value)}
-          onFocus={() => hits.length > 0 && setOpen(true)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setOpen(false);
-            if (e.key === "Enter" && hits.length > 0) go(hits[0]);
-          }}
-          placeholder="Search name, phone, email, order…"
-          aria-label="Global search"
-          className="w-full rounded-md bg-white/15 py-1.5 pl-8 pr-2 text-sm text-white placeholder:text-blue-200 focus:bg-white/25 focus:outline-none focus:ring-2 focus:ring-white/40"
-        />
-      </div>
-
-      {open && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-80 overflow-y-auto rounded-md border bg-card py-1 shadow-xl">
-          {hits.length === 0 && (
-            <p className="px-3 py-2 text-xs text-muted-foreground">
-              {busy ? "Searching…" : "Nothing found."}
-            </p>
-          )}
-          {hits.map((hit) => {
-            const Icon = ICON[hit.kind];
-            return (
-              <button
-                key={`${hit.kind}-${hit.id}`}
-                type="button"
-                onClick={() => go(hit)}
-                className={cn(
-                  "flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors",
-                  "hover:bg-muted"
-                )}
-              >
-                <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{hit.title}</span>
-                  {hit.detail && (
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {hit.detail}
-                    </span>
-                  )}
-                </span>
-                <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {hit.kind}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+    <div className="relative">
+      <button
+        type="button"
+        aria-label="Search"
+        onClick={go}
+        className="absolute left-2.5 top-1/2 -translate-y-1/2 text-blue-200 hover:text-white"
+      >
+        <Search className="size-4" aria-hidden="true" />
+      </button>
+      <input
+        value={term}
+        onChange={(e) => setTerm(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") go();
+        }}
+        placeholder="Search name, phone, email, order… ↵"
+        aria-label="Global search"
+        className="w-full rounded-md bg-white/15 py-1.5 pl-8 pr-2 text-sm text-white placeholder:text-blue-200 focus:bg-white/25 focus:outline-none focus:ring-2 focus:ring-white/40"
+      />
     </div>
   );
 }

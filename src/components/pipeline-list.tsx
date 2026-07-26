@@ -3,6 +3,7 @@ import Link from "next/link";
 import { CalendarCheck2, Inbox, Mail, MapPin, Phone, Plus, User } from "lucide-react";
 import { VehiclePhoto } from "@/components/vehicle-photo";
 import { RowMessageButton } from "@/components/messaging/row-message-buttons";
+import { NotesQuickButton } from "@/components/messaging/notes-quick";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -122,8 +123,13 @@ export async function PipelineList({
   const loadIds = loads.map((l) => l.id);
   const customerIds = [...new Set(loads.map((l) => l.customer_id).filter(Boolean))];
 
-  const [{ data: customers }, { data: reps }, { data: vehicles }, { data: unreadRows }] =
-    await Promise.all([
+  const [
+    { data: customers },
+    { data: reps },
+    { data: vehicles },
+    { data: unreadRows },
+    { data: noteRows },
+  ] = await Promise.all([
       customerIds.length
         ? supabase.from("customers").select("id, contact_name, phone, email").in("id", customerIds)
         : Promise.resolve({
@@ -143,6 +149,9 @@ export async function PipelineList({
             .is("read_at", null)
             .in("customer_id", customerIds)
         : Promise.resolve({ data: [] as { customer_id: string | null }[] }),
+      loadIds.length
+        ? supabase.from("load_notes").select("load_id").in("load_id", loadIds)
+        : Promise.resolve({ data: [] as { load_id: string }[] }),
     ]);
 
   const customerById = new Map((customers ?? []).map((c) => [c.id, c]));
@@ -159,6 +168,10 @@ export async function PipelineList({
   for (const row of unreadRows ?? []) {
     if (!row.customer_id) continue;
     unreadByCustomer.set(row.customer_id, (unreadByCustomer.get(row.customer_id) ?? 0) + 1);
+  }
+  const notesByLoad = new Map<string, number>();
+  for (const row of noteRows ?? []) {
+    notesByLoad.set(row.load_id, (notesByLoad.get(row.load_id) ?? 0) + 1);
   }
 
   const basePath = stage === "lead" ? "/leads" : stage === "quote" ? "/quotes" : "/orders";
@@ -299,15 +312,15 @@ export async function PipelineList({
                     <p className="text-[13px] tabular-nums text-muted-foreground">{created.time}</p>
                   </td>
                   <td className="px-3 py-4">
-                    {/* Stacked counters, msgplane-style: notes, then unread
-                        inbound messages (red when attention is needed). */}
+                    {/* Stacked counters, msgplane-style: notes (click to read
+                        or add without opening the order), then unread inbound
+                        messages (red when attention is needed). */}
                     <div className="flex flex-col items-start gap-1">
-                      <span
-                        title="Notes on this record"
-                        className="inline-flex min-w-6 justify-center rounded border px-1.5 py-0.5 text-[13px] tabular-nums text-muted-foreground"
-                      >
-                        {load.notes || load.shipper_info ? 1 : 0}
-                      </span>
+                      <NotesQuickButton
+                        loadId={load.id}
+                        loadNumber={load.load_number}
+                        count={notesByLoad.get(load.id) ?? 0}
+                      />
                       <span
                         title="Unread messages from this customer"
                         className={cn(

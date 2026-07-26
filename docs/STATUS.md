@@ -152,12 +152,20 @@ the right column, "Back to list" in the footer.
 
 ## Global search
 
-Sidebar omnibox → `/api/search`, covering shippers (name/company/email/phone),
-carriers (company/contact/city/phone) and orders (load number). RLS-scoped:
-sales only match their own records, and loads read through the role view.
+Top-bar box, **Enter to search** (no search-as-you-type — deliberate, per the
+owner), landing on `/search`: the headline section is ORDERS — matching a
+shipper's name/phone/email lists every order that belongs to them — then
+shippers and carriers. RLS-scoped; loads read through the role view.
 **Careful with PostgREST `or=(...)`**: `,` `.` `(` `)` are grammar, so every
 pattern is double-quoted via `likePattern()` — a phone typed as
-"(865) 328-7418" silently returned nothing before that.
+"(865) 328-7418" silently returned nothing before that. (/api/search still
+exists and uses the same escaping.)
+
+Also: carrier records hold their documents (COI/W-9/MC authority, private
+bucket + signed URLs; COI expiry mirrors onto carriers.coi_expiry_date and
+shows an EXPIRED flag), and the notes counter on any pipeline row opens a
+quick-notes sheet — read and add notes with attachments without opening the
+order, msgplane-style.
 
 ## Internal notes + attachments
 

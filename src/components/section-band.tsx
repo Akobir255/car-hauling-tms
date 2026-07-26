@@ -22,11 +22,11 @@ export function SectionBand({
     <section id={id} className={cn("overflow-hidden rounded-lg border bg-card shadow-sm", className)}>
       {/* Solid title bar — each section announces itself, msgplane-style, so
           long forms never read as one undivided sheet. */}
-      <div className="flex items-center justify-between gap-3 bg-primary px-5 py-2.5 text-primary-foreground">
-        <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+      <div className="flex items-center justify-between gap-3 bg-primary px-5 py-3 text-primary-foreground">
+        <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
         {action}
       </div>
-      <div className={cn("p-5", bodyClassName)}>{children}</div>
+      <div className={cn("p-6", bodyClassName)}>{children}</div>
     </section>
   );
 }
