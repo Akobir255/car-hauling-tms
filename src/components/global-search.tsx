@@ -75,7 +75,7 @@ export function GlobalSearch({ onNavigate }: { onNavigate?: () => void }) {
     <div ref={boxRef} className="relative">
       <div className="relative">
         <Search
-          className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-zinc-500"
+          className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-blue-200"
           aria-hidden="true"
         />
         <input
@@ -88,14 +88,14 @@ export function GlobalSearch({ onNavigate }: { onNavigate?: () => void }) {
           }}
           placeholder="Search name, phone, email, order…"
           aria-label="Global search"
-          className="w-full rounded-md bg-zinc-900 py-2 pl-8 pr-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
+          className="w-full rounded-md bg-white/15 py-1.5 pl-8 pr-2 text-sm text-white placeholder:text-blue-200 focus:bg-white/25 focus:outline-none focus:ring-2 focus:ring-white/40"
         />
       </div>
 
       {open && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-80 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-900 py-1 shadow-xl">
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-80 overflow-y-auto rounded-md border bg-card py-1 shadow-xl">
           {hits.length === 0 && (
-            <p className="px-3 py-2 text-xs text-zinc-500">
+            <p className="px-3 py-2 text-xs text-muted-foreground">
               {busy ? "Searching…" : "Nothing found."}
             </p>
           )}
@@ -108,19 +108,19 @@ export function GlobalSearch({ onNavigate }: { onNavigate?: () => void }) {
                 onClick={() => go(hit)}
                 className={cn(
                   "flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors",
-                  "hover:bg-zinc-800"
+                  "hover:bg-muted"
                 )}
               >
-                <Icon className="mt-0.5 size-4 shrink-0 text-zinc-500" aria-hidden="true" />
+                <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-zinc-100">
-                    {hit.title}
-                  </span>
+                  <span className="block truncate text-sm font-medium">{hit.title}</span>
                   {hit.detail && (
-                    <span className="block truncate text-xs text-zinc-500">{hit.detail}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {hit.detail}
+                    </span>
                   )}
                 </span>
-                <span className="shrink-0 text-[10px] uppercase tracking-wide text-zinc-600">
+                <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
                   {hit.kind}
                 </span>
               </button>

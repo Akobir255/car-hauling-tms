@@ -1,6 +1,6 @@
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { AppSidebar } from "@/components/app-sidebar";
+import { AppTopBar } from "@/components/app-topbar";
 import { signOut } from "./actions";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -15,8 +15,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .is("read_at", null);
 
   return (
-    <div className="flex min-h-screen flex-col lg:flex-row">
-      <AppSidebar
+    <div className="flex min-h-screen flex-col">
+      <AppTopBar
         role={profile.role}
         unreadMessages={unreadMessages ?? 0}
         userName={profile.full_name || profile.email}

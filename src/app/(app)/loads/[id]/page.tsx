@@ -163,37 +163,47 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
-      {/* Hero: the facts that matter at a glance. */}
-      <div className="rounded-lg border bg-card p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-3">
-              <Link href={backPath} className="text-2xl font-bold tabular-nums hover:underline">
+      {/* Record header, laid out like the system this replaces: the ID/Status/
+          Campaign/Loadboard facts on the left, the lifecycle actions as a row
+          of buttons on the right. */}
+      <div className="rounded-lg border bg-card px-4 py-3 shadow-sm">
+        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
+          <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
+            <Field label="ID">
+              <Link
+                href={backPath}
+                className="text-base font-bold tabular-nums text-primary hover:underline"
+              >
                 {load.load_number}
               </Link>
-              <StatusBadge status={load.status} size="lg" />
-              {customer?.blacklisted && (
-                <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800 ring-1 ring-inset ring-red-600/20 dark:bg-red-400/15 dark:text-red-300">
-                  Blacklisted
-                </span>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {origin} <span className="mx-1">→</span> {destination} · {vehicleSummary}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {customer?.contact_name ?? "—"}
-              {load.campaign ? ` · ${load.campaign}` : ""}
-              {loadboard !== "—" ? ` · Posted ${loadboard}` : ""}
-            </p>
+            </Field>
+            <Field label="Status">
+              <span className="flex items-center gap-2">
+                <StatusBadge status={load.status} />
+                {customer?.blacklisted && (
+                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-800 ring-1 ring-inset ring-red-600/20 dark:bg-red-400/15 dark:text-red-300">
+                    Blacklisted
+                  </span>
+                )}
+              </span>
+            </Field>
+            <Field label="Campaign">{load.campaign || "—"}</Field>
+            <Field label="Loadboard">{loadboard}</Field>
+            <Field label="Tariff">
+              <span className="font-bold tabular-nums">{formatCurrency(load.customer_rate)}</span>
+            </Field>
           </div>
-          <div className="text-right">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              Tariff
-            </p>
-            <p className="text-2xl font-bold tabular-nums">{formatCurrency(load.customer_rate)}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <OrderActionBar loadId={load.id} actions={actionsFor(load.status, profile.role)} />
+            <Button size="sm" variant="secondary" render={<Link href={`/loads/${load.id}/edit`} />}>
+              Edit
+            </Button>
           </div>
         </div>
+        <p className="mt-2 border-t pt-2 text-sm text-muted-foreground">
+          {origin} <span className="mx-1">→</span> {destination} · {vehicleSummary}
+          {customer?.contact_name ? ` · ${customer.contact_name}` : ""}
+        </p>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
@@ -417,35 +427,9 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
           </SectionBand>
         </div>
 
-        {/* Sticky action sidebar */}
-        <div className="space-y-5 lg:sticky lg:top-4 lg:self-start">
-          <SectionBand title="Actions">
-            <div className="space-y-3">
-              <OrderActionBar loadId={load.id} actions={actionsFor(load.status, profile.role)} stack />
-              <div className="border-t pt-3">
-                <Button variant="outline" className="w-full" render={<Link href={`/loads/${load.id}/edit`} />}>
-                  Edit
-                </Button>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex-1">
-                  <OrderMoreMenu
-                    loadId={load.id}
-                    customerId={load.customer_id}
-                    blacklisted={customer?.blacklisted ?? false}
-                    canManage={canManageCarrier}
-                  />
-                </div>
-                {profile.role === "admin" && (
-                  <DeleteButton
-                    onDelete={boundDelete}
-                    confirmMessage={`Delete ${load.load_number}? This cannot be undone.`}
-                  />
-                )}
-              </div>
-            </div>
-          </SectionBand>
-
+        {/* Sticky sidebar: E-Sign + the secondary menu. The primary lifecycle
+            actions moved up into the record header. */}
+        <div className="space-y-5 lg:sticky lg:top-16 lg:self-start">
           <SectionBand title="E-Sign">
             <EsignPanel
               loadId={load.id}
@@ -459,7 +443,33 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               events={contractEvents ?? []}
             />
           </SectionBand>
+
+          <SectionBand title="More">
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <OrderMoreMenu
+                  loadId={load.id}
+                  customerId={load.customer_id}
+                  blacklisted={customer?.blacklisted ?? false}
+                  canManage={canManageCarrier}
+                />
+              </div>
+              {profile.role === "admin" && (
+                <DeleteButton
+                  onDelete={boundDelete}
+                  confirmMessage={`Delete ${load.load_number}? This cannot be undone.`}
+                />
+              )}
+            </div>
+          </SectionBand>
         </div>
+      </div>
+
+      {/* Record footer, as in the old system: back to the list on the right. */}
+      <div className="flex justify-end border-t pt-3">
+        <Button variant="secondary" size="sm" render={<Link href={backPath} />}>
+          Back to list
+        </Button>
       </div>
     </div>
   );

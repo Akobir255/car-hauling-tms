@@ -141,6 +141,15 @@ with `node scripts/import-carriers.mjs <tsv>` — idempotent on name+phone.
 Phone search works regardless of formatting because `phone_digits` on
 customers and carriers is a **generated** column (migration 0017).
 
+## App chrome
+
+Horizontal blue top bar (`app-topbar.tsx`) in the style of the system this
+replaces: modules left, **global search top-right**, refresh, account menu;
+narrow screens get a drawer. The old dark left sidebar is gone. Order detail
+follows the same pattern — ID / Status / Campaign / Loadboard / Tariff on one
+header row with the lifecycle buttons on the right, E-Sign and the ⋯ menu in
+the right column, "Back to list" in the footer.
+
 ## Global search
 
 Sidebar omnibox → `/api/search`, covering shippers (name/company/email/phone),
