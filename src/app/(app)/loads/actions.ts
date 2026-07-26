@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
 import { isSmsConfigured, sendSms, toE164 } from "@/lib/messaging/ringcentral";
+import { isEmailConfigured, isPlausibleEmail, sendEmail } from "@/lib/messaging/email";
 import { SMS_CHUNK_MAX, runSmsChunk } from "@/lib/messaging/sms-bulk";
 import { LOAD_STATUSES, type LoadStatus } from "@/types/database";
 
@@ -340,6 +341,9 @@ export async function updateLoad(
         changed_by: profile.id,
         note: "Converted to order",
       });
+      // msgplane behavior: a new order automatically emails the customer
+      // their contract. Failure is advisory (history + timeline), not fatal.
+      await generateAndSendContract(supabase, profile, id, { email: true, sms: false });
     }
   }
 
@@ -409,8 +413,17 @@ export async function convertToQuote(id: string): Promise<{ ok: boolean; error?:
 
 // Standalone quote → order (the header button), separate from the edit-form
 // convert path above. Only from QUOTE — a lead has to be priced first.
+// msgplane behavior: creating the order automatically emails the customer
+// their contract. A failed email never blocks the conversion — it lands in
+// the history and message timeline for the rep to see and resend.
 export async function convertToOrder(id: string): Promise<{ ok: boolean; error?: string }> {
-  return transition(id, ["quote"], {}, "ready", "Converted to order");
+  const result = await transition(id, ["quote"], {}, "ready", "Converted to order");
+  if (result.ok) {
+    const profile = await requireRole(...ALL_STAFF);
+    const supabase = await createClient();
+    await generateAndSendContract(supabase, profile, id, { email: true, sms: false });
+  }
+  return result;
 }
 
 export async function postOrder(id: string, board: "cd" | "sd" | "all"): Promise<void> {
@@ -715,20 +728,21 @@ function appBaseUrl(): string {
 
 export type EsignState = { error: string | null; link?: string; sentVia?: string };
 
-// Ensures the load has a signing token, records the send, and optionally texts
-// the link to the customer. `resend` uses the same path.
-export async function sendContract(
+// Core of the e-sign flow, msgplane-style "generate_and_send": ensure the
+// signing token exists, record the send, EMAIL the link to the customer
+// (the default channel — this is also what fires automatically when a quote
+// converts to an order), optionally text it, and log the email into the
+// order's message timeline. Email problems never throw — callers decide
+// whether they're fatal (manual send) or advisory (auto-send on convert).
+async function generateAndSendContract(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  profile: { id: string },
   loadId: string,
-  _prevState: EsignState,
-  formData: FormData
-): Promise<EsignState> {
-  const profile = await requireRole("admin", "dispatcher", "sales");
-  const viaSms = formData.get("via") === "sms";
-  const supabase = await createClient();
-
+  via: { email: boolean; sms: boolean }
+): Promise<{ error: string | null; link?: string; sentVia?: string }> {
   const { data: load } = await supabase
     .from("loads")
-    .select("contract_token, customer_id")
+    .select("contract_token, customer_id, load_number")
     .eq("id", loadId)
     .single();
   if (!load) return { error: "Order not found." };
@@ -748,13 +762,61 @@ export async function sendContract(
   const base = appBaseUrl();
   const link = base ? `${base}/sign/${token}` : `/sign/${token}`;
 
-  let sentVia: string | undefined;
-  if (viaSms) {
-    const { data: customer } = await supabase
-      .from("customers")
-      .select("phone, sms_opt_out")
-      .eq("id", load.customer_id)
-      .single();
+  const { data: customer } = await supabase
+    .from("customers")
+    .select("contact_name, email, email_opt_out, phone, sms_opt_out")
+    .eq("id", load.customer_id)
+    .single();
+
+  const sentVia: string[] = [];
+  let softError: string | null = null;
+
+  if (via.email) {
+    // Transactional, one recipient — opt-out doesn't apply to a contract the
+    // customer asked for, but a missing/implausible address does.
+    if (!isPlausibleEmail(customer?.email)) {
+      softError = "No valid customer email on file — send the link another way.";
+    } else if (!isEmailConfigured()) {
+      softError = "Email isn't connected — copy the link and send it manually.";
+    } else if (!base) {
+      softError = "Set NEXT_PUBLIC_APP_URL so the link is a full URL.";
+    } else {
+      const firstName = (customer?.contact_name || "there").split(/\s+/)[0];
+      const subject = `Your vehicle transport agreement — order ${load.load_number}`;
+      const body =
+        `Hi ${firstName},\n\n` +
+        `Your vehicle transport order ${load.load_number} with US Star Trucking is ready. ` +
+        `Please review and sign your transport agreement here:\n\n${link}\n\n` +
+        `Reply to this email or text us with any questions.\n\n— US Star Trucking LLC`;
+      let status = "sent";
+      let providerMessageId: string | null = null;
+      try {
+        const r = await sendEmail(customer!.email!.trim(), subject, body);
+        providerMessageId = r.providerMessageId;
+        sentVia.push("email");
+      } catch (err) {
+        console.error("E-sign email failed:", err);
+        status = "failed";
+        softError = "Couldn't email the link — copy it and send manually.";
+      }
+      // Into the order's message timeline either way, so a failed send is
+      // visible instead of silent.
+      await supabase.from("messages").insert({
+        customer_id: load.customer_id,
+        load_id: loadId,
+        channel: "email",
+        direction: "outbound",
+        to_addr: customer!.email!.trim(),
+        subject,
+        body,
+        provider_message_id: providerMessageId,
+        status,
+        sent_by: profile.id,
+      });
+    }
+  }
+
+  if (via.sms) {
     const to = toE164(customer?.phone);
     if (customer?.sms_opt_out) return { error: "Customer opted out of SMS — can't text the link.", link };
     if (!to) return { error: "No valid customer phone on file to text the link.", link };
@@ -762,7 +824,7 @@ export async function sendContract(
     if (!base) return { error: "Set NEXT_PUBLIC_APP_URL so the link is a full URL.", link };
     try {
       await sendSms(to, `Please review and sign your vehicle transport agreement: ${link}`);
-      sentVia = "sms";
+      sentVia.push("sms");
     } catch (err) {
       console.error("E-sign SMS failed:", err);
       return { error: "Couldn't text the link — copy it and send manually.", link };
@@ -773,11 +835,32 @@ export async function sendContract(
     load_id: loadId,
     status: "quote" as LoadStatus, // history note only; status unchanged
     changed_by: profile.id,
-    note: sentVia === "sms" ? "Contract texted to customer" : "Contract link generated",
+    note:
+      sentVia.length > 0
+        ? `Contract sent to customer (${sentVia.join(" + ")})`
+        : softError
+          ? `Contract link generated — ${softError}`
+          : "Contract link generated",
   });
 
   revalidatePath(`/loads/${loadId}`);
-  return { error: null, link, sentVia };
+  return { error: softError, link, sentVia: sentVia.join("+") || undefined };
+}
+
+// Manual send from the E-Sign panel. Default = email (matching msgplane's
+// generate-and-send); via=sms texts the link instead.
+export async function sendContract(
+  loadId: string,
+  _prevState: EsignState,
+  formData: FormData
+): Promise<EsignState> {
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const viaSms = formData.get("via") === "sms";
+  const supabase = await createClient();
+  return generateAndSendContract(supabase, profile, loadId, {
+    email: !viaSms,
+    sms: viaSms,
+  });
 }
 
 // Staff override: mark the contract signed without the customer using the link.

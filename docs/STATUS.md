@@ -95,8 +95,19 @@ desk only, and it releases the carrier so re-assignment re-dispatches) ·
 pipeline-list msgplane parity (per-row unread-message badges — red when >0,
 notes counter, floating "+" quick-create) · follow-up quick-note buttons
 ("Left message" / "Spoke to someone") on the edit page's follow-up section.
+· contract auto-send (converting a quote to an order automatically EMAILS
+the customer their signing link — msgplane's generate_and_send; failure is
+advisory, logged to history + the order's message timeline, never blocks
+the conversion; the E-Sign panel's manual Send now emails by default, SMS
+via the existing button).
 Parity items deliberately still open: row quick-view popup, vehicle-photo
-override editor, Loadboard/Campaign selects on the edit header.
+override editor, Loadboard/Campaign selects on the edit header, manual
+Load Requests queue (msgplane logs carrier offers by hand — price/carrier/
+dates + [CD|SD] tag — behind the Requests tab; no API needed), printable
+Dispatch Sheet, auto-tickets on signed/dispatched events, and Phase-4-lite
+dispatch confirmation by INGESTING CentralDispatch's notification emails
+(msgplane logs "ACCEPTED by <carrier>" emails from
+do-not-reply@centraldispatch.com straight onto the order — no API).
 
 ## Integrations
 
