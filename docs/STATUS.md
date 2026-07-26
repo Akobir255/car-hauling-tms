@@ -150,6 +150,18 @@ sales only match their own records, and loads read through the role view.
 pattern is double-quoted via `likePattern()` — a phone typed as
 "(865) 328-7418" silently returned nothing before that.
 
+## Internal notes + attachments
+
+Order detail carries a notes THREAD (migration 0018 `load_notes`), each note
+stamped with author/time, editable or removable by its author (managers can do
+anyone's — enforced in RLS, not just the UI), with multi-file attachments.
+Files live in the **private** `load-files` bucket (create it with
+`node scripts/ensure-storage.mjs`) and are only reachable through 60-second
+signed URLs minted per click by `attachmentUrl()`, which re-checks note
+visibility through RLS first. Attachment rows reuse the existing `documents`
+table via a nullable `note_id`; deleting a note removes its objects from
+storage too, so nothing is orphaned.
+
 ## Open items
 
 - Supabase dashboard: password policy (min length 12, complexity, secure

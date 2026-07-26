@@ -22,6 +22,7 @@ import type {
 import { OrderActionBar } from "./order-action-bar";
 import { EsignPanel } from "./esign-panel";
 import { OrderMoreMenu } from "./order-more-menu";
+import { NotesThread } from "./notes-thread";
 import { deleteLoad } from "../actions";
 
 const BACK_PATH = { lead: "/leads", quote: "/quotes", order: "/orders" } as const;
@@ -46,6 +47,8 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
     { data: history },
     { data: contractEvents },
     { data: messagesData },
+    { data: noteRows },
+    { data: noteDocs },
   ] = await Promise.all([
     supabase.from("customers").select("*").eq("id", load.customer_id).single(),
     supabase.from("load_vehicles").select("*").eq("load_id", id).order("created_at"),
@@ -71,11 +74,31 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
       .in("channel", ["sms", "email"])
       .order("created_at", { ascending: false })
       .limit(30),
+    supabase
+      .from("load_notes")
+      .select("id, body, author_id, created_at, updated_at")
+      .eq("load_id", id)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    supabase
+      .from("documents")
+      .select("id, note_id, file_name, storage_path")
+      .eq("entity_id", id)
+      .not("note_id", "is", null),
   ]);
   const customer = customerData as Customer | null;
   const vehicles = (vehiclesData ?? []) as LoadVehicle[];
   const historyRows = (history ?? []) as LoadStatusHistoryEntry[];
   const messages = (messagesData ?? []) as Message[];
+
+  type NoteRow = {
+    id: string;
+    body: string;
+    author_id: string | null;
+    created_at: string;
+    updated_at: string;
+  };
+  const notesData = (noteRows ?? []) as NoteRow[];
 
   const profileIds = [
     ...new Set(
@@ -83,6 +106,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
         load.sales_owner_id,
         ...historyRows.map((h) => h.changed_by),
         ...messages.map((m) => m.sent_by),
+        ...notesData.map((n) => n.author_id),
       ].filter(Boolean) as string[]
     ),
   ];
@@ -103,6 +127,33 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
 
   const boundDelete = deleteLoad.bind(null, load.id);
   const backPath = BACK_PATH[stageOf(load.status)];
+
+  // Notes + their attachments, ready for the thread. A rep may edit their own
+  // note; managers may edit anyone's (same rule the RLS policy enforces).
+  const attachmentsByNote = new Map<string, { id: string; file_name: string | null; storage_path: string }[]>();
+  for (const d of (noteDocs ?? []) as {
+    id: string;
+    note_id: string | null;
+    file_name: string | null;
+    storage_path: string;
+  }[]) {
+    if (!d.note_id) continue;
+    const list = attachmentsByNote.get(d.note_id) ?? [];
+    list.push({ id: d.id, file_name: d.file_name, storage_path: d.storage_path });
+    attachmentsByNote.set(d.note_id, list);
+  }
+  const threadNotes = notesData.map((n) => {
+    const author = n.author_id ? profById.get(n.author_id) : null;
+    return {
+      id: n.id,
+      body: n.body,
+      created_at: n.created_at,
+      updated_at: n.updated_at,
+      authorName: author?.full_name || author?.email || "Unknown",
+      canEdit: canManageCarrier || n.author_id === profile.id,
+      attachments: attachmentsByNote.get(n.id) ?? [],
+    };
+  });
 
   const origin = [load.pickup_city, load.pickup_state].filter(Boolean).join(", ") || "—";
   const destination = [load.delivery_city, load.delivery_state].filter(Boolean).join(", ") || "—";
@@ -252,6 +303,10 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                 <span className="whitespace-pre-wrap">{load.notes || "—"}</span>
               </Field>
             </div>
+          </SectionBand>
+
+          <SectionBand title="Internal Notes">
+            <NotesThread loadId={load.id} notes={threadNotes} />
           </SectionBand>
 
           <SectionBand title="Messages" bodyClassName="p-0">
