@@ -8,9 +8,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
 import { isSmsConfigured, sendSms, toE164 } from "@/lib/messaging/ringcentral";
-import { isEmailConfigured, isPlausibleEmail, sendEmail } from "@/lib/messaging/email";
+import { isEmailConfigured, isPlausibleEmail, sendEmail, sendEmailBatch } from "@/lib/messaging/email";
+import { buildContext, renderTemplate } from "@/lib/messaging/render";
 import { SMS_CHUNK_MAX, runSmsChunk } from "@/lib/messaging/sms-bulk";
-import { LOAD_STATUSES, type LoadStatus } from "@/types/database";
+import { LOAD_STATUSES, type Customer, type Load, type LoadStatus } from "@/types/database";
 
 export type LoadFormState = { error: string | null };
 
@@ -1053,6 +1054,117 @@ export type BulkSmsChunkResult = {
   unprocessedLoadIds: string[];
   retryAfterMs: number | null;
 };
+
+// Bulk email from a pipeline selection. One Resend batch request (never a
+// loop — see docs/STATUS.md), rendered per recipient, logged per row.
+export async function bulkEmail(
+  loadIds: string[],
+  subject: string,
+  body: string
+): Promise<{ error: string | null; sent: number; queued: number; skipped: number; failed: number }> {
+  const empty = (error: string | null) => ({ error, sent: 0, queued: 0, skipped: 0, failed: 0 });
+  const profile = await requireRole(...ALL_STAFF);
+  const text = body.trim();
+  const subj = subject.trim();
+  if (loadIds.length === 0) return empty(null);
+  if (!text) return empty("Message is required.");
+  if (!subj) return empty("Email needs a subject line.");
+  if (loadIds.length > 100) return empty("Max 100 recipients per send — narrow the selection.");
+
+  const supabase = await createClient();
+  const { data: loads, error: loadsError } = await supabase
+    .from(profile.role === "sales" ? "loads_sales_safe" : MANAGER_LOADS_TABLE)
+    .select("id, customer_id, customer_rate, load_number, pickup_city, pickup_state, delivery_city, delivery_state, pickup_ready_date")
+    .in("id", loadIds);
+  if (loadsError) return empty(loadsError.message);
+
+  const customerIds = [...new Set((loads ?? []).map((l) => l.customer_id).filter(Boolean))];
+  const { data: customers } = customerIds.length
+    ? await supabase.from("customers").select("*").in("id", customerIds)
+    : { data: [] as Customer[] };
+  const custById = new Map(((customers ?? []) as Customer[]).map((c) => [c.id, c]));
+
+  const { data: vehicleRows } = loadIds.length
+    ? await supabase.from("load_vehicles").select("load_id, year, make, model").in("load_id", loadIds).order("created_at")
+    : { data: [] as { load_id: string; year: number | null; make: string | null; model: string | null }[] };
+  const vehicleByLoad = new Map<string, string>();
+  for (const v of vehicleRows ?? []) {
+    if (!vehicleByLoad.has(v.load_id)) {
+      vehicleByLoad.set(v.load_id, [v.year, v.make, v.model].filter(Boolean).join(" "));
+    }
+  }
+
+  let skipped = loadIds.length - (loads ?? []).length;
+  const agent = profile.full_name || profile.email || "";
+  const recipients: { loadId: string; customerId: string; to: string; subject: string; text: string }[] = [];
+  for (const l of loads ?? []) {
+    const c = custById.get(l.customer_id);
+    if (!c || c.email_opt_out || !isPlausibleEmail(c.email)) {
+      skipped++;
+      continue;
+    }
+    const ctx = buildContext(c, l as unknown as Load, { agent, vehicle: vehicleByLoad.get(l.id) ?? "" });
+    recipients.push({
+      loadId: l.id,
+      customerId: c.id,
+      to: c.email!.trim(),
+      subject: renderTemplate(subj, ctx),
+      text: renderTemplate(text, ctx),
+    });
+  }
+  if (recipients.length === 0) return { ...empty(null), skipped };
+
+  const statuses: { status: string; id: string | null }[] = [];
+  if (!isEmailConfigured()) {
+    recipients.forEach(() => statuses.push({ status: "queued", id: null }));
+  } else {
+    const result = await sendEmailBatch(
+      recipients.map((r) => ({ to: r.to, subject: r.subject, text: r.text }))
+    );
+    if (result.ok) result.ids.forEach((id) => statuses.push({ status: "sent", id }));
+    else {
+      console.error("Bulk email failed:", result.error);
+      recipients.forEach(() => statuses.push({ status: "failed", id: null }));
+    }
+  }
+
+  const { error: logError } = await supabase.from("messages").insert(
+    recipients.map((r, i) => ({
+      customer_id: r.customerId,
+      load_id: r.loadId,
+      channel: "email",
+      direction: "outbound",
+      to_addr: r.to,
+      subject: r.subject,
+      body: r.text,
+      provider_message_id: statuses[i].id,
+      status: statuses[i].status,
+      sent_by: profile.id,
+    }))
+  );
+
+  let sent = 0;
+  let queued = 0;
+  let failed = 0;
+  for (const s of statuses) {
+    if (s.status === "sent") sent++;
+    else if (s.status === "queued") queued++;
+    else failed++;
+  }
+  revalidatePath("/messages");
+  return {
+    error:
+      logError && sent > 0
+        ? `${sent} email(s) were SENT but could not be logged (${logError.message}).`
+        : logError
+          ? `Logging failed: ${logError.message}`
+          : null,
+    sent,
+    queued,
+    skipped,
+    failed,
+  };
+}
 
 export async function bulkSmsChunk(loadIds: string[], body: string): Promise<BulkSmsChunkResult> {
   const empty = (error: string | null): BulkSmsChunkResult => ({

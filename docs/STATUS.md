@@ -132,6 +132,24 @@ Workspace domain; sending bulk from it would put real business email at risk.
 (Its root SPF also has a typo — `include:_spf.google.com~all` is missing the
 space before `~all`, making the include unresolvable. Registrar is Squarespace.)
 
+## Carrier directory
+
+~4.7k carrier companies imported from the old system (migration 0016 added
+`city`, `state`, `source`; `source` = 'cd' | 'sd' | null and is why the same
+company can appear twice with different contact details). Re-import or top up
+with `node scripts/import-carriers.mjs <tsv>` — idempotent on name+phone.
+Phone search works regardless of formatting because `phone_digits` on
+customers and carriers is a **generated** column (migration 0017).
+
+## Global search
+
+Sidebar omnibox → `/api/search`, covering shippers (name/company/email/phone),
+carriers (company/contact/city/phone) and orders (load number). RLS-scoped:
+sales only match their own records, and loads read through the role view.
+**Careful with PostgREST `or=(...)`**: `,` `.` `(` `)` are grammar, so every
+pattern is double-quoted via `likePattern()` — a phone typed as
+"(865) 328-7418" silently returned nothing before that.
+
 ## Open items
 
 - Supabase dashboard: password policy (min length 12, complexity, secure

@@ -44,6 +44,10 @@ export const STATUS_VARIANT: Record<LoadStatus, BadgeVariant> = {
 };
 
 // Which pipeline stage a status belongs to (drives the three nav sections).
+// A lead or quote that is put on hold, cancelled, lost or archived stays in
+// ITS stage rather than jumping to Orders — otherwise a cancelled quote
+// vanishes from the quote screens entirely, which is where a rep looks for
+// it. The order list keeps its own hold/archived/lost tabs for orders.
 export const LEAD_STATUSES: LoadStatus[] = ["lead"];
 export const QUOTE_STATUSES: LoadStatus[] = ["quote"];
 export const ORDER_STATUSES: LoadStatus[] = [
@@ -80,17 +84,31 @@ export type OrderTab = {
   statuses?: LoadStatus[];
   notSigned?: boolean;
   followUpDue?: boolean;
+  // Restrict a shared status (hold/cancelled/archived) to records that belong
+  // to this stage. Which stage a parked record came from is derived from its
+  // price rather than stored: pricing is exactly what promotes a lead to a
+  // quote, so "has a price" IS "was a quote". No extra column to keep in sync.
+  stage?: PipelineStage;
 };
 
-// The reps' working queue on Leads and Quotes — msgplane's "Follow-up Today".
+// The reps' working queue on Leads and Quotes — msgplane's "Follow-up Today",
+// plus the parking tabs a rep needs when a deal stalls: Hold, Cancelled
+// (cancelled/lost) and Archived. `stage` scopes a tab to leads or quotes so
+// a cancelled quote shows up under Quotes, not Leads.
 export const LEAD_TABS: OrderTab[] = [
   { key: "leads", label: "Leads", statuses: ["lead"] },
   { key: "followup", label: "Follow-up Today", statuses: ["lead"], followUpDue: true },
+  { key: "hold", label: "Hold", statuses: ["hold"], stage: "lead" },
+  { key: "cancelled", label: "Cancelled", statuses: ["cancelled", "lost"], stage: "lead" },
+  { key: "archived", label: "Archived", statuses: ["archived"], stage: "lead" },
 ];
 
 export const QUOTE_TABS: OrderTab[] = [
   { key: "quotes", label: "Quotes", statuses: ["quote"] },
   { key: "followup", label: "Follow-up Today", statuses: ["quote"], followUpDue: true },
+  { key: "hold", label: "Hold", statuses: ["hold"], stage: "quote" },
+  { key: "cancelled", label: "Cancelled", statuses: ["cancelled", "lost"], stage: "quote" },
+  { key: "archived", label: "Archived", statuses: ["archived"], stage: "quote" },
 ];
 
 export const ORDER_TABS: OrderTab[] = [

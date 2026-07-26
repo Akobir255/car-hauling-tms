@@ -19,15 +19,19 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { GlobalSearch } from "@/components/global-search";
 import { titleCase } from "@/lib/format";
 import type { UserRole } from "@/types/database";
 
+// Customers is deliberately NOT in the nav: shippers are reached through
+// their lead/quote/order or the global search, never browsed as a list.
+// (The /customers pages still exist and are linked from records.)
 const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; roles?: UserRole[] }[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/leads", label: "Leads", icon: Sparkles },
   { href: "/quotes", label: "Quotes", icon: FileText },
   { href: "/orders", label: "Orders", icon: ClipboardList },
-  { href: "/customers", label: "Customers", icon: Building2 },
+  { href: "/carriers", label: "Carriers", icon: Building2 },
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/tickets", label: "Tickets", icon: Ticket },
   { href: "/admin/users", label: "Users", icon: UserCog, roles: ["admin"] },
@@ -159,6 +163,9 @@ export function AppSidebar({
       {/* Desktop rail */}
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col bg-zinc-950 lg:flex">
         <Brand />
+        <div className="px-3 pb-3">
+          <GlobalSearch />
+        </div>
         <NavLinks role={role} unreadMessages={unreadMessages} />
         <UserBlock name={userName} role={role} signOut={signOut} />
       </aside>
@@ -201,6 +208,9 @@ export function AppSidebar({
               >
                 <X className="size-5" aria-hidden="true" />
               </Button>
+            </div>
+            <div className="px-3 pb-3">
+              <GlobalSearch onNavigate={() => setOpen(false)} />
             </div>
             <NavLinks role={role} unreadMessages={unreadMessages} onNavigate={() => setOpen(false)} />
             <UserBlock name={userName} role={role} signOut={signOut} />

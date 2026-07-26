@@ -2,6 +2,7 @@ import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import Link from "next/link";
 import { CalendarCheck2, Inbox, Mail, MapPin, Phone, Plus, User } from "lucide-react";
 import { VehiclePhoto } from "@/components/vehicle-photo";
+import { RowMessageButton } from "@/components/messaging/row-message-buttons";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,10 @@ export async function PipelineList({
   } else {
     query = query.in("status", activeTab.statuses ?? stageStatuses);
   }
+  // Parked tabs (hold/cancelled/archived) are shared across stages: a priced
+  // record was a quote, an unpriced one was still a lead.
+  if (activeTab.stage === "quote") query = query.not("customer_rate", "is", null);
+  else if (activeTab.stage === "lead") query = query.is("customer_rate", null);
   if (activeTab.followUpDue) {
     // Oldest follow-up first — that's the order reps should work the queue in.
     query = query
@@ -78,21 +83,34 @@ export async function PipelineList({
   }
   if (canSeeMargin && rep) query = query.eq("sales_owner_id", rep);
 
-  // One slim query feeds every tab count for this stage.
+  // One slim query feeds every tab count for this stage. Parked statuses are
+  // included so Hold/Cancelled/Archived can show counts too.
+  const parkedStatuses: LoadStatus[] = ["hold", "cancelled", "lost", "archived"];
+  const countStatuses =
+    stage === "order" ? stageStatuses : [...new Set([...stageStatuses, ...parkedStatuses])];
   let countQuery = supabase
     .from(table)
-    .select("status, date_signed, follow_up_at")
-    .in("status", stageStatuses);
+    .select("status, date_signed, follow_up_at, customer_rate")
+    .in("status", countStatuses);
   if (canSeeMargin && rep) countQuery = countQuery.eq("sales_owner_id", rep);
 
   const [{ data, error }, { data: countRows }] = await Promise.all([query, countQuery]);
   const loads = (data ?? []) as Load[];
 
-  type CountRow = { status: LoadStatus; date_signed: string | null; follow_up_at: string | null };
+  type CountRow = {
+    status: LoadStatus;
+    date_signed: string | null;
+    follow_up_at: string | null;
+    customer_rate: number | null;
+  };
   const tabCount = (t: OrderTab) => {
     const rows = (countRows ?? []) as CountRow[];
-    if (t.notSigned) return rows.filter((r) => r.date_signed == null).length;
-    const inStatuses = rows.filter((r) => (t.statuses ?? stageStatuses).includes(r.status));
+    if (t.notSigned) {
+      return rows.filter((r) => ORDER_STATUSES.includes(r.status) && r.date_signed == null).length;
+    }
+    let inStatuses = rows.filter((r) => (t.statuses ?? stageStatuses).includes(r.status));
+    if (t.stage === "quote") inStatuses = inStatuses.filter((r) => r.customer_rate != null);
+    else if (t.stage === "lead") inStatuses = inStatuses.filter((r) => r.customer_rate == null);
     if (t.followUpDue) {
       // Compare as Dates — string compare breaks if offset formats ever differ.
       return inStatuses.filter((r) => r.follow_up_at && new Date(r.follow_up_at) <= endOfToday)
@@ -323,12 +341,24 @@ export async function PipelineList({
                           <p className="flex items-center gap-1.5 tabular-nums text-muted-foreground">
                             <Phone className="size-3.5 shrink-0" aria-hidden="true" />
                             {formatPhone(customer.phone)}
+                            <RowMessageButton
+                              channel="sms"
+                              loadId={load.id}
+                              customerId={customer.id}
+                              customerName={customer.contact_name}
+                            />
                           </p>
                         )}
                         {customer.email && (
                           <p className="flex items-center gap-1.5 text-muted-foreground">
                             <Mail className="size-3.5 shrink-0" aria-hidden="true" />
                             <span className="max-w-44 truncate">{customer.email}</span>
+                            <RowMessageButton
+                              channel="email"
+                              loadId={load.id}
+                              customerId={customer.id}
+                              customerName={customer.contact_name}
+                            />
                           </p>
                         )}
                       </div>
