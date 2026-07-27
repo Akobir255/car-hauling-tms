@@ -326,7 +326,7 @@ export async function PipelineList({
             {tabs.map((t) => {
               const active = activeTab.key === t.key;
               const count = tabCount(t);
-              const showBadge = t.followUpDue && count > 0;
+              const showBadge = (t.badge || t.followUpDue) && count > 0;
               return (
                 <Link
                   key={t.key}

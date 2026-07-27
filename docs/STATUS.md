@@ -183,6 +183,31 @@ Workspace domain; sending bulk from it would put real business email at risk.
 (Its root SPF also has a typo — `include:_spf.google.com~all` is missing the
 space before `~all`, making the include unresolvable. Registrar is Squarespace.)
 
+## Pipeline lists = a clone of the old system's
+
+Tabs, column labels, per-tab date columns, statuses and paging are copied
+from the system this replaces (audited live, 2026-07-27):
+
+- Orders module tabs: Orders · Posted CD · Posted SD · Requests · Not Signed
+  · Dispatched · Issues · Picked-Up · Hold · Archived. There is no Delivered
+  and no Lost tab — Archived holds both completed and lost work, and each row
+  keeps showing its own word. Issues = their "incomplete" (delivered, still
+  something open) and is the one tab with a red count badge.
+- Quotes/Leads tabs: Follow-up Today · Quotes/Leads · Hold · Archived.
+  Follow-up Today is drawn FIRST but the nav link lands on Quotes —
+  `OrderTab.default` marks the landing tab, which is NOT the same as bar order.
+- Each tab renames the second column and reads a different date: Converted /
+  Posted / Received / Sent / Signed / Picked UP / Delivered / Archived.
+- Posted CD and Posted SD filter on the BOARD TIMESTAMPS, not status, so an
+  order posted to both boards appears under both (as it does there).
+- **Not Signed is a live queue**: contract sent, still unsigned, on a working
+  order (`NOT_SIGNED_STATUSES`). Defining it as "any order with no signature"
+  swept in every archived record ever imported and showed hundreds.
+- 100 rows per page with a real pager, and every tab count is an exact
+  `head:true` count — the old client-side tally silently capped at 1000 rows.
+- Imported records carry the source's own status word in
+  `loads.msgplane_status` (migration 0021) and the list displays it.
+
 ## Imported book of business (2026-07-27)
 
 441 real records migrated from msgplane with their ORIGINAL order numbers

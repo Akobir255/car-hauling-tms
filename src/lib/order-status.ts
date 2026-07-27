@@ -126,6 +126,9 @@ export type OrderTab = {
   // Board tabs filter on the posting timestamp, so a load posted to both
   // boards shows up under both.
   postedTo?: "cd" | "sd";
+  // Draw the red count badge beside the label (the old system shows one only
+  // on Issues).
+  badge?: boolean;
   // Restrict a shared status (hold/cancelled/archived) to records that belong
   // to this stage. Which stage a parked record came from is derived from its
   // price rather than stored: pricing is exactly what promotes a lead to a
@@ -207,7 +210,9 @@ export const ORDER_TABS: OrderTab[] = [
   {
     key: "issues",
     label: "Issues",
-    // Their "incomplete": delivered, but something still open on it.
+    // Their "incomplete": delivered, but something still open on it. This is
+    // the one tab that carries a red count badge in the old system.
+    badge: true,
     statuses: ["delivered"],
     dateCol: { label: "Delivered", field: "delivered_at" },
     carrierCol: true,
