@@ -78,6 +78,22 @@ export function stageOf(status: LoadStatus): PipelineStage {
 // msgplane-style Orders sub-status tabs. `statuses: null` = the default
 // "Orders" tab (active, unposted work queue). `notSigned` is derived;
 // `followUpDue` filters to rows whose follow-up is due today or overdue.
+// Which date the second column shows for a tab, msgplane-exact: every tab
+// renames it ("Converted", "Posted", "Sent", "Signed", "Delivered"…) and pulls
+// a different field. "posted" = whichever board date the load carries.
+export type TabDateCol = {
+  label: string;
+  field:
+    | "created_at"
+    | "posted"
+    | "contract_sent_at"
+    | "date_signed"
+    | "delivered_at"
+    | "picked_up_at"
+    | "dispatched_at"
+    | "updated_at";
+};
+
 export type OrderTab = {
   key: string;
   label: string;
@@ -87,6 +103,11 @@ export type OrderTab = {
   // msgplane's Requests tab: posted orders that have carrier offers logged
   // in load_requests — the dispatcher's "review the offers" queue.
   hasRequests?: boolean;
+  // Per-tab column variants (msgplane): the renamed date column, the Carrier
+  // (assigned carrier name/phone) column, and Requests' circled offer count.
+  dateCol?: TabDateCol;
+  carrierCol?: boolean;
+  requestCount?: boolean;
   // Restrict a shared status (hold/cancelled/archived) to records that belong
   // to this stage. Which stage a parked record came from is derived from its
   // price rather than stored: pricing is exactly what promotes a lead to a
@@ -98,39 +119,104 @@ export type OrderTab = {
 // plus the parking tabs a rep needs when a deal stalls: Hold, Cancelled
 // (cancelled/lost) and Archived. `stage` scopes a tab to leads or quotes so
 // a cancelled quote shows up under Quotes, not Leads.
+// msgplane's Quotes/Leads modules: Follow-up Today is the FIRST (default)
+// tab, there is no Cancelled tab — cancelled/lost park under Archived.
 export const LEAD_TABS: OrderTab[] = [
-  { key: "leads", label: "Leads", statuses: ["lead"] },
   { key: "followup", label: "Follow-up Today", statuses: ["lead"], followUpDue: true },
+  { key: "leads", label: "Leads", statuses: ["lead"] },
   { key: "hold", label: "Hold", statuses: ["hold"], stage: "lead" },
-  { key: "cancelled", label: "Cancelled", statuses: ["cancelled", "lost"], stage: "lead" },
-  { key: "archived", label: "Archived", statuses: ["archived"], stage: "lead" },
+  { key: "archived", label: "Archived", statuses: ["archived", "cancelled", "lost"], stage: "lead" },
 ];
 
 export const QUOTE_TABS: OrderTab[] = [
-  { key: "quotes", label: "Quotes", statuses: ["quote"] },
   { key: "followup", label: "Follow-up Today", statuses: ["quote"], followUpDue: true },
+  { key: "quotes", label: "Quotes", statuses: ["quote"] },
   { key: "hold", label: "Hold", statuses: ["hold"], stage: "quote" },
-  { key: "cancelled", label: "Cancelled", statuses: ["cancelled", "lost"], stage: "quote" },
-  { key: "archived", label: "Archived", statuses: ["archived"], stage: "quote" },
+  {
+    key: "archived",
+    label: "Archived",
+    statuses: ["archived", "cancelled", "lost"],
+    stage: "quote",
+  },
 ];
 
+// Orders tabs with msgplane's per-tab column set (audited live 2026-07-27).
 export const ORDER_TABS: OrderTab[] = [
-  { key: "orders", label: "Orders", statuses: ["ready", "booked"] },
-  { key: "posted_cd", label: "Posted CD", statuses: ["posted_cd"] },
-  { key: "posted_sd", label: "Posted SD", statuses: ["posted_sd"] },
+  {
+    key: "orders",
+    label: "Orders",
+    statuses: ["ready", "booked"],
+    dateCol: { label: "Converted", field: "created_at" },
+  },
+  {
+    key: "posted_cd",
+    label: "Posted CD",
+    statuses: ["posted_cd"],
+    dateCol: { label: "Posted", field: "posted" },
+  },
+  {
+    key: "posted_sd",
+    label: "Posted SD",
+    statuses: ["posted_sd"],
+    dateCol: { label: "Received", field: "created_at" },
+  },
   {
     key: "requests",
     label: "Requests",
     statuses: ["posted_cd", "posted_sd", "booked"],
     hasRequests: true,
+    dateCol: { label: "Posted", field: "posted" },
+    requestCount: true,
   },
-  { key: "not_signed", label: "Not Signed", notSigned: true },
-  { key: "dispatched", label: "Dispatched", statuses: ["dispatched", "in_transit"] },
-  { key: "picked_up", label: "Picked-Up", statuses: ["picked_up"] },
-  { key: "delivered", label: "Delivered", statuses: ["delivered", "invoiced", "paid"] },
-  { key: "hold", label: "Hold", statuses: ["hold"] },
-  { key: "archived", label: "Archived", statuses: ["archived"] },
-  { key: "lost", label: "Lost", statuses: ["lost", "cancelled"] },
+  {
+    key: "not_signed",
+    label: "Not Signed",
+    notSigned: true,
+    dateCol: { label: "Sent", field: "contract_sent_at" },
+    carrierCol: true,
+  },
+  {
+    key: "dispatched",
+    label: "Dispatched",
+    statuses: ["dispatched", "in_transit"],
+    dateCol: { label: "Signed", field: "date_signed" },
+    carrierCol: true,
+  },
+  {
+    key: "picked_up",
+    label: "Picked-Up",
+    statuses: ["picked_up"],
+    dateCol: { label: "Picked UP", field: "picked_up_at" },
+    carrierCol: true,
+  },
+  {
+    key: "delivered",
+    label: "Delivered",
+    statuses: ["delivered", "invoiced", "paid"],
+    dateCol: { label: "Delivered", field: "delivered_at" },
+    carrierCol: true,
+  },
+  {
+    key: "hold",
+    label: "Hold",
+    statuses: ["hold"],
+    dateCol: { label: "Signed", field: "date_signed" },
+    carrierCol: true,
+  },
+  {
+    key: "archived",
+    label: "Archived",
+    statuses: ["archived"],
+    dateCol: { label: "Archived", field: "updated_at" },
+    carrierCol: true,
+  },
+  {
+    key: "lost",
+    label: "Lost",
+    statuses: ["lost", "cancelled"],
+    dateCol: { label: "Converted", field: "created_at" },
+    carrierCol: true,
+  },
 ];
 
 // Lifecycle actions available from each status. The detail page renders these

@@ -11,6 +11,7 @@ import { formatDate, formatPhone } from "@/lib/format";
 import { endOfBusinessDay } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { SelectionProvider } from "@/components/pipeline/selection-context";
+import { RepSelect } from "@/components/pipeline/rep-select";
 import { RowCheckbox, SelectAllCheckbox } from "@/components/pipeline/row-checkbox";
 import { BulkActionBar } from "@/components/pipeline/bulk-action-bar";
 import { EmptyState } from "@/components/empty-state";
@@ -26,6 +27,32 @@ import {
 } from "@/lib/order-status";
 import { VEHICLE_TYPE_LABELS } from "@/types/database";
 import type { Load, LoadStatus, LoadVehicle, Profile } from "@/types/database";
+
+// msgplane money style: "Tariff:$500" — whole dollars, no separators.
+const money0 = (v: number | null | undefined) => (v == null ? "—" : `$${Math.round(v)}`);
+
+// The Quote cell, shared by both column layouts. Carrier pay renders only
+// for managers — the sales view never carries the column.
+function QuoteCell({ load, canSeeMargin }: { load: Load; canSeeMargin: boolean }) {
+  return (
+    <>
+      <p>
+        <span className="text-muted-foreground">Tariff:</span>
+        <span className="text-foreground">{money0(load.customer_rate)}</span>
+      </p>
+      <p>
+        <span className="text-muted-foreground">Deposit:</span>
+        <span className="text-foreground">{money0(load.deposit_amount)}</span>
+      </p>
+      {canSeeMargin && load.carrier_pay != null && (
+        <p>
+          <span className="text-muted-foreground">Carrier:</span>
+          <span className="text-foreground">{money0(load.carrier_pay)}</span>
+        </p>
+      )}
+    </>
+  );
+}
 
 // Shared list for Leads / Quotes / Orders — one query path, msgplane column
 // layout. Orders get sub-status tabs; Leads and Quotes get the working-queue
@@ -63,12 +90,17 @@ export async function PipelineList({
   const endOfTodayIso = endOfToday.toISOString();
 
   // Which orders have carrier offers logged — feeds msgplane's Requests tab
-  // (filter + count). Only the order stage pays for this query; RLS scopes it.
+  // (filter, count badge, and the circled per-row offer count). Only the
+  // order stage pays for this query; RLS scopes it.
   const { data: reqRows } =
     stage === "order"
       ? await supabase.from("load_requests").select("load_id")
       : { data: [] as { load_id: string }[] };
   const requestLoadIds = [...new Set((reqRows ?? []).map((r) => r.load_id))];
+  const requestCountByLoad = new Map<string, number>();
+  for (const r of reqRows ?? []) {
+    requestCountByLoad.set(r.load_id, (requestCountByLoad.get(r.load_id) ?? 0) + 1);
+  }
 
   let query = supabase.from(table).select("*").limit(200);
   if (activeTab.notSigned) {
@@ -139,6 +171,9 @@ export async function PipelineList({
 
   const loadIds = loads.map((l) => l.id);
   const customerIds = [...new Set(loads.map((l) => l.customer_id).filter(Boolean))];
+  const carrierIds = activeTab.carrierCol
+    ? [...new Set(loads.map((l) => l.carrier_id).filter(Boolean) as string[])]
+    : [];
 
   const [
     { data: customers },
@@ -146,6 +181,7 @@ export async function PipelineList({
     { data: vehicles },
     { data: unreadRows },
     { data: noteRows },
+    { data: carrierRows },
   ] = await Promise.all([
       customerIds.length
         ? supabase.from("customers").select("id, contact_name, phone, email").in("id", customerIds)
@@ -169,9 +205,21 @@ export async function PipelineList({
       loadIds.length
         ? supabase.from("load_notes").select("load_id").in("load_id", loadIds)
         : Promise.resolve({ data: [] as { load_id: string }[] }),
+      // The Carrier column (Not Signed / Dispatched / Picked-Up / Hold /
+      // Archived tabs): assigned carrier's name + phone, msgplane-style.
+      carrierIds.length
+        ? supabase.from("carriers").select("id, company_name, phone").in("id", carrierIds)
+        : Promise.resolve({
+            data: [] as { id: string; company_name: string; phone: string | null }[],
+          }),
     ]);
 
   const customerById = new Map((customers ?? []).map((c) => [c.id, c]));
+  const carrierById = new Map(
+    ((carrierRows ?? []) as { id: string; company_name: string; phone: string | null }[]).map(
+      (c) => [c.id, c]
+    )
+  );
   const repById = new Map(
     ((reps ?? []) as Pick<Profile, "id" | "full_name" | "email">[]).map((r) => [r.id, r])
   );
@@ -221,9 +269,6 @@ export async function PipelineList({
     };
   };
 
-  // msgplane's money style: "Tariff:$500" — whole dollars, no separators.
-  const money0 = (v: number | null | undefined) =>
-    v == null ? "—" : `$${Math.round(v)}`;
   // Date-only columns are calendar dates — parse locally so "2026-08-03"
   // never renders as Aug 2 in US timezones.
   const usDateOnly = (v: string | null) => {
@@ -234,6 +279,22 @@ export async function PipelineList({
   const statusText = (status: LoadStatus) => {
     if (status === "hold" && stage === "order") return "on-hold-order";
     return status.replace(/_/g, "-");
+  };
+
+  // The tab's renamed date column value: timestamps get the 2-line
+  // date + time treatment, date-only fields a single line.
+  const tabDate = (load: Load): { date: string; time: string | null } | null => {
+    const field = stage === "order" ? (activeTab.dateCol?.field ?? "created_at") : "created_at";
+    const raw =
+      field === "posted"
+        ? (load.posted_to_central_dispatch_at ?? load.posted_to_super_dispatch_at)
+        : ((load as unknown as Record<string, string | null>)[field] ?? null);
+    if (!raw) return null;
+    if (raw.includes("T")) {
+      const dt = dateTime(raw);
+      return { date: dt.date, time: dt.time };
+    }
+    return { date: usDateOnly(raw), time: null };
   };
 
   const repsForBar = ((reps ?? []) as Pick<Profile, "id" | "full_name" | "email">[]).map((r) => ({
@@ -251,8 +312,8 @@ export async function PipelineList({
       {/* msgplane tab bar: plain labels, coral active pill, a count badge
           ONLY where attention is needed (their Issues-style badge). */}
       {tabs.length > 1 && (
-        <div className="overflow-x-auto border-b pb-1">
-          <div className="flex items-center gap-1">
+        <div className="flex items-center justify-between gap-3 border-b pb-1">
+          <div className="flex items-center gap-1 overflow-x-auto">
             {tabs.map((t) => {
               const active = activeTab.key === t.key;
               const count = tabCount(t);
@@ -284,6 +345,14 @@ export async function PipelineList({
               );
             })}
           </div>
+          {/* msgplane's top-right list controls: rep filter + "0-100 ›". */}
+          <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
+            {canSeeMargin && (
+              <RepSelect reps={repsForBar} current={rep} profileId={profile.id} />
+            )}
+            <span className="tabular-nums">0-{loads.length}</span>
+            <span aria-hidden="true">›</span>
+          </div>
         </div>
       )}
 
@@ -292,20 +361,36 @@ export async function PipelineList({
       <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
         <table className="w-full border-collapse text-[15px]">
           <thead>
-            {/* msgplane header row: quiet Title-case labels, no shouting. */}
+            {/* msgplane header row: quiet Title-case labels; the date column
+                is renamed per tab (Converted/Posted/Sent/Signed/Delivered…),
+                and the parked/dispatched tabs add a Carrier column. Quotes
+                order theirs: Quote money, then Est. Ship, then Status. */}
             <tr className="border-b text-left text-sm font-normal text-muted-foreground [&>th]:font-normal">
               <th className="w-8 px-2 py-3">
                 <SelectAllCheckbox ids={loadIds} />
               </th>
               <th className="px-3 py-3">ID</th>
-              <th className="px-3 py-3">{stage === "order" ? "Converted" : "Quoted"}</th>
+              <th className="px-3 py-3">
+                {stage === "order" ? (activeTab.dateCol?.label ?? "Converted") : "Quoted"}
+              </th>
               <th className="px-3 py-3">Notes</th>
               <th className="px-3 py-3">Assigned to</th>
               <th className="px-3 py-3">Shipper</th>
               <th className="px-3 py-3">Vehicles</th>
               <th className="px-3 py-3">Orig/Dest</th>
-              <th className="px-3 py-3">{stage === "order" ? "1st. Avail" : "Est. Ship Date"}</th>
-              <th className="px-3 py-3">Quote</th>
+              {stage === "order" ? (
+                <>
+                  <th className="px-3 py-3">1st. Avail</th>
+                  {activeTab.carrierCol && <th className="px-3 py-3">Carrier</th>}
+                  <th className="px-3 py-3">Quote</th>
+                </>
+              ) : (
+                <>
+                  <th className="px-3 py-3">Quote</th>
+                  <th className="px-3 py-3">Est. Ship</th>
+                  <th className="px-3 py-3">Status</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -313,7 +398,8 @@ export async function PipelineList({
               const customer = customerById.get(load.customer_id);
               const rp = load.sales_owner_id ? repById.get(load.sales_owner_id) : undefined;
               const loadVehicles = vehiclesByLoad.get(load.id) ?? [];
-              const created = dateTime(load.created_at);
+              const colDate = tabDate(load);
+              const rowCarrier = load.carrier_id ? carrierById.get(load.carrier_id) : undefined;
               return (
                 // Plain white rows with a thin rule — the msgplane look.
                 <tr
@@ -348,8 +434,24 @@ export async function PipelineList({
                     )}
                   </td>
                   <td className="whitespace-nowrap px-3 py-4">
-                    <p className="tabular-nums text-foreground">{created.date}</p>
-                    <p className="text-[13px] tabular-nums text-muted-foreground">{created.time}</p>
+                    {colDate ? (
+                      <>
+                        <p className="tabular-nums text-foreground">{colDate.date}</p>
+                        {colDate.time && (
+                          <p className="text-[13px] tabular-nums text-muted-foreground">
+                            {colDate.time}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-muted-foreground">—</p>
+                    )}
+                    {/* Requests tab: msgplane's circled offer count under the date. */}
+                    {activeTab.requestCount && (requestCountByLoad.get(load.id) ?? 0) > 0 && (
+                      <span className="mt-1 inline-flex size-5 items-center justify-center rounded-full border border-foreground text-[12px] font-semibold tabular-nums">
+                        {requestCountByLoad.get(load.id)}
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-4">
                     {/* Stacked counters, msgplane-style: notes (click to read
@@ -466,32 +568,55 @@ export async function PipelineList({
                       {load.delivery_city || "—"} {load.delivery_state || ""} {load.delivery_zip || ""}
                     </p>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-4 tabular-nums text-foreground">
-                    {usDateOnly(load.pickup_ready_date)}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-4 tabular-nums">
-                    {/* msgplane money: "Tariff:$500" — tight, whole dollars. */}
-                    <p>
-                      <span className="text-muted-foreground">Tariff:</span>
-                      <span className="text-foreground">{money0(load.customer_rate)}</span>
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Deposit:</span>
-                      <span className="text-foreground">{money0(load.deposit_amount)}</span>
-                    </p>
-                    {canSeeMargin && load.carrier_pay != null && (
-                      <p>
-                        <span className="text-muted-foreground">Carrier:</span>
-                        <span className="text-foreground">{money0(load.carrier_pay)}</span>
-                      </p>
-                    )}
-                  </td>
+                  {stage === "order" ? (
+                    <>
+                      <td className="whitespace-nowrap px-3 py-4 tabular-nums text-foreground">
+                        {usDateOnly(load.pickup_ready_date)}
+                      </td>
+                      {activeTab.carrierCol && (
+                        <td className="px-3 py-4">
+                          {rowCarrier ? (
+                            <>
+                              <Link
+                                href={`/carriers/${rowCarrier.id}`}
+                                className="text-primary hover:underline"
+                              >
+                                {rowCarrier.company_name}
+                              </Link>
+                              {rowCarrier.phone && (
+                                <p className="text-[13px] tabular-nums text-muted-foreground">
+                                  {formatPhone(rowCarrier.phone)}
+                                </p>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      )}
+                      <td className="whitespace-nowrap px-3 py-4 tabular-nums">
+                        <QuoteCell load={load} canSeeMargin={canSeeMargin} />
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="whitespace-nowrap px-3 py-4 tabular-nums">
+                        <QuoteCell load={load} canSeeMargin={canSeeMargin} />
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-4 tabular-nums text-foreground">
+                        {usDateOnly(load.pickup_ready_date)}
+                      </td>
+                      <td className="px-3 py-4 lowercase text-muted-foreground">
+                        {statusText(load.status)}
+                      </td>
+                    </>
+                  )}
                 </tr>
               );
             })}
             {loads.length === 0 && (
               <tr>
-                <td colSpan={10}>
+                <td colSpan={11}>
                   {activeTab.followUpDue ? (
                     <EmptyState
                       icon={CalendarCheck2}
