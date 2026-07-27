@@ -16,20 +16,30 @@ export function VehiclePhoto({
   model,
   type,
   className,
+  vehicleId,
+  hasOverride = false,
 }: {
   year?: number | null;
   make?: string | null;
   model?: string | null;
   type: VehicleType | string;
   className?: string;
+  /** When this vehicle carries an uploaded photo, it wins over the lookup. */
+  vehicleId?: string;
+  hasOverride?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
 
-  if (failed || !make?.trim() || !model?.trim()) {
+  // An uploaded photo works even when make/model are blank or unknown.
+  if (failed || (!hasOverride && (!make?.trim() || !model?.trim()))) {
     return <VehicleThumb type={type} className={className} />;
   }
 
-  const src = `/api/vehicles/image?${new URLSearchParams({ make, model })}`;
+  const query = new URLSearchParams();
+  if (hasOverride && vehicleId) query.set("vehicleId", vehicleId);
+  if (make?.trim()) query.set("make", make);
+  if (model?.trim()) query.set("model", model);
+  const src = `/api/vehicles/image?${query}`;
   const alt = [year, make, model].filter(Boolean).join(" ");
   return (
     <span

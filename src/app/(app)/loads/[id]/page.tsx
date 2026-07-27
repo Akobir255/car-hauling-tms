@@ -2,7 +2,6 @@ import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { VehiclePhoto } from "@/components/vehicle-photo";
 import { requireProfile } from "@/lib/auth";
 import { StatusBadge } from "@/components/status-badge";
 import { DeleteButton } from "@/components/delete-button";
@@ -32,6 +31,7 @@ import { OrderActionBar } from "./order-action-bar";
 import { EsignPanel } from "./esign-panel";
 import { OrderMoreMenu } from "./order-more-menu";
 import { NotesThread } from "./notes-thread";
+import { VehiclePhotoEditor } from "./vehicle-photo-editor";
 import { LoadRequestsBand } from "./load-requests";
 import { deleteLoad } from "../actions";
 
@@ -350,13 +350,15 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                 </p>
                 {vehicles.length === 0 && <p className="text-sm text-muted-foreground">No vehicles.</p>}
                 {vehicles.map((v) => (
-                  <div key={v.id} className="flex items-center gap-3">
-                    <VehiclePhoto
+                  <div key={v.id} className="flex items-start gap-3">
+                    <VehiclePhotoEditor
+                      loadId={load.id}
+                      vehicleId={v.id}
                       year={v.year}
                       make={v.make}
                       model={v.model}
                       type={v.vehicle_type}
-                      className="h-12 w-[4.5rem] rounded-md"
+                      hasOverride={Boolean(v.photo_path)}
                     />
                     <div>
                       <p className="text-[15px] font-medium">

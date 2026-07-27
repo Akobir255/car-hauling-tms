@@ -19,6 +19,39 @@ const MISS_CACHE = "public, s-maxage=3600";
 type WikiPage = { title?: string; thumbnail?: { source?: string } };
 
 export async function GET(req: NextRequest) {
+  // An uploaded photo always wins over the make/model lookup. The file sits
+  // in the PRIVATE bucket, so it is fetched server-side with the service
+  // role and streamed from here — the bucket never becomes public, and the
+  // no-login contract page can still show the picture.
+  const vehicleId = req.nextUrl.searchParams.get("vehicleId");
+  if (vehicleId && /^[0-9a-f-]{36}$/i.test(vehicleId)) {
+    try {
+      const { createAdminClient } = await import("@/lib/supabase/admin");
+      const admin = createAdminClient();
+      const { data: vehicle } = await admin
+        .from("load_vehicles")
+        .select("photo_path")
+        .eq("id", vehicleId)
+        .maybeSingle();
+      if (vehicle?.photo_path) {
+        const { data: file } = await admin.storage.from("load-files").download(vehicle.photo_path);
+        if (file) {
+          return new NextResponse(file, {
+            headers: {
+              "Content-Type": file.type || "image/jpeg",
+              // Private to the viewer's browser: an override is customer
+              // content, not a public model shot.
+              "Cache-Control": "private, max-age=3600",
+            },
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Vehicle photo override failed:", err);
+      // fall through to the make/model lookup
+    }
+  }
+
   const params = normalizeVehicleImageParams(
     req.nextUrl.searchParams.get("make"),
     req.nextUrl.searchParams.get("model")

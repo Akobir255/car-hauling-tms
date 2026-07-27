@@ -168,6 +168,8 @@ export interface LoadVehicle {
   plate_state: string | null;
   lot_number: string | null;
   color: string | null;
+  /** Uploaded photo in the private bucket; overrides the make/model lookup. */
+  photo_path: string | null;
   notes: string | null;
   created_at: string;
 }
