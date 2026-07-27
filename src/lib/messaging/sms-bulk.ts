@@ -54,6 +54,18 @@ export class SmsProviderOutageError extends Error {
   }
 }
 
+// Thrown when the recipient is on the do-not-text list. Distinct from a failed
+// send: nothing went wrong, the message was correctly refused. Callers filter
+// suppressed numbers out before they get here, so this firing means a call site
+// skipped that filter — it stays as the backstop that makes the mistake
+// harmless rather than expensive.
+export class SmsSuppressedError extends Error {
+  constructor(public to: string) {
+    super("Recipient has opted out of SMS");
+    this.name = "SmsSuppressedError";
+  }
+}
+
 export type SmsOutcome = {
   status: "sent" | "queued" | "failed";
   providerMessageId: string | null;
@@ -127,6 +139,14 @@ export async function runSmsChunk(
           // The provider is down, not this number — stop instead of marking
           // every remaining recipient permanently "failed".
           return { outcomes, retryAfterMs: null, providerError: err.message };
+        }
+        if (err instanceof SmsSuppressedError) {
+          // Refused on purpose. Logged as "failed" because that is the only
+          // terminal status the messages table has, but it is not an error to
+          // chase — it means the guard did its job.
+          console.warn(`SMS to ${r.to} refused: recipient opted out.`);
+          outcomes.push({ status: "failed", providerMessageId: null });
+          break;
         }
         // A real send failure for THIS number (bad number, blocked, etc.) —
         // record it and keep going; one dud must not sink the blast.

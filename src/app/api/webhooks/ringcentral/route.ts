@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getWebhookVerificationToken, toE164 } from "@/lib/messaging/ringcentral";
 import { optKeyword } from "@/lib/messaging/opt-keywords";
+import { suppressPhone, unsuppressPhone } from "@/lib/messaging/suppression";
 
 // Public endpoint — RingCentral POSTs here for every new SMS on our number.
 // Auth model: no user session; instead every notification must carry the
@@ -203,12 +204,28 @@ export async function POST(request: NextRequest) {
     loadId = loads?.[0]?.id ?? null;
   }
 
-  // STOP/START compliance — inbound only — flip the opt-out flag.
+  // STOP/START compliance — inbound only.
+  //
+  // The suppression list is keyed by phone, so it works even when the sender
+  // matches no customer (a stale lead, a resold number, a wrong number). The
+  // customer flag is kept in step for the UI, but it is no longer what stops
+  // the send — that used to leave un-matched STOPs silently ignored.
   const keyword = isInbound ? optKeyword(text) : null;
+  if (keyword && counterparty) {
+    if (keyword === "stop") {
+      await suppressPhone(counterparty, "stop_reply", text);
+    } else {
+      await unsuppressPhone(counterparty);
+    }
+  }
   if (customerId && keyword) {
     await supabase
       .from("customers")
-      .update({ sms_opt_out: keyword === "stop" })
+      .update({
+        sms_opt_out: keyword === "stop",
+        sms_opt_out_at: keyword === "stop" ? new Date().toISOString() : null,
+        sms_opt_out_source: keyword === "stop" ? (text || "STOP").slice(0, 500) : null,
+      })
       .eq("id", customerId);
   }
 

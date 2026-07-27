@@ -3,7 +3,12 @@
 // four RINGCENTRAL_* env vars are set; until then isConfigured() is false
 // and bulk sends stay logged as `queued` for a later retry.
 
-import { SmsProviderOutageError, SmsRateLimitError } from "@/lib/messaging/sms-bulk";
+import {
+  SmsProviderOutageError,
+  SmsRateLimitError,
+  SmsSuppressedError,
+} from "@/lib/messaging/sms-bulk";
+import { isSuppressed } from "@/lib/messaging/suppression";
 
 function parseRetryAfterMs(res: Response): number | null {
   const seconds = Number.parseInt(res.headers.get("Retry-After") ?? "", 10);
@@ -67,6 +72,13 @@ async function getAccessToken(): Promise<string> {
 export async function sendSms(to: string, text: string): Promise<{ providerMessageId: string }> {
   if (!isSmsConfigured()) {
     throw new Error("RingCentral is not configured");
+  }
+  // Last line of defense, before the token is even fetched. Every outbound
+  // text in the app funnels through here, so a number on the do-not-text list
+  // cannot be reached by any call site, present or future — including one that
+  // forgets to check, or one texting a number with no customer row at all.
+  if (await isSuppressed(to)) {
+    throw new SmsSuppressedError(to);
   }
   const token = await getAccessToken();
   // Network failure or a hung socket is a provider problem (typed so bulk

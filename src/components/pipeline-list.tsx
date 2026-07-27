@@ -6,6 +6,7 @@ import { RowMessageButton } from "@/components/messaging/row-message-buttons";
 import { NotesQuickButton } from "@/components/messaging/notes-quick";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { phoneDigits, suppressedAmong } from "@/lib/messaging/suppression";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatPhone } from "@/lib/format";
 import { endOfBusinessDay } from "@/lib/dates";
@@ -301,7 +302,17 @@ export async function PipelineList({
           }),
     ]);
 
-  const customerById = new Map((customers ?? []).map((c) => [c.id, c]));
+  // The do-not-text list is keyed by phone number, so it flags the same human
+  // arriving as a brand-new row from a lead generator — which the per-row
+  // sms_opt_out flag cannot. Merged in here so the row shows "opted out"
+  // BEFORE a rep drafts a text that the send guard would refuse anyway.
+  const suppressedPhones = await suppressedAmong((customers ?? []).map((c) => c.phone));
+  const customerById = new Map(
+    (customers ?? []).map((c) => [
+      c.id,
+      { ...c, sms_opt_out: c.sms_opt_out || suppressedPhones.has(phoneDigits(c.phone)) },
+    ])
+  );
   const carrierById = new Map(
     ((carrierRows ?? []) as { id: string; company_name: string; phone: string | null }[]).map(
       (c) => [c.id, c]

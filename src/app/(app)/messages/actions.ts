@@ -18,7 +18,8 @@ import {
   toE164,
 } from "@/lib/messaging/ringcentral";
 import { isEmailConfigured, isPlausibleEmail, sendEmailBatch } from "@/lib/messaging/email";
-import { SMS_CHUNK_MAX, runSmsChunk } from "@/lib/messaging/sms-bulk";
+import { SMS_CHUNK_MAX, SmsSuppressedError, runSmsChunk } from "@/lib/messaging/sms-bulk";
+import { isSuppressed, phoneDigits, suppressedAmong } from "@/lib/messaging/suppression";
 import type { Customer, Load } from "@/types/database";
 
 export type MessageFormState = {
@@ -145,11 +146,22 @@ async function resolveRecipients(opts: {
     }
   }
 
+  // The do-not-text list is keyed by number, not by customer row, so it also
+  // catches the same human arriving under a fresh row from a lead generator —
+  // which the per-row flag never could. One query for the whole blast.
+  const suppressed = isEmail
+    ? new Set<string>()
+    : await suppressedAmong(customers.map((c) => c.phone));
+
   let skipped = customerIds.length - customers.length;
   const recipients: Recipient[] = [];
   for (const customer of customers) {
     // Per-channel opt-out is legally required for SMS and expected for email.
     if (isEmail ? customer.email_opt_out : customer.sms_opt_out) {
+      skipped++;
+      continue;
+    }
+    if (!isEmail && suppressed.has(phoneDigits(customer.phone))) {
       skipped++;
       continue;
     }
@@ -428,6 +440,9 @@ export async function sendReply(
   if (customer.sms_opt_out) {
     return { error: "This customer has opted out of SMS (replied STOP)." };
   }
+  if (await isSuppressed(customer.phone)) {
+    return { error: "This number is on the do-not-text list (replied STOP)." };
+  }
   const to = toE164(customer.phone);
   if (!to) return { error: "Customer has no valid US phone number." };
   if (!isSmsConfigured()) return { error: "RingCentral is not connected." };
@@ -437,6 +452,9 @@ export async function sendReply(
     const result = await sendSms(to, parsed.data.body);
     providerMessageId = result.providerMessageId;
   } catch (err) {
+    if (err instanceof SmsSuppressedError) {
+      return { error: "This number is on the do-not-text list (replied STOP)." };
+    }
     console.error(`SMS reply to ${to} failed:`, err);
     return { error: "Send failed — RingCentral rejected the message." };
   }

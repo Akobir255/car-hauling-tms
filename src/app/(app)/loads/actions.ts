@@ -11,6 +11,7 @@ import { isSmsConfigured, sendSms, toE164 } from "@/lib/messaging/ringcentral";
 import { isEmailConfigured, isPlausibleEmail, sendEmail, sendEmailBatch } from "@/lib/messaging/email";
 import { buildContext, renderTemplate } from "@/lib/messaging/render";
 import { SMS_CHUNK_MAX, runSmsChunk } from "@/lib/messaging/sms-bulk";
+import { isSuppressed, phoneDigits, suppressedAmong } from "@/lib/messaging/suppression";
 import { LOAD_STATUSES, type Customer, type Load, type LoadStatus } from "@/types/database";
 
 export type LoadFormState = { error: string | null };
@@ -943,6 +944,9 @@ async function generateAndSendContract(
   if (via.sms) {
     const to = toE164(customer?.phone);
     if (customer?.sms_opt_out) return { error: "Customer opted out of SMS — can't text the link.", link };
+    if (await isSuppressed(customer?.phone)) {
+      return { error: "That number is on the do-not-text list — can't text the link.", link };
+    }
     if (!to) return { error: "No valid customer phone on file to text the link.", link };
     if (!isSmsConfigured()) return { error: "SMS isn't connected yet — copy the link and send it manually.", link };
     if (!base) return { error: "Set NEXT_PUBLIC_APP_URL so the link is a full URL.", link };
@@ -1566,13 +1570,17 @@ export async function bulkSmsChunk(loadIds: string[], body: string): Promise<Bul
     : { data: [] as { id: string; phone: string | null; sms_opt_out: boolean }[] };
   const custById = new Map((customers ?? []).map((c) => [c.id, c]));
 
+  // Checked by number as well as by row: the same person often has several
+  // orders, and they opted out of being texted, not out of one order.
+  const suppressed = await suppressedAmong((customers ?? []).map((c) => c.phone));
+
   // RLS-hidden loads count as skipped so the operator's totals reconcile.
   let skipped = loadIds.length - (loads ?? []).length;
   const recipients: { loadId: string; customerId: string; to: string; text: string }[] = [];
   for (const l of loads ?? []) {
     const c = custById.get(l.customer_id);
     const to = toE164(c?.phone);
-    if (!c || c.sms_opt_out || !to) {
+    if (!c || c.sms_opt_out || !to || suppressed.has(phoneDigits(c.phone))) {
       skipped++;
       continue;
     }

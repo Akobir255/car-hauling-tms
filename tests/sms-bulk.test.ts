@@ -7,6 +7,7 @@ import {
   SMS_SEND_INTERVAL_MS,
   SmsProviderOutageError,
   SmsRateLimitError,
+  SmsSuppressedError,
   chunkIds,
   runSmsChunk,
   type SmsChunkDeps,
@@ -81,6 +82,18 @@ describe("runSmsChunk failure handling", () => {
     const run = await runSmsChunk(recipients(3), deps);
     expect(run.outcomes.map((o) => o.status)).toEqual(["sent", "failed", "sent"]);
     expect(run.retryAfterMs).toBeNull();
+  });
+
+  it("refuses an opted-out recipient without retrying and keeps the blast going", async () => {
+    const { deps, sendLog } = harness((to) =>
+      to.endsWith("1") ? new SmsSuppressedError(to) : "ok"
+    );
+    const run = await runSmsChunk(recipients(3), deps);
+
+    expect(run.outcomes.map((o) => o.status)).toEqual(["sent", "failed", "sent"]);
+    // Attempted exactly once: a STOP is not a transient error to retry around.
+    expect(sendLog.filter((to) => to.endsWith("1"))).toHaveLength(1);
+    expect(run.providerError).toBeNull();
   });
 
   it("honors Retry-After on a 429 and retries that message once", async () => {
