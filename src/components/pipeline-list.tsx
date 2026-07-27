@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { SelectionProvider } from "@/components/pipeline/selection-context";
 import { RepSelect } from "@/components/pipeline/rep-select";
 import { QuickView } from "@/components/pipeline/quick-view";
+import { FilterBar, type FilterValues } from "@/components/pipeline/filter-bar";
 import { RowCheckbox, SelectAllCheckbox } from "@/components/pipeline/row-checkbox";
 import { BulkActionBar } from "@/components/pipeline/bulk-action-bar";
 import { EmptyState } from "@/components/empty-state";
@@ -69,6 +70,7 @@ export async function PipelineList({
   tab,
   rep,
   page: pageParam,
+  filters = {},
 }: {
   stage: PipelineStage;
   title: string;
@@ -76,6 +78,7 @@ export async function PipelineList({
   tab?: string;
   rep?: string;
   page?: string;
+  filters?: FilterValues;
 }) {
   const page = Math.max(0, Number.parseInt(pageParam ?? "0", 10) || 0);
   const profile = await requireProfile();
@@ -113,10 +116,77 @@ export async function PipelineList({
     requestCountByLoad.set(r.load_id, (requestCountByLoad.get(r.load_id) ?? 0) + 1);
   }
 
+  // Filter support. Opt-out lives on the CUSTOMER and documents/vehicle
+  // condition on child tables, so each is resolved to an id list first and
+  // applied to the loads query. These sets are small in practice (opt-outs
+  // and files are the exception, not the rule).
+  const NONE = ["00000000-0000-0000-0000-000000000000"];
+  let optOutCustomerIds: string[] | null = null;
+  if (filters.optout) {
+    let cq = supabase.from("customers").select("id");
+    if (filters.optout === "sms") cq = cq.eq("sms_opt_out", true);
+    else if (filters.optout === "email") cq = cq.eq("email_opt_out", true);
+    else if (filters.optout === "blacklisted") cq = cq.eq("blacklisted", true);
+    else cq = cq.or("sms_opt_out.eq.true,email_opt_out.eq.true,blacklisted.eq.true");
+    const { data } = await cq.limit(20000);
+    optOutCustomerIds = (data ?? []).map((c) => c.id);
+  }
+
+  let docLoadIds: string[] | null = null;
+  if (filters.docs) {
+    const { data } = await supabase
+      .from("documents")
+      .select("entity_id")
+      .eq("entity_type", "load")
+      .limit(20000);
+    docLoadIds = [...new Set((data ?? []).map((d) => d.entity_id as string))];
+  }
+
+  let nonRunningLoadIds: string[] | null = null;
+  if (filters.vehicles === "nonrunning") {
+    const { data } = await supabase
+      .from("load_vehicles")
+      .select("load_id")
+      .eq("condition", "non_running")
+      .limit(20000);
+    nonRunningLoadIds = [...new Set((data ?? []).map((v) => v.load_id as string))];
+  }
+
   // One place that knows how a tab is filtered — used by the page query AND
   // by each tab's exact count, so the number on the tab and the rows in the
   // table can never disagree.
   type LoadQuery = ReturnType<ReturnType<typeof supabase.from>["select"]>;
+
+  const applyUserFilters = (q: LoadQuery): LoadQuery => {
+    let out = q;
+    if (optOutCustomerIds) {
+      out =
+        filters.optout === "none"
+          ? optOutCustomerIds.length
+            ? out.not("customer_id", "in", `(${optOutCustomerIds.join(",")})`)
+            : out
+          : out.in("customer_id", optOutCustomerIds.length ? optOutCustomerIds : NONE);
+    }
+    if (filters.signed === "yes") out = out.not("date_signed", "is", null);
+    else if (filters.signed === "sent") {
+      out = out.not("contract_sent_at", "is", null).is("date_signed", null);
+    } else if (filters.signed === "no") out = out.is("contract_sent_at", null);
+
+    if (docLoadIds) {
+      out =
+        filters.docs === "yes"
+          ? out.in("id", docLoadIds.length ? docLoadIds : NONE)
+          : docLoadIds.length
+            ? out.not("id", "in", `(${docLoadIds.join(",")})`)
+            : out;
+    }
+    if (filters.vehicles === "enclosed") out = out.eq("transport_type", "enclosed");
+    else if (nonRunningLoadIds) {
+      out = out.in("id", nonRunningLoadIds.length ? nonRunningLoadIds : NONE);
+    }
+    return out;
+  };
+
   const applyTabFilter = (q: LoadQuery, t: OrderTab): LoadQuery => {
     let out = q;
     if (t.notSigned) {
@@ -147,7 +217,7 @@ export async function PipelineList({
       out = out.not("follow_up_at", "is", null).lte("follow_up_at", endOfTodayIso);
     }
     if (canSeeMargin && rep) out = out.eq("sales_owner_id", rep);
-    return out;
+    return applyUserFilters(out);
   };
 
   // 100 rows a page, like the system this replaces.
@@ -190,9 +260,20 @@ export async function PipelineList({
     { data: carrierRows },
   ] = await Promise.all([
       customerIds.length
-        ? supabase.from("customers").select("id, contact_name, phone, email").in("id", customerIds)
+        ? supabase
+            .from("customers")
+            .select("id, contact_name, phone, email, sms_opt_out, email_opt_out, blacklisted")
+            .in("id", customerIds)
         : Promise.resolve({
-            data: [] as { id: string; contact_name: string; phone: string | null; email: string | null }[],
+            data: [] as {
+              id: string;
+              contact_name: string;
+              phone: string | null;
+              email: string | null;
+              sms_opt_out: boolean;
+              email_opt_out: boolean;
+              blacklisted: boolean;
+            }[],
           }),
       supabase.from("profiles").select("id, full_name, email").order("full_name"),
       loadIds.length
@@ -390,6 +471,8 @@ export async function PipelineList({
         </div>
       )}
 
+      <FilterBar values={filters} matched={totalRows} />
+
       {error && <p className="text-sm text-destructive">{error.message}</p>}
 
       <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
@@ -526,28 +609,62 @@ export async function PipelineList({
                         >
                           <User className="size-4 shrink-0 text-blue-600 dark:text-blue-400" aria-hidden="true" />
                           {customer.contact_name}
+                          {/* Anyone who asked us to stop, marked right on the
+                              row so nobody texts them by accident. */}
+                          {customer.blacklisted && (
+                            <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-white">
+                              blacklisted
+                            </span>
+                          )}
                         </Link>
                         {customer.phone && (
                           <p className="flex items-center gap-1.5 tabular-nums text-foreground">
                             <Phone className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                            {formatPhone(customer.phone)}
-                            <RowMessageButton
-                              channel="sms"
-                              loadId={load.id}
-                              customerId={customer.id}
-                              customerName={customer.contact_name}
-                            />
+                            <span className={customer.sms_opt_out ? "line-through opacity-60" : undefined}>
+                              {formatPhone(customer.phone)}
+                            </span>
+                            {customer.sms_opt_out ? (
+                              <span
+                                title="Replied STOP — texting this number is not allowed"
+                                className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-red-700 ring-1 ring-inset ring-red-600/30 dark:bg-red-950 dark:text-red-300"
+                              >
+                                STOP
+                              </span>
+                            ) : (
+                              <RowMessageButton
+                                channel="sms"
+                                loadId={load.id}
+                                customerId={customer.id}
+                                customerName={customer.contact_name}
+                              />
+                            )}
                           </p>
                         )}
                         {customer.email && (
                           <p className="flex items-center gap-1.5 text-foreground">
-                            <RowMessageButton
-                              channel="email"
-                              loadId={load.id}
-                              customerId={customer.id}
-                              customerName={customer.contact_name}
-                            />
-                            <span className="max-w-44 truncate">{customer.email}</span>
+                            {customer.email_opt_out ? (
+                              <span
+                                title="Unsubscribed from email"
+                                className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-red-700 ring-1 ring-inset ring-red-600/30 dark:bg-red-950 dark:text-red-300"
+                              >
+                                UNSUB
+                              </span>
+                            ) : (
+                              <RowMessageButton
+                                channel="email"
+                                loadId={load.id}
+                                customerId={customer.id}
+                                customerName={customer.contact_name}
+                              />
+                            )}
+                            <span
+                              className={cn(
+                                "max-w-44 truncate",
+                                customer.email_opt_out && "line-through opacity-60"
+                              )}
+                            >
+                              {customer.email}
+                            </span>
                           </p>
                         )}
                         {/* The old system's per-row "quick view": a popup of
