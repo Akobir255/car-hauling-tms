@@ -2,16 +2,38 @@
 
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { CreditCard, SquarePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatDateTime } from "@/lib/format";
-import { sendContract, markContractSigned, voidSignature, type EsignState } from "../actions";
+import { Input } from "@/components/ui/input";
+import { FieldLabel } from "@/components/form-section";
+import { cn } from "@/lib/utils";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
+import type { ContractVersion } from "@/types/database";
+import {
+  sendContract,
+  changeTermsAndSend,
+  makeContractCurrent,
+  markContractSigned,
+  voidSignature,
+  type EsignState,
+} from "../actions";
 
 export type ContractEventRow = { event: string; ip: string | null; created_at: string };
+export type CardOnFile = {
+  brand: string | null;
+  last4: string;
+  exp_month: number | null;
+  exp_year: number | null;
+  cardholder_first: string;
+  cardholder_last: string;
+};
 
 const initial: EsignState = { error: null };
 
-// The msgplane-style E-Sign row: status + Send / SMS / Resend / View / Mark
-// signed. Signing itself happens on the public /sign/<token> page.
+// msgplane's E-Sign band: "⊞ Customer Contract" with a row of small boxed
+// actions — open / resend / sms / view all / change terms & send (red).
+// "view all" expands the version list + the who-opened-it audit;
+// "change terms & send" mints a NEW contract version (fresh token).
 export function EsignPanel({
   loadId,
   token,
@@ -21,6 +43,9 @@ export function EsignPanel({
   signedName,
   signedIp,
   signedEmail,
+  requiresCard,
+  card,
+  versions = [],
   events = [],
 }: {
   loadId: string;
@@ -31,25 +56,35 @@ export function EsignPanel({
   signedName?: string | null;
   signedIp?: string | null;
   signedEmail?: string | null;
+  requiresCard: boolean;
+  card?: CardOnFile | null;
+  versions?: ContractVersion[];
   events?: ContractEventRow[];
 }) {
   const send = sendContract.bind(null, loadId);
   const [state, formAction] = useActionState(send, initial);
   const [pending, start] = useTransition();
+  const [panel, setPanel] = useState<"none" | "all" | "terms">("none");
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (state.error) toast.error(state.error);
-    else if (state.sentVia === "sms") toast.success("Contract texted to the customer.");
+    else if (state.sentVia?.includes("sms")) toast.success("Contract texted to the customer.");
+    else if (state.sentVia) toast.success("Contract emailed to the customer.");
     else if (state.link && !state.error) toast.success("Contract link ready.");
   }, [state]);
 
   const signHref = token ? `/sign/${token}` : null;
+  const boxBtn =
+    "h-8 rounded border bg-card px-3 text-[13px] font-medium lowercase text-foreground shadow-sm transition-colors hover:bg-muted disabled:opacity-40";
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="font-medium">Customer Contract</span>
+        <span className="flex items-center gap-1.5 text-[17px] font-medium text-muted-foreground">
+          <SquarePlus className="size-4" aria-hidden="true" />
+          Customer Contract
+        </span>
         {signedAt ? (
           <span
             className="rounded-full bg-green-600/10 px-2.5 py-0.5 text-xs font-semibold text-green-700 dark:text-green-400"
@@ -67,52 +102,89 @@ export function EsignPanel({
             Not sent
           </span>
         )}
+        {requiresCard && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-blue-600/10 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
+            <CreditCard className="size-3" aria-hidden="true" />
+            card info required
+          </span>
+        )}
+        {card && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold tabular-nums text-foreground">
+            <CreditCard className="size-3" aria-hidden="true" />
+            {(card.brand || "CARD").toUpperCase()} •••• {card.last4}
+            {card.exp_month && card.exp_year
+              ? ` · ${String(card.exp_month).padStart(2, "0")}/${String(card.exp_year).slice(-2)}`
+              : ""}
+          </span>
+        )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 [&_button]:h-8 [&_button]:text-xs [&_button]:font-semibold [&_button]:uppercase [&_button]:tracking-wide">
+      <div className="flex flex-wrap items-center gap-2">
+        {signHref && sentAt && (
+          <a href={signHref} target="_blank" rel="noopener noreferrer" className={cn(boxBtn, "inline-flex items-center")}>
+            open
+          </a>
+        )}
+
         {!signedAt && (
           <>
-            <form action={formAction}>
-              <Button type="submit" size="sm" variant="secondary">
-                {sentAt ? "Change terms & resend" : "Send for signature"}
-              </Button>
-            </form>
+            {!sentAt ? (
+              <>
+                <form action={formAction}>
+                  <input type="hidden" name="require_card" value="0" />
+                  <button type="submit" className={boxBtn}>send</button>
+                </form>
+                <form action={formAction}>
+                  <input type="hidden" name="require_card" value="1" />
+                  <button type="submit" className={boxBtn}>send + card info</button>
+                </form>
+              </>
+            ) : (
+              <form action={formAction}>
+                <button type="submit" className={boxBtn}>resend</button>
+              </form>
+            )}
             <form action={formAction}>
               <input type="hidden" name="via" value="sms" />
-              <Button type="submit" size="sm" variant="outline">
-                SMS
-              </Button>
+              <button type="submit" className={boxBtn}>sms</button>
             </form>
           </>
         )}
 
-        {signHref && (
-          <Button size="sm" variant="outline" render={<a href={signHref} target="_blank" rel="noopener noreferrer" />}>
-            View
-          </Button>
+        <button type="button" className={boxBtn} onClick={() => setPanel(panel === "all" ? "none" : "all")}>
+          view all
+        </button>
+
+        {!signedAt && (
+          <button
+            type="button"
+            onClick={() => setPanel(panel === "terms" ? "none" : "terms")}
+            className={cn(boxBtn, "border-red-300 text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40")}
+          >
+            change terms &amp; send
+          </button>
         )}
 
         {signHref && (
-          <Button
-            size="sm"
-            variant="ghost"
+          <button
+            type="button"
+            className={cn(boxBtn, "border-transparent shadow-none")}
             onClick={() => {
-              // Always derive from the CURRENT token — after "Void signature"
-              // rotates it, the stale action-state link would be a dead URL.
-              const url = `${window.location.origin}${signHref}`;
-              navigator.clipboard?.writeText(url);
+              // Always derive from the CURRENT token — after a version change
+              // rotates it, a stale action-state link would be a dead URL.
+              navigator.clipboard?.writeText(`${window.location.origin}${signHref}`);
               setCopied(true);
               setTimeout(() => setCopied(false), 1500);
             }}
           >
-            {copied ? "Copied" : "Copy link"}
-          </Button>
+            {copied ? "copied" : "copy link"}
+          </button>
         )}
 
-        {canManage && !signedAt && (
-          <Button
-            size="sm"
-            variant="outline"
+        {canManage && !signedAt && sentAt && (
+          <button
+            type="button"
+            className={cn(boxBtn, "border-transparent shadow-none")}
             disabled={pending}
             onClick={() =>
               start(async () => {
@@ -121,69 +193,203 @@ export function EsignPanel({
               })
             }
           >
-            Mark signed
-          </Button>
+            mark signed
+          </button>
         )}
         {canManage && signedAt && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-destructive hover:text-destructive"
+          <button
+            type="button"
+            className={cn(boxBtn, "border-transparent text-destructive shadow-none")}
             disabled={pending}
             onClick={() => {
-              if (!confirm("Void this signature so it can be re-sent?")) return;
+              if (!confirm("Void this signature so a new contract can be sent?")) return;
               start(async () => {
                 await voidSignature(loadId);
                 toast.success("Signature voided.");
               });
             }}
           >
-            Void signature
-          </Button>
+            void signature
+          </button>
         )}
       </div>
 
-      {/* Audit trail: who opened the link, from where, and which IP signed. */}
+      {panel === "terms" && <ChangeTermsPanel loadId={loadId} requiresCard={requiresCard} onDone={() => setPanel("none")} />}
+
+      {panel === "all" && (
+        <ViewAllPanel
+          loadId={loadId}
+          currentToken={token}
+          versions={versions}
+          events={events}
+          canManage={canManage}
+          signed={Boolean(signedAt)}
+        />
+      )}
+
+      {/* Compact audit line, always visible once there's activity. */}
       {(events.length > 0 || signedEmail) && (
-        <div className="space-y-1.5 border-t pt-3 text-xs">
-          <p className="text-muted-foreground">
-            {(() => {
-              const views = events.filter((e) => e.event === "viewed");
-              const ips = new Set(views.map((v) => v.ip).filter(Boolean));
-              const parts: string[] = [];
-              if (views.length > 0) {
-                parts.push(
-                  `Link opened ${views.length}× from ${ips.size} IP${ips.size === 1 ? "" : "s"}`
-                );
-              }
-              if (signedIp) parts.push(`signed from ${signedIp}`);
-              if (signedEmail) parts.push(signedEmail);
-              return parts.join(" · ");
-            })()}
-          </p>
-          {events.length > 0 && (
-            <ul className="space-y-0.5">
-              {events.slice(0, 6).map((e, i) => (
-                <li key={i} className="flex items-center gap-2 tabular-nums text-muted-foreground">
-                  <span
-                    className={
-                      e.event === "signed"
-                        ? "font-bold text-green-700 dark:text-green-400"
-                        : undefined
+        <p className="border-t pt-2.5 text-xs text-muted-foreground">
+          {(() => {
+            const views = events.filter((e) => e.event === "viewed");
+            const ips = new Set(views.map((v) => v.ip).filter(Boolean));
+            const parts: string[] = [];
+            if (views.length > 0) {
+              parts.push(`Link opened ${views.length}× from ${ips.size} IP${ips.size === 1 ? "" : "s"}`);
+            }
+            if (signedIp) parts.push(`signed from ${signedIp}`);
+            if (signedEmail) parts.push(signedEmail);
+            return parts.join(" · ");
+          })()}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// msgplane's "change terms & send": adjust price/deposit, choose whether the
+// signing page asks for card details, and send a brand-new version. The old
+// link dies and any signature is voided — that's the point.
+function ChangeTermsPanel({
+  loadId,
+  requiresCard,
+  onDone,
+}: {
+  loadId: string;
+  requiresCard: boolean;
+  onDone: () => void;
+}) {
+  const [state, formAction, pending] = useActionState(changeTermsAndSend.bind(null, loadId), initial);
+  useEffect(() => {
+    if (state.error) toast.error(state.error);
+    else if (state !== initial) {
+      toast.success("New contract version sent.");
+      onDone();
+    }
+  }, [state, onDone]);
+
+  return (
+    <form action={formAction} className="flex flex-wrap items-end gap-3 rounded-md border bg-muted/40 p-3">
+      <div className="space-y-1">
+        <FieldLabel>New tariff ($)</FieldLabel>
+        <Input name="tariff" inputMode="decimal" placeholder="keep current" className="h-8 w-28" />
+      </div>
+      <div className="space-y-1">
+        <FieldLabel>New deposit ($)</FieldLabel>
+        <Input name="deposit" inputMode="decimal" placeholder="keep current" className="h-8 w-28" />
+      </div>
+      <div className="min-w-40 flex-1 space-y-1">
+        <FieldLabel>Note (shown in view all)</FieldLabel>
+        <Input name="note" maxLength={300} placeholder="What changed…" className="h-8" />
+      </div>
+      <label className="flex items-center gap-1.5 pb-1.5 text-sm">
+        <input type="checkbox" name="require_card" defaultChecked={requiresCard} className="size-4 accent-primary" />
+        Require card info
+      </label>
+      <label className="flex items-center gap-1.5 pb-1.5 text-sm">
+        <input type="checkbox" name="also_sms" className="size-4 accent-primary" />
+        Also SMS
+      </label>
+      <Button type="submit" size="sm" disabled={pending}>
+        {pending ? "Sending…" : "Send new version"}
+      </Button>
+      <p className="basis-full text-xs text-muted-foreground">
+        Sends a fresh signing link. The previous link stops working and any existing signature is voided.
+      </p>
+    </form>
+  );
+}
+
+// msgplane's "view all" popup: every contract version (current one on top,
+// "make current" to restore an older one) and the open/sign audit with a
+// check-location link per IP.
+function ViewAllPanel({
+  loadId,
+  currentToken,
+  versions,
+  events,
+  canManage,
+  signed,
+}: {
+  loadId: string;
+  currentToken: string | null;
+  versions: ContractVersion[];
+  events: ContractEventRow[];
+  canManage: boolean;
+  signed: boolean;
+}) {
+  const [pending, start] = useTransition();
+  return (
+    <div className="space-y-3 rounded-md border bg-muted/40 p-3 text-sm">
+      <div className="space-y-1.5">
+        {versions.length === 0 && (
+          <p className="text-muted-foreground">No contract versions yet — versions appear when a contract is sent.</p>
+        )}
+        {versions.map((v) => {
+          const isCurrent = v.token === currentToken;
+          return (
+            <div key={v.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border bg-card px-3 py-2">
+              <span className={cn("font-semibold", v.signed_at ? "text-green-700 dark:text-green-400" : isCurrent ? "text-primary" : "text-muted-foreground")}>
+                Contract{v.signed_at ? " — signed" : ""}
+              </span>
+              <span className="tabular-nums text-muted-foreground">{formatDateTime(v.sent_at ?? v.created_at)}</span>
+              {v.tariff != null && <span className="tabular-nums">{formatCurrency(v.tariff)}</span>}
+              {v.deposit != null && <span className="tabular-nums text-muted-foreground">dep {formatCurrency(v.deposit)}</span>}
+              {v.requires_card && (
+                <span className="rounded bg-blue-600/10 px-1.5 py-0.5 text-[11px] font-semibold text-blue-700 dark:text-blue-300">card</span>
+              )}
+              {v.sent_via && <span className="text-xs uppercase text-muted-foreground">{v.sent_via}</span>}
+              {v.note && <span className="italic text-muted-foreground">“{v.note}”</span>}
+              {v.signed_at && v.signed_name && <span className="text-muted-foreground">by {v.signed_name}</span>}
+              <span className="ml-auto">
+                {isCurrent ? (
+                  <span className="text-xs font-bold uppercase text-green-700 dark:text-green-400">current</span>
+                ) : canManage && !signed ? (
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-primary hover:underline disabled:opacity-50"
+                    disabled={pending}
+                    onClick={() =>
+                      start(async () => {
+                        const res = await makeContractCurrent(loadId, v.id);
+                        if (!res.ok) toast.error(res.error ?? "Couldn't restore.");
+                        else toast.success("Version restored as current.");
+                      })
                     }
                   >
-                    {e.event === "signed" ? "SIGNED" : "opened"}
-                  </span>
-                  <span>{e.ip ?? "unknown IP"}</span>
-                  <span className="ml-auto">{formatDateTime(e.created_at)}</span>
-                </li>
-              ))}
-              {events.length > 6 && (
-                <li className="text-muted-foreground/70">…and {events.length - 6} earlier</li>
+                    make current
+                  </button>
+                ) : (
+                  <span className="text-xs text-muted-foreground">superseded</span>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {events.length > 0 && (
+        <ul className="space-y-0.5 border-t pt-2">
+          {events.map((e, i) => (
+            <li key={i} className="flex flex-wrap items-center gap-2 tabular-nums text-xs text-muted-foreground">
+              <span className={e.event === "signed" ? "font-bold text-green-700 dark:text-green-400" : undefined}>
+                {e.event === "signed" ? "contract SIGNED" : "contract opened"}
+              </span>
+              <span>— {e.ip ?? "unknown IP"}</span>
+              {e.ip && (
+                <a
+                  href={`https://ipinfo.io/${encodeURIComponent(e.ip)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  check location
+                </a>
               )}
-            </ul>
-          )}
-        </div>
+              <span className="ml-auto">{formatDateTime(e.created_at)}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

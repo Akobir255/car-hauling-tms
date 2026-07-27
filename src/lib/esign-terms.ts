@@ -8,6 +8,14 @@
 
 export const TERMS_VERSION = "2026-07-24";
 
+// The letterhead facts on the customer's Order Invoice, exactly as they
+// appear on the msgplane contract US Star sends today.
+export const COMPANY = {
+  name: "US Star Trucking LLC",
+  website: "https://www.usstartruckingllc.com",
+  mcNumber: "206532",
+} as const;
+
 // Signing links stop working this many days after the contract was last
 // sent; resending refreshes the window.
 export const CONTRACT_LINK_EXPIRY_DAYS = 14;

@@ -24,7 +24,7 @@ export async function signByToken(
 
   const { data: load } = await supabase
     .from("loads")
-    .select("id, date_signed, contract_signed_name, contract_sent_at")
+    .select("id, date_signed, contract_signed_name, contract_sent_at, contract_requires_card")
     .eq("contract_token", token)
     .maybeSingle();
 
@@ -60,6 +60,68 @@ export async function signByToken(
     return { error: "Please enter a valid email address.", signed: false };
   }
 
+  // Card-required contracts: validate the MASKED card details. The full card
+  // number and CVV never reach this server — the signing page strips them
+  // client-side and submits brand/last4/expiry/billing only.
+  type CardInsert = {
+    cardholder_first: string;
+    cardholder_last: string;
+    brand: string | null;
+    last4: string;
+    exp_month: number;
+    exp_year: number;
+    billing_address: string | null;
+    billing_city: string | null;
+    billing_state: string | null;
+    billing_zip: string | null;
+  };
+  let card: CardInsert | null = null;
+  if (load.contract_requires_card) {
+    const first = (formData.get("card_first") || "").toString().trim().slice(0, 80);
+    const last = (formData.get("card_last") || "").toString().trim().slice(0, 80);
+    const last4 = (formData.get("card_last4") || "").toString().trim();
+    const brand = (formData.get("card_brand") || "").toString().trim().slice(0, 20) || null;
+    const exp = (formData.get("card_exp") || "").toString().trim();
+    const expMatch = exp.match(/^(\d{2})\s*\/\s*(\d{2})$/);
+    if (!first || !last) {
+      return { error: "Please enter the cardholder's first and last name.", signed: false };
+    }
+    if (!/^\d{4}$/.test(last4)) {
+      return { error: "Please enter your card number.", signed: false };
+    }
+    if (!expMatch) {
+      return { error: "Please enter the card expiry as MM/YY.", signed: false };
+    }
+    const expMonth = Number(expMatch[1]);
+    const expYear = 2000 + Number(expMatch[2]);
+    const now = new Date();
+    if (expMonth < 1 || expMonth > 12) {
+      return { error: "Please enter the card expiry as MM/YY.", signed: false };
+    }
+    if (expYear < now.getFullYear() || (expYear === now.getFullYear() && expMonth < now.getMonth() + 1)) {
+      return { error: "That card looks expired — please use another one.", signed: false };
+    }
+    card = {
+      cardholder_first: first,
+      cardholder_last: last,
+      brand,
+      last4,
+      exp_month: expMonth,
+      exp_year: expYear,
+      billing_address: (formData.get("billing_address") || "").toString().trim().slice(0, 200) || null,
+      billing_city: (formData.get("billing_city") || "").toString().trim().slice(0, 120) || null,
+      billing_state: (formData.get("billing_state") || "").toString().trim().slice(0, 40) || null,
+      billing_zip: (formData.get("billing_zip") || "").toString().trim().slice(0, 12) || null,
+    };
+  }
+
+  // Optional drawn signature (PNG data URL from the pad). Size-capped; the
+  // typed name remains the signature of record either way.
+  let signatureImage = (formData.get("signature_image") || "").toString();
+  if (!signatureImage.startsWith("data:image/png;base64,") || signatureImage.length > 300_000) {
+    signatureImage = "";
+  }
+
   const hdrs = await headers();
   const ip = (hdrs.get("x-forwarded-for") || "").split(",")[0].trim() || null;
   const ua = (hdrs.get("user-agent") || "").slice(0, 300) || null;
@@ -93,6 +155,31 @@ export async function signByToken(
   await supabase
     .from("contract_events")
     .insert({ load_id: load.id, event: "signed", ip, user_agent: ua });
+
+  // Stamp the signed version (view-all shows which document was executed)
+  // and keep the drawn signature with it.
+  const { data: version } = await supabase
+    .from("contract_versions")
+    .select("id")
+    .eq("token", token)
+    .maybeSingle();
+  if (version) {
+    await supabase
+      .from("contract_versions")
+      .update({
+        signed_at: new Date().toISOString(),
+        signed_name: fullName,
+        signature_image: signatureImage || null,
+      })
+      .eq("id", version.id);
+  }
+
+  // Card on file (masked). Written only here, only through the service role.
+  if (card) {
+    await supabase
+      .from("contract_cards")
+      .insert({ load_id: load.id, contract_version_id: version?.id ?? null, ...card });
+  }
 
   await supabase.from("load_status_history").insert({
     load_id: load.id,

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldLabel } from "@/components/form-section";
+import { CarrierPicker, type PickedCarrier } from "@/components/carrier-picker";
 import { cn } from "@/lib/utils";
 import type { OrderAction } from "@/lib/order-status";
 import {
@@ -18,6 +19,7 @@ import {
   resendPost,
   markLost,
   recordPayment,
+  assignCarrier,
   type LoadFormState,
 } from "../actions";
 
@@ -43,6 +45,7 @@ const LABEL: Record<OrderAction, string> = {
   convert_to_order: "Convert to Order",
   post: "Post",
   unpost: "Unpost",
+  dispatch: "Dispatch",
   resend: "Resend",
   mark_lost: "Mark as Lost",
   record_payment: "Create Payment",
@@ -51,7 +54,7 @@ const LABEL: Record<OrderAction, string> = {
   reactivate: "Reactivate",
 };
 
-const PANEL_ACTIONS: OrderAction[] = ["post", "record_payment", "mark_lost"];
+const PANEL_ACTIONS: OrderAction[] = ["post", "record_payment", "mark_lost", "dispatch"];
 const CONFIRM: Partial<Record<OrderAction, string>> = {
   unpost: "Unpost this order and return it to Ready?",
 };
@@ -96,14 +99,15 @@ export function OrderActionBar({
             : "flex flex-wrap items-center justify-end"
         )}
       >
-        {actions.map((a, i) => {
-          const primary = i === 0;
+        {actions.map((a) => {
+          // msgplane's header bar: every action is the same quiet gray box
+          // (EDIT alone is green, rendered by the page). Lost keeps red text.
           const danger = a === "mark_lost";
           return (
             <Button
               key={a}
               size="sm"
-              variant={primary ? "default" : danger ? "outline" : "secondary"}
+              variant="secondary"
               className={danger ? "text-destructive hover:text-destructive" : undefined}
               disabled={pending}
               onClick={() =>
@@ -138,6 +142,47 @@ export function OrderActionBar({
       )}
       {openPanel === "mark_lost" && (
         <LostPanel loadId={loadId} onDone={() => setOpenPanel(null)} full={stack} />
+      )}
+      {openPanel === "dispatch" && (
+        <DispatchPanel loadId={loadId} onDone={() => setOpenPanel(null)} full={stack} />
+      )}
+    </div>
+  );
+}
+
+// Dispatch = pick the carrier. Assigning them to this posted order is what
+// flips it to Dispatched (server-enforced) — there is no bare status flip.
+function DispatchPanel({ loadId, onDone, full }: { loadId: string; onDone: () => void; full: boolean }) {
+  const [name, setName] = useState("");
+  const [picked, setPicked] = useState<PickedCarrier | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <div className={cn("flex flex-wrap items-end gap-2 rounded-md border bg-card p-2 shadow-sm", full && "w-full")}>
+      <div className="w-64 space-y-1">
+        <FieldLabel>Carrier</FieldLabel>
+        <CarrierPicker value={name} onChange={setName} onPick={setPicked} placeholder="Search the carrier directory…" />
+      </div>
+      <Button
+        size="sm"
+        disabled={pending || !picked}
+        onClick={() =>
+          start(async () => {
+            if (!picked) return;
+            const res = await assignCarrier(loadId, picked.id);
+            if (!res.ok) toast.error(res.error ?? "Couldn't dispatch.");
+            else {
+              toast.success(`Dispatched to ${picked.name}.`);
+              onDone();
+            }
+          })
+        }
+      >
+        {pending ? "Dispatching…" : "Assign & dispatch"}
+      </Button>
+      {!picked && name.trim().length >= 2 && (
+        <p className="basis-full text-xs text-muted-foreground">
+          Pick a carrier from the directory — or log it under Load Requests first.
+        </p>
       )}
     </div>
   );

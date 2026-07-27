@@ -739,26 +739,93 @@ async function generateAndSendContract(
   supabase: Awaited<ReturnType<typeof createClient>>,
   profile: { id: string },
   loadId: string,
-  via: { email: boolean; sms: boolean }
+  via: { email: boolean; sms: boolean },
+  // rotate mints a NEW contract version (change terms & send): fresh token,
+  // old links dead, any signature voided. requiresCard flips whether the
+  // signing page asks for card details; omitted = keep the current setting.
+  opts: { rotate?: boolean; requiresCard?: boolean; note?: string } = {}
 ): Promise<{ error: string | null; link?: string; sentVia?: string }> {
   const { data: load } = await supabase
     .from("loads")
-    .select("contract_token, customer_id, load_number")
+    .select(
+      "contract_token, customer_id, load_number, contract_requires_card, customer_rate, deposit_amount, date_signed"
+    )
     .eq("id", loadId)
     .single();
   if (!load) return { error: "Order not found." };
 
+  const rotate = Boolean(opts.rotate);
+  if (load.date_signed && !rotate) {
+    return { error: "Already signed — use Change terms & send for a new version." };
+  }
+
   let token = load.contract_token as string | null;
-  if (!token) {
+  const isNewVersion = rotate || !token;
+  if (isNewVersion) {
     const { randomUUID } = await import("node:crypto");
     token = randomUUID();
   }
+  const requiresCard = opts.requiresCard ?? Boolean(load.contract_requires_card);
 
-  const { error } = await supabase
-    .from("loads")
-    .update({ contract_token: token, contract_sent_at: new Date().toISOString() })
-    .eq("id", loadId);
+  const now = new Date().toISOString();
+  const updates: Record<string, unknown> = {
+    contract_token: token,
+    contract_sent_at: now,
+    contract_requires_card: requiresCard,
+  };
+  if (rotate) {
+    // A new version is a new agreement — the old signature (if any) is void.
+    updates.date_signed = null;
+    updates.contract_signed_ip = null;
+    updates.contract_signed_name = null;
+    updates.contract_signed_email = null;
+  }
+  const { error } = await supabase.from("loads").update(updates).eq("id", loadId);
   if (error) return { error: error.message };
+
+  // Version bookkeeping for "view all" / "make current". A re-send updates
+  // the current version's stamp; legacy contracts (sent before versioning)
+  // get their row created on the first re-send.
+  const sentViaLabel =
+    [via.email ? "email" : null, via.sms ? "sms" : null].filter(Boolean).join("+") || null;
+  const versionStamp = {
+    requires_card: requiresCard,
+    tariff: load.customer_rate,
+    deposit: load.deposit_amount,
+    sent_at: now,
+    sent_via: sentViaLabel,
+  };
+  if (isNewVersion) {
+    await supabase
+      .from("contract_versions")
+      .update({ superseded_at: now })
+      .eq("load_id", loadId)
+      .is("superseded_at", null);
+    await supabase.from("contract_versions").insert({
+      load_id: loadId,
+      token,
+      note: opts.note || null,
+      created_by: profile.id,
+      ...versionStamp,
+    });
+  } else {
+    const { data: existing } = await supabase
+      .from("contract_versions")
+      .select("id")
+      .eq("token", token)
+      .maybeSingle();
+    if (existing) {
+      await supabase.from("contract_versions").update(versionStamp).eq("id", existing.id);
+    } else {
+      await supabase.from("contract_versions").insert({
+        load_id: loadId,
+        token,
+        note: opts.note || null,
+        created_by: profile.id,
+        ...versionStamp,
+      });
+    }
+  }
 
   const base = appBaseUrl();
   const link = base ? `${base}/sign/${token}` : `/sign/${token}`;
@@ -837,11 +904,13 @@ async function generateAndSendContract(
     status: "quote" as LoadStatus, // history note only; status unchanged
     changed_by: profile.id,
     note:
-      sentVia.length > 0
+      (sentVia.length > 0
         ? `Contract sent to customer (${sentVia.join(" + ")})`
         : softError
           ? `Contract link generated — ${softError}`
-          : "Contract link generated",
+          : "Contract link generated") +
+      (rotate ? " — new terms" : "") +
+      (requiresCard ? " · card info required" : ""),
   });
 
   revalidatePath(`/loads/${loadId}`);
@@ -849,7 +918,8 @@ async function generateAndSendContract(
 }
 
 // Manual send from the E-Sign panel. Default = email (matching msgplane's
-// generate-and-send); via=sms texts the link instead.
+// generate-and-send); via=sms texts the link instead. require_card "1"/"0"
+// picks the with-card / without-card contract; blank keeps the current one.
 export async function sendContract(
   loadId: string,
   _prevState: EsignState,
@@ -857,11 +927,160 @@ export async function sendContract(
 ): Promise<EsignState> {
   const profile = await requireRole("admin", "dispatcher", "sales");
   const viaSms = formData.get("via") === "sms";
+  const cardField = (formData.get("require_card") || "").toString();
   const supabase = await createClient();
-  return generateAndSendContract(supabase, profile, loadId, {
-    email: !viaSms,
-    sms: viaSms,
+  return generateAndSendContract(
+    supabase,
+    profile,
+    loadId,
+    { email: !viaSms, sms: viaSms },
+    cardField === "" ? {} : { requiresCard: cardField === "1" }
+  );
+}
+
+// msgplane's red "change terms & send": update price/deposit, flip the card
+// requirement, and mint a NEW contract version — fresh token, old links dead,
+// any existing signature voided. The customer gets the new link by email
+// (and SMS if ticked).
+export async function changeTermsAndSend(
+  loadId: string,
+  _prevState: EsignState,
+  formData: FormData
+): Promise<EsignState> {
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const tariff = numeric.parse(formData.get("tariff")?.toString());
+  const deposit = numeric.parse(formData.get("deposit")?.toString());
+  const requiresCard = formData.get("require_card") === "on";
+  const note = (formData.get("note") || "").toString().trim().slice(0, 300);
+  const alsoSms = formData.get("also_sms") === "on";
+  if (tariff != null && (Number.isNaN(tariff) || tariff < 0)) {
+    return { error: "Tariff must be a positive amount." };
+  }
+  if (deposit != null && (Number.isNaN(deposit) || deposit < 0)) {
+    return { error: "Deposit must be a positive amount." };
+  }
+
+  const supabase = await createClient();
+  if (tariff != null || deposit != null) {
+    const upd: Record<string, unknown> = {};
+    if (tariff != null) upd.customer_rate = tariff;
+    if (deposit != null) upd.deposit_amount = deposit;
+    const { error } = await supabase.from("loads").update(upd).eq("id", loadId);
+    if (error) return { error: error.message };
+  }
+  return generateAndSendContract(
+    supabase,
+    profile,
+    loadId,
+    { email: true, sms: alsoSms },
+    { rotate: true, requiresCard, note: note || undefined }
+  );
+}
+
+// "make current" in the view-all popup: point the signing link back at an
+// older version (its token + card setting). Refused while a signature exists —
+// void it first. Manager-gated: this changes which document is live.
+export async function makeContractCurrent(
+  loadId: string,
+  versionId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const profile = await requireRole("admin", "dispatcher");
+  const supabase = await createClient();
+  const { data: version } = await supabase
+    .from("contract_versions")
+    .select("id, token, requires_card")
+    .eq("id", versionId)
+    .eq("load_id", loadId)
+    .maybeSingle();
+  if (!version) return { ok: false, error: "Contract version not found." };
+
+  const { data: load } = await supabase
+    .from("loads")
+    .select("date_signed")
+    .eq("id", loadId)
+    .single();
+  if (load?.date_signed) {
+    return { ok: false, error: "Void the current signature first." };
+  }
+
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("loads")
+    .update({
+      contract_token: version.token,
+      contract_requires_card: version.requires_card,
+      // Fresh send stamp so the restored link gets a full expiry window.
+      contract_sent_at: now,
+    })
+    .eq("id", loadId);
+  if (error) return { ok: false, error: error.message };
+
+  await supabase
+    .from("contract_versions")
+    .update({ superseded_at: now })
+    .eq("load_id", loadId)
+    .is("superseded_at", null)
+    .neq("id", versionId);
+  await supabase.from("contract_versions").update({ superseded_at: null }).eq("id", versionId);
+  await supabase.from("load_status_history").insert({
+    load_id: loadId,
+    status: "quote" as LoadStatus,
+    changed_by: profile.id,
+    note: "Contract version restored as current",
   });
+  revalidatePath(`/loads/${loadId}`);
+  return { ok: true };
+}
+
+// The DISPATCH button. Deliberately NOT a status flip: it assigns a carrier
+// to a posted order, and that assignment is what dispatches — the same rule
+// updateLoad enforces on the edit form. Dispatch desk only.
+export async function assignCarrier(
+  loadId: string,
+  carrierId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const profile = await requireRole("admin", "dispatcher");
+  const supabase = await createClient();
+  const { data: current } = await supabase
+    .from("loads")
+    .select("status")
+    .eq("id", loadId)
+    .single();
+  if (!current) return { ok: false, error: "Not found." };
+  if (!["posted_cd", "posted_sd", "booked"].includes(current.status)) {
+    return { ok: false, error: `Dispatch works on a posted order — can't from ${current.status}.` };
+  }
+  const { data: carrier } = await supabase
+    .from("carriers")
+    .select("id, company_name")
+    .eq("id", carrierId)
+    .maybeSingle();
+  if (!carrier) return { ok: false, error: "Carrier not found." };
+
+  // carrier_id / dispatcher_id are column-revoked for the user client —
+  // written through the service role AFTER the requireRole above.
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("loads")
+    .update({ carrier_id: carrier.id, dispatcher_id: profile.id })
+    .eq("id", loadId);
+  if (error) return { ok: false, error: error.message };
+
+  const { error: dispatchError } = await supabase
+    .from("loads")
+    .update({ status: "dispatched", dispatched_at: new Date().toISOString().slice(0, 10) })
+    .eq("id", loadId);
+  if (dispatchError) return { ok: false, error: dispatchError.message };
+  await supabase.from("load_status_history").insert({
+    load_id: loadId,
+    status: "dispatched",
+    changed_by: profile.id,
+    note: `Dispatched — carrier assigned (${carrier.company_name})`,
+  });
+  revalidatePath(`/loads/${loadId}`);
+  revalidatePath("/loads");
+  revalidatePath("/orders");
+  return { ok: true };
 }
 
 // Staff override: mark the contract signed without the customer using the link.
@@ -899,6 +1118,13 @@ export async function voidSignature(loadId: string): Promise<void> {
     })
     .eq("id", loadId);
   if (error) return;
+  // The rotated token belongs to no version — everything prior is superseded
+  // until the next send mints a fresh version.
+  await supabase
+    .from("contract_versions")
+    .update({ superseded_at: new Date().toISOString() })
+    .eq("load_id", loadId)
+    .is("superseded_at", null);
   await supabase.from("load_status_history").insert({
     load_id: loadId,
     status: "quote" as LoadStatus,

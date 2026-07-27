@@ -3,7 +3,7 @@
 US Star Trucking's broker TMS. Replaces a paid SuiteCRM-based system (msgplane,
 $250/mo + $50/user). Live at **https://carshiphelp.com** for a team of ~48.
 
-Last updated: 2026-07-25.
+Last updated: 2026-07-26.
 
 ## Stack
 
@@ -110,10 +110,36 @@ the customer their signing link — msgplane's generate_and_send; failure is
 advisory, logged to history + the order's message timeline, never blocks
 the conversion; the E-Sign panel's manual Send now emails by default, SMS
 via the existing button).
+· Load Requests band (0019 `load_requests`): the blue add-form strip at the
+top of every ORDER record — price / carrier (directory autocomplete via
+/api/carriers/suggest, free text allowed) / CD|SD tag / dates; per-row
+Dispatch (managers, posted orders — creates a directory record for free-text
+carriers first) and the header DISPATCH button (opens carrier assignment —
+still never a bare status flip; sales never see it; pipeline.test.ts pins
+this) · contract VERSIONS (0019 `contract_versions`): every send is a
+version with its own token; E-Sign band is msgplane's — open / resend /
+sms / view all / change terms & send (red) — where "change terms & send"
+updates tariff/deposit + card requirement and mints a new version (old link
+dies, signature voided), "view all" lists versions with make-current
+(manager, unsigned only) and the per-open IP audit with check-location
+links · with/without-card contracts: "send + card info" (or the checkbox in
+change-terms) makes the public signing page ask for card details;
+**the full card number and CVV never reach the server** — those inputs have
+no name attribute, the browser submits only brand/last4/expiry/billing,
+stored in `contract_cards` (service-role writes only; staff read shows a
+"VISA •••• 1234" chip on the E-Sign band). Real vaulting arrives with the
+Stax-or-Stripe decision · public /sign page restyled as the msgplane Order
+Invoice sheet (letterhead + M.C.# from COMPANY in esign-terms.ts,
+shipper/shipping info, origin/destination, vehicle table with photo —
+/api/vehicles/image is now a PUBLIC path for this — totals incl. computed
+COD-to-carrier = tariff − deposit, A–H terms, sticky GET STARTED bar) with
+a draw-signature pad (PNG stored on the version; typed name remains the
+signature of record) and the card form when required · order footer has
+msgplane's orange NEXT (next record in the same stage, newest-first) ·
+quick notes on list rows are now an anchored popover at the row (textarea +
+SAVE/CANCEL, msgplane-style), not a bottom sheet.
 Parity items deliberately still open: row quick-view popup, vehicle-photo
-override editor, Loadboard/Campaign selects on the edit header, manual
-Load Requests queue (msgplane logs carrier offers by hand — price/carrier/
-dates + [CD|SD] tag — behind the Requests tab; no API needed), printable
+override editor, Loadboard/Campaign selects on the edit header, printable
 Dispatch Sheet, auto-tickets on signed/dispatched events, and Phase-4-lite
 dispatch confirmation by INGESTING CentralDispatch's notification emails
 (msgplane logs "ACCEPTED by <carrier>" emails from

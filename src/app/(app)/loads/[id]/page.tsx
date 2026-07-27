@@ -9,11 +9,20 @@ import { DeleteButton } from "@/components/delete-button";
 import { SectionBand, BandRow, Field } from "@/components/section-band";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate, formatPhone } from "@/lib/format";
-import { actionsFor, stageOf } from "@/lib/order-status";
+import {
+  actionsFor,
+  stageOf,
+  LEAD_STATUSES,
+  QUOTE_STATUSES,
+  ORDER_STATUSES,
+} from "@/lib/order-status";
 import { ArrowDownLeft, ArrowUpRight, Mail, MessageSquareText } from "lucide-react";
 import type {
+  ContractCard,
+  ContractVersion,
   Customer,
   Load,
+  LoadRequest,
   LoadStatusHistoryEntry,
   LoadVehicle,
   Message,
@@ -23,6 +32,7 @@ import { OrderActionBar } from "./order-action-bar";
 import { EsignPanel } from "./esign-panel";
 import { OrderMoreMenu } from "./order-more-menu";
 import { NotesThread } from "./notes-thread";
+import { LoadRequestsBand } from "./load-requests";
 import { deleteLoad } from "../actions";
 
 const BACK_PATH = { lead: "/leads", quote: "/quotes", order: "/orders" } as const;
@@ -49,6 +59,9 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
     { data: messagesData },
     { data: noteRows },
     { data: noteDocs },
+    { data: requestRows },
+    { data: versionRows },
+    { data: cardRows },
   ] = await Promise.all([
     supabase.from("customers").select("*").eq("id", load.customer_id).single(),
     supabase.from("load_vehicles").select("*").eq("load_id", id).order("created_at"),
@@ -85,6 +98,23 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
       .select("id, note_id, file_name, storage_path")
       .eq("entity_id", id)
       .not("note_id", "is", null),
+    supabase
+      .from("load_requests")
+      .select("*")
+      .eq("load_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("contract_versions")
+      .select("*")
+      .eq("load_id", id)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    supabase
+      .from("contract_cards")
+      .select("*")
+      .eq("load_id", id)
+      .order("created_at", { ascending: false })
+      .limit(1),
   ]);
   const customer = customerData as Customer | null;
   const vehicles = (vehiclesData ?? []) as LoadVehicle[];
@@ -126,7 +156,24 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
           : "—";
 
   const boundDelete = deleteLoad.bind(null, load.id);
-  const backPath = BACK_PATH[stageOf(load.status)];
+  const stage = stageOf(load.status);
+  const backPath = BACK_PATH[stage];
+  const requests = (requestRows ?? []) as LoadRequest[];
+  const versions = (versionRows ?? []) as ContractVersion[];
+  const cardOnFile = ((cardRows ?? [])[0] ?? null) as ContractCard | null;
+
+  // msgplane's orange NEXT: walk the list this record lives in (newest-first,
+  // same stage) without going back to it.
+  const stageStatuses =
+    stage === "lead" ? LEAD_STATUSES : stage === "quote" ? QUOTE_STATUSES : ORDER_STATUSES;
+  const { data: nextRow } = await supabase
+    .from(canManageCarrier ? MANAGER_LOADS_TABLE : "loads_sales_safe")
+    .select("id")
+    .in("status", stageStatuses)
+    .lt("created_at", load.created_at)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   // Notes + their attachments, ready for the thread. A rep may edit their own
   // note; managers may edit anyone's (same rule the RLS policy enforces).
@@ -163,6 +210,19 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
+      {/* msgplane puts the Load Requests notebook ABOVE the record header on
+          every order — carrier offers are the first thing a dispatcher sees. */}
+      {stage === "order" && (
+        <LoadRequestsBand
+          loadId={load.id}
+          requests={requests}
+          canDispatch={
+            canManageCarrier &&
+            ["posted_cd", "posted_sd", "booked"].includes(load.status)
+          }
+        />
+      )}
+
       {/* Record header, laid out like the system this replaces: the ID/Status/
           Campaign/Loadboard facts on the left, the lifecycle actions as a row
           of buttons on the right. */}
@@ -195,7 +255,12 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <OrderActionBar loadId={load.id} actions={actionsFor(load.status, profile.role)} />
-            <Button size="sm" variant="secondary" render={<Link href={`/loads/${load.id}/edit`} />}>
+            {/* msgplane's one colored header button: green EDIT. */}
+            <Button
+              size="sm"
+              className="h-8 bg-green-600 text-xs font-semibold uppercase tracking-wide text-white hover:bg-green-700"
+              render={<Link href={`/loads/${load.id}/edit`} />}
+            >
               Edit
             </Button>
           </div>
@@ -219,6 +284,9 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               signedName={load.contract_signed_name}
               signedIp={load.contract_signed_ip}
               signedEmail={load.contract_signed_email}
+              requiresCard={load.contract_requires_card}
+              card={cardOnFile}
+              versions={versions}
               events={contractEvents ?? []}
             />
           </SectionBand>
@@ -460,6 +528,16 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
         <Button variant="secondary" size="sm" render={<Link href={backPath} />}>
           Back to list
         </Button>
+        {/* msgplane's orange NEXT — straight to the next record in this list. */}
+        {nextRow?.id && (
+          <Button
+            size="sm"
+            className="bg-orange-500 font-bold uppercase tracking-wide text-white hover:bg-orange-600"
+            render={<Link href={`/loads/${nextRow.id}`} />}
+          >
+            Next
+          </Button>
+        )}
       </div>
     </div>
   );

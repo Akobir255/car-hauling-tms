@@ -4,7 +4,9 @@ import { buildCsp } from "@/lib/security-headers";
 
 // /sign/<token> is the customer-facing contract page — no login, reached from
 // an SMS/email link. It authenticates by the unguessable token, not a session.
-const PUBLIC_PATHS = ["/login", "/set-password", "/sign"];
+// The vehicle-image proxy is public with it: the contract shows the car's
+// photo, and the route only serves cached Wikipedia page images by make/model.
+const PUBLIC_PATHS = ["/login", "/set-password", "/sign", "/api/vehicles/image"];
 
 // Telephony endpoints authenticate themselves (carrier signature / shared
 // token) and must never be redirected to /login — a carrier that follows a

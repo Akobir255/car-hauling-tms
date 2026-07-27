@@ -131,6 +131,7 @@ export type OrderAction =
   | "convert_to_order"
   | "post"
   | "unpost"
+  | "dispatch"
   | "resend"
   | "mark_lost"
   | "record_payment"
@@ -138,19 +139,21 @@ export type OrderAction =
   | "archive"
   | "reactivate";
 
-// There is deliberately NO dispatch / picked-up / delivered button for ANY
-// role, admin included. Dispatched happens automatically when a carrier is
-// assigned to a posted order (updateLoad), and picked-up / delivered /
-// cancelled-after-dispatch mirror what the CARRIER reports — they'll be
-// driven by the CD/SD integration when it lands. Until then, orders rest at
-// Dispatched; that's the msgplane behavior the team already lives with.
+// There is deliberately NO status-flip dispatch / picked-up / delivered
+// button for ANY role, admin included. The DISPATCH button on a posted order
+// opens carrier assignment — assigning the carrier is what dispatches (same
+// rule as the edit form) — and picked-up / delivered / cancelled-after-
+// dispatch mirror what the CARRIER reports; they'll be driven by the CD/SD
+// integration when it lands. Until then, orders rest at Dispatched; that's
+// the msgplane behavior the team already lives with. Button ORDER matches
+// msgplane's header bar.
 export const ACTIONS_BY_STATUS: Record<LoadStatus, OrderAction[]> = {
   lead: ["convert_to_quote", "mark_lost"],
   quote: ["convert_to_order", "record_payment", "mark_lost"],
-  ready: ["post", "record_payment", "mark_lost", "hold"],
-  posted_cd: ["record_payment", "resend", "unpost"],
-  posted_sd: ["record_payment", "resend", "unpost"],
-  booked: ["post", "record_payment", "mark_lost"],
+  ready: ["record_payment", "post", "mark_lost", "hold"],
+  posted_cd: ["dispatch", "record_payment", "resend", "unpost"],
+  posted_sd: ["dispatch", "record_payment", "resend", "unpost"],
+  booked: ["dispatch", "record_payment", "post", "mark_lost"],
   dispatched: ["record_payment", "unpost"],
   picked_up: ["record_payment"],
   in_transit: ["record_payment"],
@@ -166,6 +169,8 @@ export const ACTIONS_BY_STATUS: Record<LoadStatus, OrderAction[]> = {
 export function actionsFor(status: LoadStatus, role: string): OrderAction[] {
   const base = ACTIONS_BY_STATUS[status] ?? [];
   if (role !== "sales") return base;
-  // Un-dispatching reverses a carrier assignment — dispatch desk only.
-  return base.filter((a) => !(a === "unpost" && status === "dispatched"));
+  // Carrier assignment (dispatch) and un-dispatching are dispatch-desk work.
+  return base.filter(
+    (a) => a !== "dispatch" && !(a === "unpost" && status === "dispatched")
+  );
 }

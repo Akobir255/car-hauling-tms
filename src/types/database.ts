@@ -120,6 +120,7 @@ export interface Load {
   contract_signed_ip: string | null;
   contract_signed_name: string | null;
   contract_signed_email: string | null;
+  contract_requires_card: boolean;
   dispatched_at: string | null;
   picked_up_at: string | null;
   delivered_at: string | null;
@@ -145,6 +146,62 @@ export interface LoadVehicle {
   condition: VehicleCondition;
   tariff: number | null;
   notes: string | null;
+  created_at: string;
+}
+
+// A carrier offer logged by hand against an order (msgplane's Load Requests).
+export interface LoadRequest {
+  id: string;
+  load_id: string;
+  price: number | null;
+  requested_on: string;
+  carrier_id: string | null;
+  carrier_name: string;
+  phone: string | null;
+  city: string | null;
+  state: string | null;
+  pickup_date: string | null;
+  delivery_date: string | null;
+  source: "cd" | "sd" | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+// One "send" of the customer contract. loads.* mirrors the CURRENT version.
+export interface ContractVersion {
+  id: string;
+  load_id: string;
+  token: string;
+  requires_card: boolean;
+  tariff: number | null;
+  deposit: number | null;
+  note: string | null;
+  sent_at: string | null;
+  sent_via: string | null;
+  superseded_at: string | null;
+  signed_at: string | null;
+  signed_name: string | null;
+  signature_image: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+// Masked card details from a card-required contract. Full number and CVV are
+// never stored — real vaulting arrives with the payment processor.
+export interface ContractCard {
+  id: string;
+  load_id: string;
+  contract_version_id: string | null;
+  cardholder_first: string;
+  cardholder_last: string;
+  brand: string | null;
+  last4: string;
+  exp_month: number | null;
+  exp_year: number | null;
+  billing_address: string | null;
+  billing_city: string | null;
+  billing_state: string | null;
+  billing_zip: string | null;
   created_at: string;
 }
 
