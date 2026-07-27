@@ -108,6 +108,10 @@ export type OrderTab = {
   dateCol?: TabDateCol;
   carrierCol?: boolean;
   requestCount?: boolean;
+  // The tab the bare URL lands on. msgplane shows Follow-up Today FIRST in
+  // the bar, but its Quotes nav link opens the Quotes tab — order in the bar
+  // and default selection are different things.
+  default?: boolean;
   // Restrict a shared status (hold/cancelled/archived) to records that belong
   // to this stage. Which stage a parked record came from is derived from its
   // price rather than stored: pricing is exactly what promotes a lead to a
@@ -123,14 +127,14 @@ export type OrderTab = {
 // tab, there is no Cancelled tab — cancelled/lost park under Archived.
 export const LEAD_TABS: OrderTab[] = [
   { key: "followup", label: "Follow-up Today", statuses: ["lead"], followUpDue: true },
-  { key: "leads", label: "Leads", statuses: ["lead"] },
+  { key: "leads", label: "Leads", statuses: ["lead"], default: true },
   { key: "hold", label: "Hold", statuses: ["hold"], stage: "lead" },
   { key: "archived", label: "Archived", statuses: ["archived", "cancelled", "lost"], stage: "lead" },
 ];
 
 export const QUOTE_TABS: OrderTab[] = [
   { key: "followup", label: "Follow-up Today", statuses: ["quote"], followUpDue: true },
-  { key: "quotes", label: "Quotes", statuses: ["quote"] },
+  { key: "quotes", label: "Quotes", statuses: ["quote"], default: true },
   { key: "hold", label: "Hold", statuses: ["hold"], stage: "quote" },
   {
     key: "archived",

@@ -81,7 +81,10 @@ export async function PipelineList({
     stage === "lead" ? LEAD_STATUSES : stage === "quote" ? QUOTE_STATUSES : ORDER_STATUSES;
   const tabs: OrderTab[] =
     stage === "order" ? ORDER_TABS : stage === "quote" ? QUOTE_TABS : LEAD_TABS;
-  const activeTab = tabs.find((t) => t.key === tab) ?? tabs[0];
+  // Bar ORDER and DEFAULT selection are different things: Follow-up Today is
+  // drawn first, but a bare /quotes opens the Quotes tab (msgplane behavior).
+  const defaultTab = tabs.find((t) => t.default) ?? tabs[0];
+  const activeTab = tabs.find((t) => t.key === tab) ?? defaultTab;
 
   // "Due" = follow-up scheduled for any time up to the end of today in the
   // business timezone (includes everything overdue). Shared with the
@@ -242,7 +245,7 @@ export async function PipelineList({
   const basePath = stage === "lead" ? "/leads" : stage === "quote" ? "/quotes" : "/orders";
   const tabHref = (tabKey: string) => {
     const params = new URLSearchParams();
-    if (tabKey !== tabs[0].key) params.set("tab", tabKey);
+    if (tabKey !== defaultTab.key) params.set("tab", tabKey);
     if (rep) params.set("rep", rep);
     const qs = params.toString();
     return qs ? `${basePath}?${qs}` : basePath;
