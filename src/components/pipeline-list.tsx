@@ -536,6 +536,27 @@ export async function PipelineList({
                     <p className="mt-1 text-[13px] lowercase text-muted-foreground">
                       {statusText(load)}
                     </p>
+                    {/* Right under the ID, where the eye already is: this
+                        customer asked us to stop contacting them. */}
+                    {customer && (customer.sms_opt_out || customer.email_opt_out) && (
+                      <p
+                        title={
+                          customer.sms_opt_out && customer.email_opt_out
+                            ? "Opted out of SMS and email"
+                            : customer.sms_opt_out
+                              ? "Replied STOP — do not text"
+                              : "Unsubscribed from email"
+                        }
+                        className="mt-0.5 text-[13px] font-semibold lowercase text-red-600 dark:text-red-400"
+                      >
+                        opted out
+                        {customer.sms_opt_out && customer.email_opt_out
+                          ? ""
+                          : customer.sms_opt_out
+                            ? " (sms)"
+                            : " (email)"}
+                      </p>
+                    )}
                     {load.follow_up_at && (
                       <span
                         title={load.follow_up_note ?? undefined}
