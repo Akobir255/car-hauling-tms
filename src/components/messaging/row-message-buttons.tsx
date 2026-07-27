@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Mail, MessageSquareText } from "lucide-react";
+import { Mail } from "lucide-react";
 import { TemplateSheet } from "@/components/messaging/template-sheet";
 import { bulkEmail } from "@/app/(app)/loads/actions";
 import { sendSmsBulkChunk } from "@/app/(app)/messages/actions";
@@ -42,18 +42,22 @@ export function RowMessageButton({
       setOpen(false);
     });
 
-  const Icon = channel === "email" ? Mail : MessageSquareText;
   return (
     <>
+      {/* msgplane look: the phone gets a small black "…" chip, the email a
+          red envelope — both open the compose sheet for this customer. */}
       <button
         type="button"
         onClick={() => setOpen(true)}
         aria-label={`${channel === "email" ? "Email" : "Text"} ${customerName}`}
         title={`${channel === "email" ? "Email" : "Text"} ${customerName}`}
-        className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className={
+          channel === "sms"
+            ? "inline-flex h-4 items-center rounded-sm bg-neutral-900 px-1.5 text-[11px] font-bold leading-none text-white transition-opacity hover:opacity-80 dark:bg-neutral-200 dark:text-neutral-900"
+            : "inline-flex items-center text-red-600 transition-opacity hover:opacity-70 dark:text-red-400"
+        }
       >
-        <Icon className="size-3" aria-hidden="true" />
-        {channel === "email" ? "Email" : "SMS"}
+        {channel === "sms" ? "•••" : <Mail className="size-3.5" aria-hidden="true" />}
       </button>
       {open && (
         <TemplateSheet

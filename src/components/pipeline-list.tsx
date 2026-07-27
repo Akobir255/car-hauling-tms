@@ -1,14 +1,13 @@
 import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import Link from "next/link";
-import { CalendarCheck2, Inbox, Mail, MapPin, Phone, Plus, User } from "lucide-react";
+import { CalendarCheck2, Inbox, MapPin, Phone, Plus, SquareArrowOutUpRight, User } from "lucide-react";
 import { VehiclePhoto } from "@/components/vehicle-photo";
 import { RowMessageButton } from "@/components/messaging/row-message-buttons";
 import { NotesQuickButton } from "@/components/messaging/notes-quick";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/status-badge";
-import { formatCurrency, formatDate, formatPhone } from "@/lib/format";
+import { formatDate, formatPhone } from "@/lib/format";
 import { endOfBusinessDay } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { SelectionProvider } from "@/components/pipeline/selection-context";
@@ -34,7 +33,7 @@ import type { Load, LoadStatus, LoadVehicle, Profile } from "@/types/database";
 export async function PipelineList({
   stage,
   title,
-  description,
+  description: _description, // kept in the API; msgplane lists carry no blurb
   tab,
   rep,
 }: {
@@ -201,12 +200,40 @@ export async function PipelineList({
     return qs ? `${basePath}?${qs}` : basePath;
   };
 
+  // Rendered in the BUSINESS timezone (like msgplane shows ET), not the
+  // viewer's — the team is remote, the freight is not.
+  const businessTz = (process.env.BUSINESS_TIMEZONE || "America/New_York").trim();
   const dateTime = (iso: string) => {
     const d = new Date(iso);
     return {
-      date: d.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }),
-      time: d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+      date: d.toLocaleDateString("en-US", {
+        month: "2-digit",
+        day: "2-digit",
+        year: "numeric",
+        timeZone: businessTz,
+      }),
+      // Leading-zero hour, exactly like the system this replaces ("04:56 PM").
+      time: d.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: businessTz,
+      }),
     };
+  };
+
+  // msgplane's money style: "Tariff:$500" — whole dollars, no separators.
+  const money0 = (v: number | null | undefined) =>
+    v == null ? "—" : `$${Math.round(v)}`;
+  // Date-only columns are calendar dates — parse locally so "2026-08-03"
+  // never renders as Aug 2 in US timezones.
+  const usDateOnly = (v: string | null) => {
+    const m = v?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[2]}/${m[3]}/${m[1]}` : "—";
+  };
+  // msgplane status text under the ID: lowercase, hyphenated, plain gray.
+  const statusText = (status: LoadStatus) => {
+    if (status === "hold" && stage === "order") return "on-hold-order";
+    return status.replace(/_/g, "-");
   };
 
   const repsForBar = ((reps ?? []) as Pick<Profile, "id" | "full_name" | "email">[]).map((r) => ({
@@ -217,22 +244,19 @@ export async function PipelineList({
   return (
     <SelectionProvider>
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">{title}</h1>
-          <p className="text-sm text-muted-foreground">
-            {loads.length} {loads.length === 1 ? "record" : "records"} · {description}
-          </p>
-        </div>
-        <Button render={<Link href="/loads/new" />}>New {stage}</Button>
-      </div>
+      {/* No page title block — msgplane's lists open straight into the tab
+          bar; the floating "+" covers quick-create. */}
+      <h1 className="sr-only">{title}</h1>
 
-      {/* msgplane-style tab bar: coral active pill, per-status counts. */}
+      {/* msgplane tab bar: plain labels, coral active pill, a count badge
+          ONLY where attention is needed (their Issues-style badge). */}
       {tabs.length > 1 && (
         <div className="overflow-x-auto border-b pb-1">
           <div className="flex items-center gap-1">
             {tabs.map((t) => {
               const active = activeTab.key === t.key;
+              const count = tabCount(t);
+              const showBadge = t.followUpDue && count > 0;
               return (
                 <Link
                   key={t.key}
@@ -242,18 +266,20 @@ export async function PipelineList({
                     "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm transition-colors",
                     active
                       ? "bg-red-400 font-medium text-white"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      : "text-foreground/80 hover:bg-muted hover:text-foreground"
                   )}
                 >
                   {t.label}
-                  <span
-                    className={cn(
-                      "rounded-full px-1.5 py-0.5 text-[11px] font-medium leading-none tabular-nums",
-                      active ? "bg-white/25 text-white" : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {tabCount(t)}
-                  </span>
+                  {showBadge && (
+                    <span
+                      className={cn(
+                        "rounded px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums",
+                        active ? "bg-white/25 text-white" : "bg-red-100 text-red-700"
+                      )}
+                    >
+                      {count}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -266,51 +292,47 @@ export async function PipelineList({
       <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
         <table className="w-full border-collapse text-[15px]">
           <thead>
-            <tr className="border-b bg-muted/50 text-left text-sm font-bold uppercase tracking-wide text-foreground">
+            {/* msgplane header row: quiet Title-case labels, no shouting. */}
+            <tr className="border-b text-left text-sm font-normal text-muted-foreground [&>th]:font-normal">
               <th className="w-8 px-2 py-3">
                 <SelectAllCheckbox ids={loadIds} />
               </th>
               <th className="px-3 py-3">ID</th>
-              <th className="px-3 py-3">Converted</th>
+              <th className="px-3 py-3">{stage === "order" ? "Converted" : "Quoted"}</th>
               <th className="px-3 py-3">Notes</th>
               <th className="px-3 py-3">Assigned to</th>
               <th className="px-3 py-3">Shipper</th>
               <th className="px-3 py-3">Vehicles</th>
               <th className="px-3 py-3">Orig/Dest</th>
-              <th className="px-3 py-3">1st Avail</th>
+              <th className="px-3 py-3">{stage === "order" ? "1st. Avail" : "Est. Ship Date"}</th>
               <th className="px-3 py-3">Quote</th>
             </tr>
           </thead>
           <tbody>
-            {loads.map((load, rowIndex) => {
+            {loads.map((load) => {
               const customer = customerById.get(load.customer_id);
               const rp = load.sales_owner_id ? repById.get(load.sales_owner_id) : undefined;
               const loadVehicles = vehiclesByLoad.get(load.id) ?? [];
               const created = dateTime(load.created_at);
               return (
-                // Banded rows + a firm rule between records, so a long list
-                // reads as separate rows rather than one block of text.
+                // Plain white rows with a thin rule — the msgplane look.
                 <tr
                   key={load.id}
-                  className={cn(
-                    "border-b border-border align-top transition-colors last:border-b-0 hover:bg-accent/60",
-                    rowIndex % 2 === 1 && "bg-muted/40"
-                  )}
+                  className="border-b border-border align-top transition-colors last:border-b-0 hover:bg-accent/40"
                 >
                   <td className="px-2 py-4">
                     <RowCheckbox id={load.id} label={`Select ${load.load_number}`} />
                   </td>
-                  {/* Accent rail marks where each record starts. */}
-                  <td className="px-3 py-4 shadow-[inset_3px_0_0_var(--color-primary)]">
+                  <td className="px-3 py-4">
                     <Link
                       href={`/loads/${load.id}`}
-                      className="font-semibold tabular-nums text-primary hover:underline"
+                      className="font-medium tabular-nums text-primary hover:underline"
                     >
                       {load.load_number}
                     </Link>
-                    <div className="mt-1.5">
-                      <StatusBadge status={load.status} />
-                    </div>
+                    <p className="mt-1 text-[13px] lowercase text-muted-foreground">
+                      {statusText(load.status)}
+                    </p>
                     {load.follow_up_at && (
                       <span
                         title={load.follow_up_note ?? undefined}
@@ -353,24 +375,25 @@ export async function PipelineList({
                     </div>
                   </td>
                   <td className="px-3 py-4">
-                    <span className="flex items-center gap-1.5 text-foreground">
+                    {/* msgplane stacks the badge over the name. */}
+                    <div className="flex flex-col items-center gap-0.5 text-center">
                       <User className="size-4 text-muted-foreground" aria-hidden="true" />
-                      {rp ? rp.full_name || rp.email : "—"}
-                    </span>
+                      <span className="text-foreground">{rp ? rp.full_name || rp.email : "—"}</span>
+                    </div>
                   </td>
                   <td className="px-3 py-4">
                     {customer ? (
-                      <div className="space-y-1">
+                      <div className="space-y-0.5">
                         <Link
                           href={`/customers/${customer.id}`}
-                          className="flex items-center gap-1.5 font-semibold text-primary hover:underline"
+                          className="flex items-center gap-1.5 text-foreground hover:underline"
                         >
-                          <User className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                          <User className="size-4 shrink-0 text-blue-600 dark:text-blue-400" aria-hidden="true" />
                           {customer.contact_name}
                         </Link>
                         {customer.phone && (
-                          <p className="flex items-center gap-1.5 tabular-nums text-muted-foreground">
-                            <Phone className="size-3.5 shrink-0" aria-hidden="true" />
+                          <p className="flex items-center gap-1.5 tabular-nums text-foreground">
+                            <Phone className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                             {formatPhone(customer.phone)}
                             <RowMessageButton
                               channel="sms"
@@ -381,17 +404,24 @@ export async function PipelineList({
                           </p>
                         )}
                         {customer.email && (
-                          <p className="flex items-center gap-1.5 text-muted-foreground">
-                            <Mail className="size-3.5 shrink-0" aria-hidden="true" />
-                            <span className="max-w-44 truncate">{customer.email}</span>
+                          <p className="flex items-center gap-1.5 text-foreground">
                             <RowMessageButton
                               channel="email"
                               loadId={load.id}
                               customerId={customer.id}
                               customerName={customer.contact_name}
                             />
+                            <span className="max-w-44 truncate">{customer.email}</span>
                           </p>
                         )}
+                        {/* msgplane's per-row "quick view" link. */}
+                        <Link
+                          href={`/loads/${load.id}`}
+                          className="flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground hover:underline"
+                        >
+                          <SquareArrowOutUpRight className="size-3" aria-hidden="true" />
+                          quick view
+                        </Link>
                       </div>
                     ) : (
                       <span className="text-muted-foreground">—</span>
@@ -409,26 +439,26 @@ export async function PipelineList({
                             type={v.vehicle_type}
                           />
                           <div className="leading-tight">
-                            <p className="font-medium">
+                            {/* msgplane: gray vehicle title, type under, red
+                                "enclosed" flag on its own line. */}
+                            <p className="text-muted-foreground">
                               {[v.year, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}
                             </p>
-                            <p className="text-[13px] text-muted-foreground">
+                            <p className="text-[13px] text-foreground">
                               {VEHICLE_TYPE_LABELS[v.vehicle_type] ?? v.vehicle_type}
-                              {load.transport_type === "enclosed" ? (
-                                <span className="font-medium text-amber-600 dark:text-amber-400">
-                                  {" "}
-                                  · enclosed
-                                </span>
-                              ) : null}
                             </p>
+                            {load.transport_type === "enclosed" && (
+                              <p className="text-[13px] text-red-600 dark:text-red-400">enclosed</p>
+                            )}
                           </div>
                         </div>
                       ))}
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-3 py-4">
+                    {/* msgplane pins: blue origin, red destination. */}
                     <p className="flex items-center gap-1.5">
-                      <MapPin className="size-3.5 shrink-0 text-green-600 dark:text-green-500" aria-hidden="true" />
+                      <MapPin className="size-3.5 shrink-0 text-blue-600 dark:text-blue-400" aria-hidden="true" />
                       {load.pickup_city || "—"} {load.pickup_state || ""} {load.pickup_zip || ""}
                     </p>
                     <p className="mt-1 flex items-center gap-1.5">
@@ -437,21 +467,22 @@ export async function PipelineList({
                     </p>
                   </td>
                   <td className="whitespace-nowrap px-3 py-4 tabular-nums text-foreground">
-                    {formatDate(load.pickup_ready_date)}
+                    {usDateOnly(load.pickup_ready_date)}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-4">
+                  <td className="whitespace-nowrap px-3 py-4 tabular-nums">
+                    {/* msgplane money: "Tariff:$500" — tight, whole dollars. */}
                     <p>
-                      <span className="text-muted-foreground">Tariff: </span>
-                      <span className="font-semibold tabular-nums text-foreground">
-                        {formatCurrency(load.customer_rate)}
-                      </span>
+                      <span className="text-muted-foreground">Tariff:</span>
+                      <span className="text-foreground">{money0(load.customer_rate)}</span>
                     </p>
-                    <p className="text-[13px] tabular-nums text-muted-foreground">
-                      Deposit: {formatCurrency(load.deposit_amount)}
+                    <p>
+                      <span className="text-muted-foreground">Deposit:</span>
+                      <span className="text-foreground">{money0(load.deposit_amount)}</span>
                     </p>
-                    {canSeeMargin && (
-                      <p className="text-[13px] tabular-nums text-muted-foreground">
-                        Carrier: {formatCurrency(load.carrier_pay)}
+                    {canSeeMargin && load.carrier_pay != null && (
+                      <p>
+                        <span className="text-muted-foreground">Carrier:</span>
+                        <span className="text-foreground">{money0(load.carrier_pay)}</span>
                       </p>
                     )}
                   </td>
