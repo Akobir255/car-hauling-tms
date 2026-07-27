@@ -77,58 +77,79 @@ export function VehiclesEditor({
   return (
     <div className="space-y-3">
       <form action={tariffFormAction} className="space-y-3">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Year</TableHead>
-              <TableHead>Make/Model</TableHead>
-              <TableHead>VIN</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Condition</TableHead>
-              <TableHead>Tariff ($)</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {vehicles.map((v) => (
-              <TableRow key={v.id}>
-                <TableCell>{v.year ?? "—"}</TableCell>
-                <TableCell>
-                  {v.make} {v.model}
-                </TableCell>
-                <TableCell className="text-muted-foreground">{v.vin || "—"}</TableCell>
-                <TableCell className="text-muted-foreground">{titleCase(v.vehicle_type)}</TableCell>
-                <TableCell className="text-muted-foreground">{titleCase(v.condition)}</TableCell>
-                <TableCell>
-                  <Input
-                    name={`tariff_${v.id}`}
-                    inputMode="decimal"
-                    defaultValue={v.tariff ?? ""}
-                    className="w-24"
-                    aria-label={`Tariff for ${v.year ?? ""} ${v.make ?? ""} ${v.model ?? ""}`}
-                  />
-                </TableCell>
-                <TableCell className="text-right">
-                  <RemoveVehicleButton
-                    onRemove={removeAction.bind(null, v.id)}
-                    disabled={vehicles.length === 1}
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-            {vehicles.length === 0 && (
+        {/* msgplane's per-vehicle detail set: plate/state/lot/color for
+            auction pickups, plus per-unit tariff and deposit. */}
+        <div className="overflow-x-auto">
+          <Table className="min-w-[64rem]">
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground">
-                  No vehicles on this load.
-                </TableCell>
+                <TableHead>Year</TableHead>
+                <TableHead>Make/Model</TableHead>
+                <TableHead>VIN</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Condition</TableHead>
+                <TableHead>Plate</TableHead>
+                <TableHead>State</TableHead>
+                <TableHead>LOT #</TableHead>
+                <TableHead>Color</TableHead>
+                <TableHead>Tariff ($)</TableHead>
+                <TableHead>Deposit ($)</TableHead>
+                <TableHead />
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {vehicles.map((v) => {
+                const unit = `${v.year ?? ""} ${v.make ?? ""} ${v.model ?? ""}`.trim();
+                return (
+                  <TableRow key={v.id}>
+                    <TableCell>{v.year ?? "—"}</TableCell>
+                    <TableCell>
+                      {v.make} {v.model}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{v.vin || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{titleCase(v.vehicle_type)}</TableCell>
+                    <TableCell className="text-muted-foreground">{titleCase(v.condition)}</TableCell>
+                    <TableCell>
+                      <Input name={`plate_${v.id}`} defaultValue={v.plate ?? ""} className="w-20" aria-label={`Plate for ${unit}`} />
+                    </TableCell>
+                    <TableCell>
+                      <Input name={`plate_state_${v.id}`} maxLength={2} defaultValue={v.plate_state ?? ""} className="w-14" aria-label={`Plate state for ${unit}`} />
+                    </TableCell>
+                    <TableCell>
+                      <Input name={`lot_number_${v.id}`} defaultValue={v.lot_number ?? ""} className="w-20" aria-label={`Lot number for ${unit}`} />
+                    </TableCell>
+                    <TableCell>
+                      <Input name={`color_${v.id}`} defaultValue={v.color ?? ""} className="w-20" aria-label={`Color for ${unit}`} />
+                    </TableCell>
+                    <TableCell>
+                      <Input name={`tariff_${v.id}`} inputMode="decimal" defaultValue={v.tariff ?? ""} className="w-20" aria-label={`Tariff for ${unit}`} />
+                    </TableCell>
+                    <TableCell>
+                      <Input name={`deposit_${v.id}`} inputMode="decimal" defaultValue={v.deposit ?? ""} className="w-20" aria-label={`Deposit for ${unit}`} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <RemoveVehicleButton
+                        onRemove={removeAction.bind(null, v.id)}
+                        disabled={vehicles.length === 1}
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {vehicles.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={12} className="text-center text-muted-foreground">
+                    No vehicles on this load.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
         {vehicles.length > 0 && (
           <div className="flex items-center gap-4">
             <Button type="submit" size="sm" variant="outline" disabled={tariffPending}>
-              {tariffPending ? "Saving..." : "Save tariffs"}
+              {tariffPending ? "Saving..." : "Save vehicles"}
             </Button>
             <p className="text-sm">
               <span className="text-muted-foreground">Total tariff: </span>
@@ -176,6 +197,22 @@ export function VehiclesEditor({
             <option value="running">Running</option>
             <option value="non_running">Non-running</option>
           </NativeSelect>
+        </div>
+        <div className="space-y-1">
+          <FieldLabel>Plate</FieldLabel>
+          <Input name="plate" className="w-24" />
+        </div>
+        <div className="space-y-1">
+          <FieldLabel>State</FieldLabel>
+          <Input name="plate_state" maxLength={2} className="w-14" />
+        </div>
+        <div className="space-y-1">
+          <FieldLabel>LOT #</FieldLabel>
+          <Input name="lot_number" className="w-24" />
+        </div>
+        <div className="space-y-1">
+          <FieldLabel>Color</FieldLabel>
+          <Input name="color" className="w-24" />
         </div>
         <div className="space-y-1">
           <FieldLabel>Tariff ($)</FieldLabel>

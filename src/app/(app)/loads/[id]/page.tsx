@@ -62,6 +62,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
     { data: requestRows },
     { data: versionRows },
     { data: cardRows },
+    { data: carrierRow },
   ] = await Promise.all([
     supabase.from("customers").select("*").eq("id", load.customer_id).single(),
     supabase.from("load_vehicles").select("*").eq("load_id", id).order("created_at"),
@@ -115,6 +116,13 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
       .eq("load_id", id)
       .order("created_at", { ascending: false })
       .limit(1),
+    load.carrier_id
+      ? supabase
+          .from("carriers")
+          .select("id, company_name, phone, source")
+          .eq("id", load.carrier_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
   const customer = customerData as Customer | null;
   const vehicles = (vehiclesData ?? []) as LoadVehicle[];
@@ -400,6 +408,82 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
           <SectionBand title="Internal Notes">
             <NotesThread loadId={load.id} notes={threadNotes} />
           </SectionBand>
+
+          {/* msgplane's Dispatch Information band: the carrier, how they get
+              paid, and who's driving — visible on every order record. */}
+          {stage === "order" && (
+            <SectionBand
+              title="Dispatch Information"
+              action={
+                canManageCarrier ? (
+                  <Link
+                    href={`/loads/${load.id}/dispatch`}
+                    className="text-xs font-semibold uppercase tracking-wide text-primary-foreground/90 hover:underline"
+                  >
+                    Edit dispatch sheet
+                  </Link>
+                ) : undefined
+              }
+            >
+              <div className="grid gap-8 sm:grid-cols-2">
+                <div className="space-y-3">
+                  <Field label="Carrier">
+                    {carrierRow ? (
+                      <span>
+                        <Link
+                          href={`/carriers/${(carrierRow as { id: string }).id}`}
+                          className="font-semibold text-primary hover:underline"
+                        >
+                          {(carrierRow as { company_name: string }).company_name}
+                        </Link>
+                        {(carrierRow as { phone: string | null }).phone && (
+                          <span className="ml-2 tabular-nums text-muted-foreground">
+                            {formatPhone((carrierRow as { phone: string | null }).phone)}
+                          </span>
+                        )}
+                        {(carrierRow as { source: string | null }).source && (
+                          <span className="ml-2 text-sm text-muted-foreground">
+                            ({(carrierRow as { source: string | null }).source === "cd"
+                              ? "CentralDispatch"
+                              : "SuperDispatch"})
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">— (CentralDispatch)</span>
+                    )}
+                  </Field>
+                  <Field label="Driver">
+                    {[load.driver_first_name, load.driver_last_name].filter(Boolean).join(" ") ||
+                    load.driver_phone ? (
+                      <span>
+                        {[load.driver_first_name, load.driver_last_name].filter(Boolean).join(" ") || "—"}
+                        {load.driver_phone && (
+                          <span className="ml-2 tabular-nums text-muted-foreground">
+                            {formatPhone(load.driver_phone)}
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </Field>
+                  {load.dispatch_instructions && (
+                    <Field label="Dispatch instructions">
+                      <span className="whitespace-pre-wrap">{load.dispatch_instructions}</span>
+                    </Field>
+                  )}
+                </div>
+                <div>
+                  <BandRow label="Balance Paid By" value={load.balance_paid_by ?? "COD to Carrier"} />
+                  <BandRow label="COD/COP Method" value={load.cod_method ?? "Cash/Certified Funds"} />
+                  <BandRow label="Payment Terms" value={load.payment_terms ?? "immediately"} />
+                  <BandRow label="Terms Begin" value={load.terms_begin ?? "delivery"} />
+                  <BandRow label="Payment Method" value={load.payment_method ?? "Cash"} />
+                </div>
+              </div>
+            </SectionBand>
+          )}
 
           <SectionBand title="Messages" bodyClassName="p-0">
             <div className="divide-y">

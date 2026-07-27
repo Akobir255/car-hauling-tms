@@ -138,12 +138,37 @@ signature of record) and the card form when required · order footer has
 msgplane's orange NEXT (next record in the same stage, newest-first) ·
 quick notes on list rows are now an anchored popover at the row (textarea +
 SAVE/CANCEL, msgplane-style), not a bottom sheet.
+· From the 2026-07-26 msgplane EDIT-PAGE tour (migration 0020): dispatch
+terms live in `src/lib/dispatch-terms.ts` — msgplane's VERBATIM select
+options for Balance Paid By / COD-COP Method / Payment Terms / Terms Begin /
+Payment Method / Invoice Payment Method (columns free-text on loads; app
+supplies the vocabulary). The edit form gained the Dispatch & payment terms
+section, driver first/last/phone, Central Dispatch note (60-char cap
+enforced server-side), Information-for-shipper, buyer numbers on both
+addresses, and msgplane's "Request credit card information" checkbox (a
+marker input protects the flag from partial forms). Vehicles carry
+plate/plate_state/lot_number/color/deposit (saveVehicleTariffs parses
+<field>_<id> inputs — LONGEST prefixes first, or plate_state mangles the
+id). The DISPATCH button now opens /loads/[id]/dispatch — msgplane's Edit
+Dispatch Sheet (dates, carrier picker with logged-offer shortcuts, driver,
+instructions, terms, money; carrier_pay via admin client) — where SAVE
+keeps the sheet and SAVE AND DISPATCH assigns the carrier (still the only
+dispatch path). Order detail gained the Dispatch Information band, and the
+orders list msgplane's REQUESTS tab (posted orders with logged carrier
+offers; the load_requests id-list feeds both filter and count — an empty
+.in() list matches everything, so it's guarded with an impossible uuid).
 Parity items deliberately still open: row quick-view popup, vehicle-photo
-override editor, Loadboard/Campaign selects on the edit header, printable
-Dispatch Sheet, auto-tickets on signed/dispatched events, and Phase-4-lite
-dispatch confirmation by INGESTING CentralDispatch's notification emails
-(msgplane logs "ACCEPTED by <carrier>" emails from
-do-not-reply@centraldispatch.com straight onto the order — no API).
+override editor, Loadboard/Campaign selects on the edit header, PRINTABLE
+dispatch sheet, msgplane's ISSUES tab ("incomplete" post-delivery orders —
+no such status here yet), the Payments/Payment Logs bands on order detail
+(their Create Payment form is a ledger row charged through Stax — ours
+waits on the processor decision), pickup/delivery date MODIFIERS on the
+dispatch sheet (Estimated/Exactly/No Earlier/No Later), auto-tickets on
+signed/dispatched events, and Phase-4-lite dispatch confirmation by
+INGESTING CentralDispatch's notification emails (msgplane logs "ACCEPTED
+by <carrier>" emails from do-not-reply@centraldispatch.com straight onto
+the order — no API; their home page even warns post-dispatch CRM edits do
+NOT sync back to CD).
 
 ## Integrations
 

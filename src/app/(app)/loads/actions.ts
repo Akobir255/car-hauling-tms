@@ -64,6 +64,20 @@ const loadCoreSchema = z.object({
   deposit_amount: numeric,
   balance_due: numeric,
   notes: z.string().optional(),
+  shipper_info: z.string().optional(),
+  pickup_buyer_number: z.string().optional(),
+  delivery_buyer_number: z.string().optional(),
+  balance_paid_by: z.string().optional(),
+  cod_method: z.string().optional(),
+  payment_terms: z.string().optional(),
+  terms_begin: z.string().optional(),
+  payment_method: z.string().optional(),
+  invoice_payment_method: z.string().optional(),
+  driver_first_name: z.string().optional(),
+  driver_last_name: z.string().optional(),
+  driver_phone: z.string().optional(),
+  cd_note: z.string().optional(),
+  dispatch_instructions: z.string().optional(),
 });
 
 function coreValues(d: z.infer<typeof loadCoreSchema>) {
@@ -92,6 +106,20 @@ function coreValues(d: z.infer<typeof loadCoreSchema>) {
     deposit_amount: d.deposit_amount,
     balance_due: d.balance_due,
     notes: d.notes || null,
+    shipper_info: d.shipper_info || null,
+    pickup_buyer_number: d.pickup_buyer_number || null,
+    delivery_buyer_number: d.delivery_buyer_number || null,
+    balance_paid_by: d.balance_paid_by || null,
+    cod_method: d.cod_method || null,
+    payment_terms: d.payment_terms || null,
+    terms_begin: d.terms_begin || null,
+    payment_method: d.payment_method || null,
+    invoice_payment_method: d.invoice_payment_method || null,
+    driver_first_name: d.driver_first_name || null,
+    driver_last_name: d.driver_last_name || null,
+    driver_phone: d.driver_phone || null,
+    cd_note: (d.cd_note || "").slice(0, 60) || null,
+    dispatch_instructions: d.dispatch_instructions || null,
   };
 }
 
@@ -249,6 +277,13 @@ export async function updateLoad(
   }
 
   const values: Record<string, unknown> = coreValues(parsedCore.data);
+
+  // msgplane's "Request Credit Card Information" checkbox: only honored when
+  // the form actually carried it (the marker input), so partial forms can't
+  // silently reset the flag.
+  if (formData.has("require_card_present")) {
+    values.contract_requires_card = formData.get("contract_requires_card") === "on";
+  }
 
   // Only admin/dispatcher may assign a carrier or set carrier pay — never
   // trust these fields from a sales-submitted form, regardless of what a
@@ -618,7 +653,11 @@ export async function deleteLoad(id: string): Promise<void> {
   revalidatePath("/loads");
 }
 
-// Per-vehicle tariffs, saved in one submit: inputs are named tariff_<vehicleId>.
+// Per-vehicle details, saved in one submit: inputs are named
+// <field>_<vehicleId>. Longest prefixes FIRST — "plate_state_x" must not
+// match the "plate" prefix and mangle the vehicle id.
+const VEHICLE_ROW_FIELDS = ["plate_state", "lot_number", "tariff", "deposit", "plate", "color"] as const;
+
 export async function saveVehicleTariffs(
   loadId: string,
   _prevState: LoadFormState,
@@ -627,17 +666,30 @@ export async function saveVehicleTariffs(
   await requireRole("admin", "dispatcher", "sales");
   const supabase = await createClient();
 
+  const updates = new Map<string, Record<string, unknown>>();
   for (const [key, value] of formData.entries()) {
-    if (!key.startsWith("tariff_")) continue;
-    const vehicleId = key.slice("tariff_".length);
+    const field = VEHICLE_ROW_FIELDS.find((f) => key.startsWith(`${f}_`));
+    if (!field) continue;
+    const vehicleId = key.slice(field.length + 1);
     const raw = value.toString().trim();
-    const tariff = raw === "" ? null : Number(raw);
-    if (tariff !== null && (Number.isNaN(tariff) || tariff < 0)) {
-      return { error: "Tariff must be a positive number." };
+    let parsed: string | number | null;
+    if (field === "tariff" || field === "deposit") {
+      parsed = raw === "" ? null : Number(raw);
+      if (parsed !== null && (Number.isNaN(parsed) || parsed < 0)) {
+        return { error: "Amounts must be positive numbers." };
+      }
+    } else {
+      parsed = raw.slice(0, 60) || null;
     }
+    const u = updates.get(vehicleId) ?? {};
+    u[field] = parsed;
+    updates.set(vehicleId, u);
+  }
+
+  for (const [vehicleId, u] of updates) {
     const { error } = await supabase
       .from("load_vehicles")
-      .update({ tariff })
+      .update(u)
       .eq("id", vehicleId)
       .eq("load_id", loadId);
     if (error) return { error: error.message };
@@ -1032,6 +1084,84 @@ export async function makeContractCurrent(
   return { ok: true };
 }
 
+// msgplane's Edit Dispatch Sheet: saves the dispatch-side fields (dates,
+// driver, instructions, terms, money), and "Save & dispatch" additionally
+// assigns the carrier — which is the one and only thing that flips a posted
+// order to Dispatched. Dispatch desk only.
+export type DispatchSheetState = LoadFormState & { dispatched?: boolean };
+
+export async function saveDispatchSheet(
+  loadId: string,
+  _prevState: DispatchSheetState,
+  formData: FormData
+): Promise<DispatchSheetState> {
+  await requireRole("admin", "dispatcher");
+  const supabase = await createClient();
+
+  const s = (name: string, max = 200) =>
+    (formData.get(name) || "").toString().trim().slice(0, max) || null;
+  const date = (name: string) => {
+    const v = (formData.get(name) || "").toString().trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+  };
+  const money = (name: string) => {
+    const v = (formData.get(name) || "").toString().trim().replace(/[$,]/g, "");
+    if (v === "") return undefined; // absent = leave alone
+    const n = Number(v);
+    return Number.isNaN(n) || n < 0 ? null : n;
+  };
+
+  const tariff = money("customer_rate");
+  const deposit = money("deposit_amount");
+  if (tariff === null || deposit === null) {
+    return { error: "Amounts must be positive numbers." };
+  }
+
+  const values: Record<string, unknown> = {
+    pickup_ready_date: date("pickup_ready_date"),
+    delivery_eta: date("delivery_eta"),
+    driver_first_name: s("driver_first_name", 80),
+    driver_last_name: s("driver_last_name", 80),
+    driver_phone: s("driver_phone", 40),
+    dispatch_instructions: s("dispatch_instructions", 2000),
+    cd_note: s("cd_note", 60),
+    balance_paid_by: s("balance_paid_by", 60),
+    cod_method: s("cod_method", 60),
+    payment_terms: s("payment_terms", 60),
+    terms_begin: s("terms_begin", 60),
+    payment_method: s("payment_method", 60),
+    invoice_payment_method: s("invoice_payment_method", 60),
+  };
+  if (tariff !== undefined) values.customer_rate = tariff;
+  if (deposit !== undefined) values.deposit_amount = deposit;
+
+  const { error } = await supabase.from("loads").update(values).eq("id", loadId);
+  if (error) return { error: error.message };
+
+  // Carrier pay is margin — written through the service role only, and only
+  // after the requireRole above (same boundary as updateLoad).
+  const carrierPay = money("carrier_pay");
+  if (carrierPay === null) return { error: "Amounts must be positive numbers." };
+  if (carrierPay !== undefined) {
+    const { error: payError } = await createAdminClient()
+      .from("loads")
+      .update({ carrier_pay: carrierPay })
+      .eq("id", loadId);
+    if (payError) return { error: payError.message };
+  }
+
+  if (formData.get("dispatch") === "1") {
+    const carrierId = (formData.get("carrier_id") || "").toString();
+    if (!carrierId) return { error: "Pick a carrier to dispatch to." };
+    const result = await assignCarrier(loadId, carrierId);
+    if (!result.ok) return { error: result.error ?? "Couldn't dispatch." };
+    return { error: null, dispatched: true };
+  }
+
+  revalidatePath(`/loads/${loadId}`);
+  return { error: null };
+}
+
 // The DISPATCH button. Deliberately NOT a status flip: it assigns a carrier
 // to a posted order, and that assignment is what dispatches — the same rule
 // updateLoad enforces on the edit form. Dispatch desk only.
@@ -1200,6 +1330,7 @@ export async function addVehicle(
   const year = (formData.get("year") || "").toString().trim();
   const tariffRaw = (formData.get("tariff") || "").toString().trim();
   const supabase = await createClient();
+  const str = (name: string) => (formData.get(name) || "").toString().trim().slice(0, 60) || null;
   const { error } = await supabase.from("load_vehicles").insert({
     load_id: loadId,
     year: year ? Number(year) : null,
@@ -1209,6 +1340,10 @@ export async function addVehicle(
     vehicle_type: (formData.get("vehicle_type") || "sedan").toString(),
     condition: (formData.get("condition") || "running").toString(),
     tariff: tariffRaw && !Number.isNaN(Number(tariffRaw)) ? Number(tariffRaw) : null,
+    plate: str("plate"),
+    plate_state: str("plate_state"),
+    lot_number: str("lot_number"),
+    color: str("color"),
   });
   if (error) return { error: error.message };
 

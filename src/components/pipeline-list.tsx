@@ -63,11 +63,26 @@ export async function PipelineList({
   const endOfToday = endOfBusinessDay();
   const endOfTodayIso = endOfToday.toISOString();
 
+  // Which orders have carrier offers logged — feeds msgplane's Requests tab
+  // (filter + count). Only the order stage pays for this query; RLS scopes it.
+  const { data: reqRows } =
+    stage === "order"
+      ? await supabase.from("load_requests").select("load_id")
+      : { data: [] as { load_id: string }[] };
+  const requestLoadIds = [...new Set((reqRows ?? []).map((r) => r.load_id))];
+
   let query = supabase.from(table).select("*").limit(200);
   if (activeTab.notSigned) {
     query = query.in("status", ORDER_STATUSES).is("date_signed", null);
   } else {
     query = query.in("status", activeTab.statuses ?? stageStatuses);
+  }
+  if (activeTab.hasRequests) {
+    // .in() with an empty list matches everything — guard with an impossible id.
+    query = query.in(
+      "id",
+      requestLoadIds.length ? requestLoadIds : ["00000000-0000-0000-0000-000000000000"]
+    );
   }
   // Parked tabs (hold/cancelled/archived) are shared across stages: a priced
   // record was a quote, an unpriced one was still a lead.
@@ -91,7 +106,7 @@ export async function PipelineList({
     stage === "order" ? stageStatuses : [...new Set([...stageStatuses, ...parkedStatuses])];
   let countQuery = supabase
     .from(table)
-    .select("status, date_signed, follow_up_at, customer_rate")
+    .select("id, status, date_signed, follow_up_at, customer_rate")
     .in("status", countStatuses);
   if (canSeeMargin && rep) countQuery = countQuery.eq("sales_owner_id", rep);
 
@@ -99,17 +114,20 @@ export async function PipelineList({
   const loads = (data ?? []) as Load[];
 
   type CountRow = {
+    id: string;
     status: LoadStatus;
     date_signed: string | null;
     follow_up_at: string | null;
     customer_rate: number | null;
   };
+  const requestIdSet = new Set(requestLoadIds);
   const tabCount = (t: OrderTab) => {
     const rows = (countRows ?? []) as CountRow[];
     if (t.notSigned) {
       return rows.filter((r) => ORDER_STATUSES.includes(r.status) && r.date_signed == null).length;
     }
     let inStatuses = rows.filter((r) => (t.statuses ?? stageStatuses).includes(r.status));
+    if (t.hasRequests) inStatuses = inStatuses.filter((r) => requestIdSet.has(r.id));
     if (t.stage === "quote") inStatuses = inStatuses.filter((r) => r.customer_rate != null);
     else if (t.stage === "lead") inStatuses = inStatuses.filter((r) => r.customer_rate == null);
     if (t.followUpDue) {

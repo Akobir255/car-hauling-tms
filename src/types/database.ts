@@ -121,6 +121,19 @@ export interface Load {
   contract_signed_name: string | null;
   contract_signed_email: string | null;
   contract_requires_card: boolean;
+  balance_paid_by: string | null;
+  cod_method: string | null;
+  payment_terms: string | null;
+  terms_begin: string | null;
+  payment_method: string | null;
+  invoice_payment_method: string | null;
+  driver_first_name: string | null;
+  driver_last_name: string | null;
+  driver_phone: string | null;
+  cd_note: string | null;
+  dispatch_instructions: string | null;
+  pickup_buyer_number: string | null;
+  delivery_buyer_number: string | null;
   dispatched_at: string | null;
   picked_up_at: string | null;
   delivered_at: string | null;
@@ -145,6 +158,11 @@ export interface LoadVehicle {
   vehicle_type: VehicleType;
   condition: VehicleCondition;
   tariff: number | null;
+  deposit: number | null;
+  plate: string | null;
+  plate_state: string | null;
+  lot_number: string | null;
+  color: string | null;
   notes: string | null;
   created_at: string;
 }

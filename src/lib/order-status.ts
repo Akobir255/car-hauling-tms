@@ -84,6 +84,9 @@ export type OrderTab = {
   statuses?: LoadStatus[];
   notSigned?: boolean;
   followUpDue?: boolean;
+  // msgplane's Requests tab: posted orders that have carrier offers logged
+  // in load_requests — the dispatcher's "review the offers" queue.
+  hasRequests?: boolean;
   // Restrict a shared status (hold/cancelled/archived) to records that belong
   // to this stage. Which stage a parked record came from is derived from its
   // price rather than stored: pricing is exactly what promotes a lead to a
@@ -115,6 +118,12 @@ export const ORDER_TABS: OrderTab[] = [
   { key: "orders", label: "Orders", statuses: ["ready", "booked"] },
   { key: "posted_cd", label: "Posted CD", statuses: ["posted_cd"] },
   { key: "posted_sd", label: "Posted SD", statuses: ["posted_sd"] },
+  {
+    key: "requests",
+    label: "Requests",
+    statuses: ["posted_cd", "posted_sd", "booked"],
+    hasRequests: true,
+  },
   { key: "not_signed", label: "Not Signed", notSigned: true },
   { key: "dispatched", label: "Dispatched", statuses: ["dispatched", "in_transit"] },
   { key: "picked_up", label: "Picked-Up", statuses: ["picked_up"] },

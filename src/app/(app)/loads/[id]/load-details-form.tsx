@@ -1,13 +1,23 @@
 "use client";
 
 import { useActionState, useCallback, useRef, useState } from "react";
-import { Handshake, MapPin, StickyNote, Truck } from "lucide-react";
+import { ClipboardList, Handshake, MapPin, StickyNote, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { FormSection, FieldLabel } from "@/components/form-section";
 import { RouteMap } from "@/components/route-map";
+import {
+  BALANCE_PAID_BY,
+  COD_METHOD,
+  PAYMENT_TERMS,
+  TERMS_BEGIN,
+  PAYMENT_METHOD,
+  INVOICE_PAYMENT_METHOD,
+  DISPATCH_TERM_DEFAULTS,
+} from "@/lib/dispatch-terms";
+import { TermsSelect } from "@/components/terms-select";
 import type { Carrier, Load } from "@/types/database";
 import type { LoadFormState } from "../actions";
 
@@ -80,9 +90,20 @@ function EndpointFields({
           />
         </div>
       </div>
-      <div className="space-y-1.5">
-        <FieldLabel htmlFor={dateField}>{dateLabel}</FieldLabel>
-        <Input id={dateField} name={dateField} type="date" defaultValue={load[dateField] ?? ""} className="w-44" />
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <FieldLabel htmlFor={dateField}>{dateLabel}</FieldLabel>
+          <Input id={dateField} name={dateField} type="date" defaultValue={load[dateField] ?? ""} className="w-44" />
+        </div>
+        <div className="space-y-1.5">
+          <FieldLabel htmlFor={`${prefix}_buyer_number`}>Buyer number</FieldLabel>
+          <Input
+            id={`${prefix}_buyer_number`}
+            name={`${prefix}_buyer_number`}
+            defaultValue={v(`${prefix}_buyer_number`)}
+            placeholder="Auction buyer #"
+          />
+        </div>
       </div>
     </fieldset>
   );
@@ -205,6 +226,33 @@ export function LoadDetailsForm({
                 placeholder="Gate codes, flexible dates, keys location..."
               />
             </div>
+            <div className="space-y-1.5">
+              <FieldLabel htmlFor="shipper_info">Information for shipper</FieldLabel>
+              <Textarea
+                id="shipper_info"
+                name="shipper_info"
+                rows={2}
+                defaultValue={load.shipper_info ?? ""}
+                placeholder="Shown to the customer on the contract…"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <FieldLabel htmlFor="cd_note">Central Dispatch note (max 60 characters)</FieldLabel>
+              <Input id="cd_note" name="cd_note" maxLength={60} defaultValue={load.cd_note ?? ""} />
+            </div>
+            {/* msgplane's "Request Credit Card Information": when checked, the
+                contract's signing page asks the customer for card details.
+                The marker input keeps partial forms from resetting the flag. */}
+            <input type="hidden" name="require_card_present" value="1" />
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                name="contract_requires_card"
+                defaultChecked={load.contract_requires_card}
+                className="size-4 accent-primary"
+              />
+              Request credit card information on the contract
+            </label>
           </div>
           <RouteMap
             getEndpoints={getEndpoints}
@@ -212,6 +260,80 @@ export function LoadDetailsForm({
               setDistance(String(mi));
               setDirty(true);
             }}
+          />
+        </div>
+      </FormSection>
+
+      {/* msgplane's Pricing Information / Dispatch Info blocks: how the
+          carrier gets paid, and who's driving. Free to edit for any staff —
+          these are contract terms, not margin. */}
+      <FormSection icon={ClipboardList} title="Dispatch & payment terms">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+          <TermsSelect
+            name="balance_paid_by"
+            label="Balance paid by"
+            options={BALANCE_PAID_BY}
+            value={load.balance_paid_by}
+            fallback={DISPATCH_TERM_DEFAULTS.balance_paid_by}
+          />
+          <TermsSelect
+            name="cod_method"
+            label="COD/COP method"
+            options={COD_METHOD}
+            value={load.cod_method}
+            fallback={DISPATCH_TERM_DEFAULTS.cod_method}
+          />
+          <TermsSelect
+            name="payment_terms"
+            label="Payment terms"
+            options={PAYMENT_TERMS}
+            value={load.payment_terms}
+            fallback={DISPATCH_TERM_DEFAULTS.payment_terms}
+          />
+          <TermsSelect
+            name="terms_begin"
+            label="Terms begin"
+            options={TERMS_BEGIN}
+            value={load.terms_begin}
+            fallback={DISPATCH_TERM_DEFAULTS.terms_begin}
+          />
+          <TermsSelect
+            name="payment_method"
+            label="Payment method"
+            options={PAYMENT_METHOD}
+            value={load.payment_method}
+            fallback={DISPATCH_TERM_DEFAULTS.payment_method}
+          />
+          <TermsSelect
+            name="invoice_payment_method"
+            label="Invoice payment method"
+            options={INVOICE_PAYMENT_METHOD}
+            value={load.invoice_payment_method}
+          />
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-3">
+          <div className="space-y-1.5">
+            <FieldLabel htmlFor="driver_first_name">Driver&apos;s first name</FieldLabel>
+            <Input id="driver_first_name" name="driver_first_name" defaultValue={load.driver_first_name ?? ""} />
+          </div>
+          <div className="space-y-1.5">
+            <FieldLabel htmlFor="driver_last_name">Driver&apos;s last name</FieldLabel>
+            <Input id="driver_last_name" name="driver_last_name" defaultValue={load.driver_last_name ?? ""} />
+          </div>
+          <div className="space-y-1.5">
+            <FieldLabel htmlFor="driver_phone">Driver&apos;s phone</FieldLabel>
+            <Input id="driver_phone" name="driver_phone" type="tel" defaultValue={load.driver_phone ?? ""} />
+          </div>
+        </div>
+        <div className="mt-4 space-y-1.5">
+          <FieldLabel htmlFor="dispatch_instructions">
+            Driver&apos;s instructions (dispatch instructions)
+          </FieldLabel>
+          <Textarea
+            id="dispatch_instructions"
+            name="dispatch_instructions"
+            rows={2}
+            defaultValue={load.dispatch_instructions ?? ""}
           />
         </div>
       </FormSection>
