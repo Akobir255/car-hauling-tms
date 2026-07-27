@@ -1,6 +1,6 @@
 import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import Link from "next/link";
-import { CalendarCheck2, Inbox, MapPin, Phone, Plus, SquareArrowOutUpRight, User } from "lucide-react";
+import { CalendarCheck2, Inbox, MapPin, Phone, Plus, User } from "lucide-react";
 import { VehiclePhoto } from "@/components/vehicle-photo";
 import { RowMessageButton } from "@/components/messaging/row-message-buttons";
 import { NotesQuickButton } from "@/components/messaging/notes-quick";
@@ -12,6 +12,7 @@ import { endOfBusinessDay } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { SelectionProvider } from "@/components/pipeline/selection-context";
 import { RepSelect } from "@/components/pipeline/rep-select";
+import { QuickView } from "@/components/pipeline/quick-view";
 import { RowCheckbox, SelectAllCheckbox } from "@/components/pipeline/row-checkbox";
 import { BulkActionBar } from "@/components/pipeline/bulk-action-bar";
 import { EmptyState } from "@/components/empty-state";
@@ -549,14 +550,37 @@ export async function PipelineList({
                             <span className="max-w-44 truncate">{customer.email}</span>
                           </p>
                         )}
-                        {/* msgplane's per-row "quick view" link. */}
-                        <Link
-                          href={`/loads/${load.id}`}
-                          className="flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground hover:underline"
-                        >
-                          <SquareArrowOutUpRight className="size-3" aria-hidden="true" />
-                          quick view
-                        </Link>
+                        {/* The old system's per-row "quick view": a popup of
+                            the record's key facts, without leaving the list. */}
+                        <QuickView
+                          canSeeMargin={canSeeMargin}
+                          data={{
+                            loadId: load.id,
+                            loadNumber: load.load_number,
+                            status: statusText(load),
+                            customerName: customer.contact_name,
+                            phone: customer.phone,
+                            email: customer.email,
+                            origin: [load.pickup_city, load.pickup_state, load.pickup_zip]
+                              .filter(Boolean)
+                              .join(" "),
+                            destination: [load.delivery_city, load.delivery_state, load.delivery_zip]
+                              .filter(Boolean)
+                              .join(" "),
+                            vehicles:
+                              loadVehicles
+                                .map((v) => [v.year, v.make, v.model].filter(Boolean).join(" "))
+                                .filter(Boolean)
+                                .join(", ") || "—",
+                            tariff: load.customer_rate,
+                            deposit: load.deposit_amount,
+                            carrierPay: canSeeMargin ? load.carrier_pay : null,
+                            firstAvail: load.pickup_ready_date,
+                            shipperInfo: load.shipper_info,
+                            notes: load.notes,
+                            assignedTo: rp ? rp.full_name || rp.email : null,
+                          }}
+                        />
                       </div>
                     ) : (
                       <span className="text-muted-foreground">—</span>

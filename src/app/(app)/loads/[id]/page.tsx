@@ -16,7 +16,7 @@ import {
   QUOTE_STATUSES,
   ORDER_STATUSES,
 } from "@/lib/order-status";
-import { ArrowDownLeft, ArrowUpRight, Mail, MessageSquareText } from "lucide-react";
+import { Mail } from "lucide-react";
 import type {
   ContractCard,
   ContractVersion,
@@ -154,14 +154,23 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   const profById = new Map((profs ?? []).map((p) => [p.id, p]));
   const assignedTo = load.sales_owner_id ? profById.get(load.sales_owner_id) : null;
 
+  // The header shows the order's Loadboard SETTING when one is chosen (the
+  // old system's header select); otherwise it falls back to where the order
+  // actually went.
   const loadboard =
-    load.posted_to_central_dispatch_at && load.posted_to_super_dispatch_at
+    load.loadboard === "all"
       ? "All"
-      : load.posted_to_central_dispatch_at
+      : load.loadboard === "cd"
         ? "CD"
-        : load.posted_to_super_dispatch_at
+        : load.loadboard === "sd"
           ? "SD"
-          : "—";
+          : load.posted_to_central_dispatch_at && load.posted_to_super_dispatch_at
+            ? "All"
+            : load.posted_to_central_dispatch_at
+              ? "CD"
+              : load.posted_to_super_dispatch_at
+                ? "SD"
+                : "—";
 
   const boundDelete = deleteLoad.bind(null, load.id);
   const stage = stageOf(load.status);
@@ -262,7 +271,11 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
             </Field>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <OrderActionBar loadId={load.id} actions={actionsFor(load.status, profile.role)} />
+            <OrderActionBar
+              loadId={load.id}
+              actions={actionsFor(load.status, profile.role)}
+              loadboard={load.loadboard}
+            />
             {/* msgplane's one colored header button: green EDIT. */}
             <Button
               size="sm"
@@ -416,12 +429,20 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               title="Dispatch Information"
               action={
                 canManageCarrier ? (
-                  <Link
-                    href={`/loads/${load.id}/dispatch`}
-                    className="text-xs font-semibold uppercase tracking-wide text-primary-foreground/90 hover:underline"
-                  >
-                    Edit dispatch sheet
-                  </Link>
+                  <span className="flex items-center gap-3">
+                    <Link
+                      href={`/loads/${load.id}/dispatch/print`}
+                      className="text-xs font-semibold uppercase tracking-wide text-primary-foreground/90 hover:underline"
+                    >
+                      Print sheet
+                    </Link>
+                    <Link
+                      href={`/loads/${load.id}/dispatch`}
+                      className="text-xs font-semibold uppercase tracking-wide text-primary-foreground/90 hover:underline"
+                    >
+                      Edit dispatch sheet
+                    </Link>
+                  </span>
                 ) : undefined
               }
             >
@@ -485,76 +506,83 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
             </SectionBand>
           )}
 
+          {/* The old system's Messages table under the record: Type / From /
+              Subject / Created By / Created, newest first. */}
           <SectionBand title="Messages" bodyClassName="p-0">
-            <div className="divide-y">
-              {messages.map((m) => {
-                const sender =
-                  m.direction === "inbound"
-                    ? customer?.contact_name || "Customer"
-                    : (m.sent_by && (profById.get(m.sent_by)?.full_name || profById.get(m.sent_by)?.email)) ||
-                      "System";
-                return (
-                  <div key={m.id} className="flex gap-3 px-5 py-3 text-sm">
-                    <span
-                      className={
-                        m.direction === "inbound"
-                          ? "mt-0.5 text-emerald-600 dark:text-emerald-400"
-                          : "mt-0.5 text-muted-foreground"
-                      }
-                    >
-                      {m.direction === "inbound" ? (
-                        <ArrowDownLeft className="size-4" aria-label="Inbound" />
-                      ) : (
-                        <ArrowUpRight className="size-4" aria-label="Outbound" />
-                      )}
-                    </span>
-                    <span className="mt-0.5 text-muted-foreground">
-                      {m.channel === "email" ? (
-                        <Mail className="size-4" aria-label="Email" />
-                      ) : (
-                        <MessageSquareText className="size-4" aria-label="SMS" />
-                      )}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                        <span className="font-medium">{sender}</span>
-                        {m.direction === "inbound" && !m.read_at && (
-                          <span className="rounded bg-blue-100 px-1.5 text-xs font-medium text-blue-800 dark:bg-blue-950 dark:text-blue-200">
-                            unread
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/60 text-left text-muted-foreground [&>th]:px-4 [&>th]:py-2 [&>th]:font-normal">
+                    <th className="w-14">Type</th>
+                    <th className="w-48">From</th>
+                    <th>Subject</th>
+                    <th className="w-32">Created By</th>
+                    <th className="w-24">Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {messages.map((m) => {
+                    const from =
+                      m.direction === "inbound"
+                        ? formatPhone(customer?.phone ?? null) || customer?.contact_name || "Customer"
+                        : m.channel === "email"
+                          ? (process.env.EMAIL_FROM_ADDRESS ?? "dispatch@mail.carshiphelp.com")
+                          : "+18657227114";
+                    const by =
+                      m.sent_by &&
+                      (profById.get(m.sent_by)?.full_name || profById.get(m.sent_by)?.email);
+                    return (
+                      <tr key={m.id} className="border-b last:border-b-0 align-top">
+                        <td className="px-4 py-2.5">
+                          {m.channel === "email" ? (
+                            <Mail className="size-4 text-red-600 dark:text-red-400" aria-label="Email" />
+                          ) : (
+                            <span
+                              className="inline-flex h-4 items-center rounded-sm bg-neutral-900 px-1.5 text-[11px] font-bold leading-none text-white dark:bg-neutral-200 dark:text-neutral-900"
+                              aria-label="SMS"
+                            >
+                              •••
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 tabular-nums text-muted-foreground">{from}</td>
+                        <td className="px-4 py-2.5">
+                          <span className="text-amber-800 dark:text-amber-200">
+                            {m.subject || m.body}
                           </span>
-                        )}
-                        {m.load_id === load.id && (
-                          <span className="rounded bg-muted px-1.5 text-xs text-muted-foreground">
-                            this order
-                          </span>
-                        )}
-                        {m.status === "failed" && (
-                          <span className="rounded bg-red-100 px-1.5 text-xs font-medium text-red-800 dark:bg-red-950 dark:text-red-200">
-                            failed
-                          </span>
-                        )}
-                        {m.status === "queued" && (
-                          <span className="rounded bg-amber-100 px-1.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                            queued
-                          </span>
-                        )}
-                        <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">
+                          {m.direction === "inbound" && !m.read_at && (
+                            <span className="ml-2 rounded bg-blue-100 px-1.5 text-xs font-medium text-blue-800 dark:bg-blue-950 dark:text-blue-200">
+                              unread
+                            </span>
+                          )}
+                          {m.status === "failed" && (
+                            <span className="ml-2 rounded bg-red-100 px-1.5 text-xs font-medium text-red-800 dark:bg-red-950 dark:text-red-200">
+                              failed
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          {by ? (
+                            <span className="text-primary">{by}</span>
+                          ) : (
+                            <span className="text-muted-foreground" />
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-muted-foreground">
                           {formatDate(m.created_at)}
-                        </span>
-                      </div>
-                      {m.subject && <p className="truncate font-medium">{m.subject}</p>}
-                      <p className="line-clamp-2 whitespace-pre-wrap break-words text-muted-foreground">
-                        {m.body}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-              {messages.length === 0 && (
-                <p className="px-5 py-4 text-sm text-muted-foreground">
-                  No messages with this customer yet.
-                </p>
-              )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {messages.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-4 text-muted-foreground">
+                        No messages with this customer yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
             <div className="border-t px-5 py-3">
               <Link

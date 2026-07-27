@@ -114,11 +114,13 @@ export function LoadDetailsForm({
   load,
   carriers,
   canManageCarrier,
+  campaigns = [],
 }: {
   action: (state: LoadFormState, formData: FormData) => Promise<LoadFormState>;
   load: Load;
   carriers: Carrier[];
   canManageCarrier: boolean;
+  campaigns?: string[];
 }) {
   const [state, formAction, pending] = useActionState(action, initialState);
   const formRef = useRef<HTMLFormElement>(null);
@@ -155,6 +157,35 @@ export function LoadDetailsForm({
       }}
       className="space-y-8"
     >
+      {/* The old system's header strip: Loadboard + Campaign sit above the
+          record, deciding where it posts and which campaign it belongs to. */}
+      <div className="flex flex-wrap items-end gap-4 rounded-lg border bg-muted/40 px-4 py-3">
+        <div className="space-y-1.5">
+          <FieldLabel htmlFor="loadboard">Loadboard</FieldLabel>
+          <NativeSelect id="loadboard" name="loadboard" defaultValue={load.loadboard ?? "all"} className="w-40">
+            <option value="all">All</option>
+            <option value="cd">Central</option>
+            <option value="sd">Super</option>
+          </NativeSelect>
+        </div>
+        <div className="space-y-1.5">
+          <FieldLabel htmlFor="campaign">Campaign</FieldLabel>
+          <Input
+            id="campaign"
+            name="campaign"
+            list="campaign-options"
+            defaultValue={load.campaign ?? ""}
+            placeholder="—"
+            className="w-48"
+          />
+          <datalist id="campaign-options">
+            {campaigns.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+        </div>
+      </div>
+
       <FormSection icon={MapPin} title="Origin & Destination">
         <div className="grid gap-x-8 gap-y-6 lg:grid-cols-2">
           <EndpointFields

@@ -124,6 +124,8 @@ export interface Load {
   // The old system's verbatim status word on imported records (null for
   // anything created here) — shown in lists so they read identically.
   msgplane_status: string | null;
+  // Where this order should be posted: "all" | "cd" | "sd" (null = ask).
+  loadboard: string | null;
   balance_paid_by: string | null;
   cod_method: string | null;
   payment_terms: string | null;

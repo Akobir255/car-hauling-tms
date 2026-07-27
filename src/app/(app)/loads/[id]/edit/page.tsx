@@ -35,15 +35,22 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
   if (!loadData) notFound();
   const load = loadData as Load;
 
-  const [{ data: customerData }, { data: vehiclesData }, { data: carriers }] = await Promise.all([
-    supabase.from("customers").select("*").eq("id", load.customer_id).single(),
-    supabase.from("load_vehicles").select("*").eq("load_id", id).order("created_at"),
-    canManageCarrier
-      ? supabase.from("carriers").select("*").order("company_name")
-      : Promise.resolve({ data: [] as Carrier[] }),
-  ]);
+  const [{ data: customerData }, { data: vehiclesData }, { data: carriers }, { data: campaignRows }] =
+    await Promise.all([
+      supabase.from("customers").select("*").eq("id", load.customer_id).single(),
+      supabase.from("load_vehicles").select("*").eq("load_id", id).order("created_at"),
+      canManageCarrier
+        ? supabase.from("carriers").select("*").order("company_name")
+        : Promise.resolve({ data: [] as Carrier[] }),
+      // Campaign names already in use, so the header field suggests instead
+      // of forcing free text every time.
+      supabase.from("loads").select("campaign").not("campaign", "is", null).limit(500),
+    ]);
   const customer = customerData as Customer | null;
   const vehicles = (vehiclesData ?? []) as LoadVehicle[];
+  const campaigns = [
+    ...new Set(((campaignRows ?? []) as { campaign: string | null }[]).map((r) => r.campaign).filter(Boolean) as string[]),
+  ].sort();
 
   const boundUpdate = updateLoad.bind(null, load.id);
   const boundStatusUpdate = updateLoadStatus.bind(null, load.id);
@@ -99,6 +106,7 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
           load={load}
           carriers={(carriers ?? []) as Carrier[]}
           canManageCarrier={canManageCarrier}
+          campaigns={campaigns}
         />
       </SectionBand>
 

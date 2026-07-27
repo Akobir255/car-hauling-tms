@@ -49,9 +49,14 @@ export default async function DispatchSheetPage({ params }: { params: Promise<{ 
         <h1 className="text-xl font-bold tracking-tight">
           Edit Dispatch Sheet for order #{load.load_number}
         </h1>
-        <Button variant="secondary" size="sm" render={<Link href={`/loads/${load.id}`} />}>
-          Back to order
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" render={<Link href={`/loads/${load.id}/dispatch/print`} />}>
+            Print sheet
+          </Button>
+          <Button variant="secondary" size="sm" render={<Link href={`/loads/${load.id}`} />}>
+            Back to order
+          </Button>
+        </div>
       </div>
 
       <SectionBand title="Dispatch Sheet">

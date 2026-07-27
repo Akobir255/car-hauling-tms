@@ -61,14 +61,23 @@ const CONFIRM: Partial<Record<OrderAction, string>> = {
 // The header/sidebar action bar. The FIRST action for the status is the
 // primary next step (loud); everything else is secondary, Mark Lost is a quiet
 // danger. `stack` lays the buttons out full-width for the sidebar column.
+const LOADBOARD_LABEL: Record<string, string> = {
+  all: "All",
+  cd: "Central Dispatch",
+  sd: "Super Dispatch",
+};
+
 export function OrderActionBar({
   loadId,
   actions,
   stack = false,
+  loadboard = null,
 }: {
   loadId: string;
   actions: OrderAction[];
   stack?: boolean;
+  /** The order's Loadboard setting, so Post highlights the intended board. */
+  loadboard?: string | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -130,14 +139,16 @@ export function OrderActionBar({
 
       {openPanel === "post" && (
         <div className={cn("flex flex-wrap items-center gap-2 rounded-md border bg-card p-2 shadow-sm", stack && "w-full")}>
-          <span className="text-xs text-muted-foreground">Post to:</span>
-          <Button size="sm" variant="secondary" disabled={pending} onClick={() => start(async () => { await postOrder(loadId, "all"); toast.success("Posted."); })}>
+          <span className="text-xs text-muted-foreground">
+            Post to{loadboard ? ` (order is set to ${LOADBOARD_LABEL[loadboard] ?? loadboard})` : ""}:
+          </span>
+          <Button size="sm" variant={loadboard === "all" || !loadboard ? "default" : "secondary"} disabled={pending} onClick={() => start(async () => { await postOrder(loadId, "all"); toast.success("Posted."); })}>
             All
           </Button>
-          <Button size="sm" variant="outline" disabled={pending} onClick={() => start(async () => { await postOrder(loadId, "cd"); toast.success("Posted."); })}>
+          <Button size="sm" variant={loadboard === "cd" ? "default" : "outline"} disabled={pending} onClick={() => start(async () => { await postOrder(loadId, "cd"); toast.success("Posted."); })}>
             Central Dispatch
           </Button>
-          <Button size="sm" variant="outline" disabled={pending} onClick={() => start(async () => { await postOrder(loadId, "sd"); toast.success("Posted."); })}>
+          <Button size="sm" variant={loadboard === "sd" ? "default" : "outline"} disabled={pending} onClick={() => start(async () => { await postOrder(loadId, "sd"); toast.success("Posted."); })}>
             Super Dispatch
           </Button>
         </div>
