@@ -67,6 +67,17 @@ export const ORDER_STATUSES: LoadStatus[] = [
   "cancelled",
 ];
 
+// Not Signed is a LIVE queue: a contract went out on a working order and is
+// still unsigned. Delivered/archived/lost/hold records never belong there,
+// however old and unsigned they are.
+export const NOT_SIGNED_STATUSES: LoadStatus[] = [
+  "ready",
+  "booked",
+  "posted_cd",
+  "posted_sd",
+  "dispatched",
+];
+
 export type PipelineStage = "lead" | "quote" | "order";
 
 export function stageOf(status: LoadStatus): PipelineStage {
@@ -112,6 +123,9 @@ export type OrderTab = {
   // the bar, but its Quotes nav link opens the Quotes tab — order in the bar
   // and default selection are different things.
   default?: boolean;
+  // Board tabs filter on the posting timestamp, so a load posted to both
+  // boards shows up under both.
+  postedTo?: "cd" | "sd";
   // Restrict a shared status (hold/cancelled/archived) to records that belong
   // to this stage. Which stage a parked record came from is derived from its
   // price rather than stored: pricing is exactly what promotes a lead to a
@@ -155,13 +169,17 @@ export const ORDER_TABS: OrderTab[] = [
   {
     key: "posted_cd",
     label: "Posted CD",
-    statuses: ["posted_cd"],
+    statuses: ["posted_cd", "posted_sd"],
+    postedTo: "cd",
     dateCol: { label: "Posted", field: "posted" },
   },
   {
     key: "posted_sd",
     label: "Posted SD",
-    statuses: ["posted_sd"],
+    // A load posted to BOTH boards appears in both tabs, as it does in the
+    // old system — so these filter on the board timestamp, not the status.
+    statuses: ["posted_cd", "posted_sd"],
+    postedTo: "sd",
     dateCol: { label: "Received", field: "created_at" },
   },
   {
@@ -182,22 +200,23 @@ export const ORDER_TABS: OrderTab[] = [
   {
     key: "dispatched",
     label: "Dispatched",
-    statuses: ["dispatched", "in_transit"],
+    statuses: ["dispatched"],
     dateCol: { label: "Signed", field: "date_signed" },
+    carrierCol: true,
+  },
+  {
+    key: "issues",
+    label: "Issues",
+    // Their "incomplete": delivered, but something still open on it.
+    statuses: ["delivered"],
+    dateCol: { label: "Delivered", field: "delivered_at" },
     carrierCol: true,
   },
   {
     key: "picked_up",
     label: "Picked-Up",
-    statuses: ["picked_up"],
+    statuses: ["picked_up", "in_transit"],
     dateCol: { label: "Picked UP", field: "picked_up_at" },
-    carrierCol: true,
-  },
-  {
-    key: "delivered",
-    label: "Delivered",
-    statuses: ["delivered", "invoiced", "paid"],
-    dateCol: { label: "Delivered", field: "delivered_at" },
     carrierCol: true,
   },
   {
@@ -210,15 +229,10 @@ export const ORDER_TABS: OrderTab[] = [
   {
     key: "archived",
     label: "Archived",
-    statuses: ["archived"],
+    // Their Archived tab holds both completed and lost orders; the row keeps
+    // showing whichever word it had.
+    statuses: ["archived", "lost", "cancelled", "invoiced", "paid"],
     dateCol: { label: "Archived", field: "updated_at" },
-    carrierCol: true,
-  },
-  {
-    key: "lost",
-    label: "Lost",
-    statuses: ["lost", "cancelled"],
-    dateCol: { label: "Converted", field: "created_at" },
     carrierCol: true,
   },
 ];

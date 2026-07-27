@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/empty-state";
 import {
   LEAD_STATUSES,
   LEAD_TABS,
+  NOT_SIGNED_STATUSES,
   ORDER_STATUSES,
   ORDER_TABS,
   QUOTE_STATUSES,
@@ -57,19 +58,25 @@ function QuoteCell({ load, canSeeMargin }: { load: Load; canSeeMargin: boolean }
 // Shared list for Leads / Quotes / Orders — one query path, msgplane column
 // layout. Orders get sub-status tabs; Leads and Quotes get the working-queue
 // pair (All | Follow-up Today).
+// Rows per page, matching the list this replaces.
+const PAGE_SIZE = 100;
+
 export async function PipelineList({
   stage,
   title,
   description: _description, // kept in the API; msgplane lists carry no blurb
   tab,
   rep,
+  page: pageParam,
 }: {
   stage: PipelineStage;
   title: string;
   description: string;
   tab?: string;
   rep?: string;
+  page?: string;
 }) {
+  const page = Math.max(0, Number.parseInt(pageParam ?? "0", 10) || 0);
   const profile = await requireProfile();
   const supabase = await createClient();
   const canSeeMargin = profile.role === "admin" || profile.role === "dispatcher";
@@ -105,72 +112,67 @@ export async function PipelineList({
     requestCountByLoad.set(r.load_id, (requestCountByLoad.get(r.load_id) ?? 0) + 1);
   }
 
-  let query = supabase.from(table).select("*").limit(200);
-  if (activeTab.notSigned) {
-    query = query.in("status", ORDER_STATUSES).is("date_signed", null);
-  } else {
-    query = query.in("status", activeTab.statuses ?? stageStatuses);
-  }
-  if (activeTab.hasRequests) {
-    // .in() with an empty list matches everything — guard with an impossible id.
-    query = query.in(
-      "id",
-      requestLoadIds.length ? requestLoadIds : ["00000000-0000-0000-0000-000000000000"]
-    );
-  }
-  // Parked tabs (hold/cancelled/archived) are shared across stages: a priced
-  // record was a quote, an unpriced one was still a lead.
-  if (activeTab.stage === "quote") query = query.not("customer_rate", "is", null);
-  else if (activeTab.stage === "lead") query = query.is("customer_rate", null);
-  if (activeTab.followUpDue) {
-    // Oldest follow-up first — that's the order reps should work the queue in.
-    query = query
-      .not("follow_up_at", "is", null)
-      .lte("follow_up_at", endOfTodayIso)
-      .order("follow_up_at", { ascending: true });
-  } else {
-    query = query.order("created_at", { ascending: false });
-  }
-  if (canSeeMargin && rep) query = query.eq("sales_owner_id", rep);
-
-  // One slim query feeds every tab count for this stage. Parked statuses are
-  // included so Hold/Cancelled/Archived can show counts too.
-  const parkedStatuses: LoadStatus[] = ["hold", "cancelled", "lost", "archived"];
-  const countStatuses =
-    stage === "order" ? stageStatuses : [...new Set([...stageStatuses, ...parkedStatuses])];
-  let countQuery = supabase
-    .from(table)
-    .select("id, status, date_signed, follow_up_at, customer_rate")
-    .in("status", countStatuses);
-  if (canSeeMargin && rep) countQuery = countQuery.eq("sales_owner_id", rep);
-
-  const [{ data, error }, { data: countRows }] = await Promise.all([query, countQuery]);
-  const loads = (data ?? []) as Load[];
-
-  type CountRow = {
-    id: string;
-    status: LoadStatus;
-    date_signed: string | null;
-    follow_up_at: string | null;
-    customer_rate: number | null;
-  };
-  const requestIdSet = new Set(requestLoadIds);
-  const tabCount = (t: OrderTab) => {
-    const rows = (countRows ?? []) as CountRow[];
+  // One place that knows how a tab is filtered — used by the page query AND
+  // by each tab's exact count, so the number on the tab and the rows in the
+  // table can never disagree.
+  type LoadQuery = ReturnType<ReturnType<typeof supabase.from>["select"]>;
+  const applyTabFilter = (q: LoadQuery, t: OrderTab): LoadQuery => {
+    let out = q;
     if (t.notSigned) {
-      return rows.filter((r) => ORDER_STATUSES.includes(r.status) && r.date_signed == null).length;
+      // Not Signed = a contract WAS SENT and is still unsigned, on a live
+      // order. Not "every order without a signature" — that would sweep in
+      // every archived record ever imported.
+      out = out
+        .in("status", NOT_SIGNED_STATUSES)
+        .not("contract_sent_at", "is", null)
+        .is("date_signed", null);
+    } else {
+      out = out.in("status", t.statuses ?? stageStatuses);
     }
-    let inStatuses = rows.filter((r) => (t.statuses ?? stageStatuses).includes(r.status));
-    if (t.hasRequests) inStatuses = inStatuses.filter((r) => requestIdSet.has(r.id));
-    if (t.stage === "quote") inStatuses = inStatuses.filter((r) => r.customer_rate != null);
-    else if (t.stage === "lead") inStatuses = inStatuses.filter((r) => r.customer_rate == null);
+    if (t.postedTo === "cd") out = out.not("posted_to_central_dispatch_at", "is", null);
+    else if (t.postedTo === "sd") out = out.not("posted_to_super_dispatch_at", "is", null);
+    if (t.hasRequests) {
+      // .in() with an empty list matches everything — guard with an impossible id.
+      out = out.in(
+        "id",
+        requestLoadIds.length ? requestLoadIds : ["00000000-0000-0000-0000-000000000000"]
+      );
+    }
+    // Parked tabs (hold/archived) are shared across stages: a priced record
+    // was a quote, an unpriced one was still a lead.
+    if (t.stage === "quote") out = out.not("customer_rate", "is", null);
+    else if (t.stage === "lead") out = out.is("customer_rate", null);
     if (t.followUpDue) {
-      // Compare as Dates — string compare breaks if offset formats ever differ.
-      return inStatuses.filter((r) => r.follow_up_at && new Date(r.follow_up_at) <= endOfToday)
-        .length;
+      out = out.not("follow_up_at", "is", null).lte("follow_up_at", endOfTodayIso);
     }
-    return inStatuses.length;
+    if (canSeeMargin && rep) out = out.eq("sales_owner_id", rep);
+    return out;
   };
+
+  // 100 rows a page, like the system this replaces.
+  const from = page * PAGE_SIZE;
+  let query = applyTabFilter(supabase.from(table).select("*"), activeTab).range(
+    from,
+    from + PAGE_SIZE - 1
+  );
+  query = activeTab.followUpDue
+    ? // Oldest follow-up first — that's the order reps work the queue in.
+      query.order("follow_up_at", { ascending: true })
+    : query.order("created_at", { ascending: false });
+
+  // Exact per-tab counts. head:true fetches no rows, so this stays correct
+  // past PostgREST's 1000-row response cap.
+  const countPromises = tabs.map((t) =>
+    applyTabFilter(supabase.from(table).select("id", { count: "exact", head: true }), t)
+  );
+
+  const [{ data, error }, ...countResults] = await Promise.all([query, ...countPromises]);
+  const loads = (data ?? []) as Load[];
+  const countByTab = new Map(
+    tabs.map((t, i) => [t.key, (countResults[i] as { count: number | null }).count ?? 0])
+  );
+  const tabCount = (t: OrderTab) => countByTab.get(t.key) ?? 0;
+  const totalRows = tabCount(activeTab);
 
   const loadIds = loads.map((l) => l.id);
   const customerIds = [...new Set(loads.map((l) => l.customer_id).filter(Boolean))];
@@ -243,10 +245,11 @@ export async function PipelineList({
   }
 
   const basePath = stage === "lead" ? "/leads" : stage === "quote" ? "/quotes" : "/orders";
-  const tabHref = (tabKey: string) => {
+  const tabHref = (tabKey: string, toPage = 0) => {
     const params = new URLSearchParams();
     if (tabKey !== defaultTab.key) params.set("tab", tabKey);
     if (rep) params.set("rep", rep);
+    if (toPage > 0) params.set("page", String(toPage));
     const qs = params.toString();
     return qs ? `${basePath}?${qs}` : basePath;
   };
@@ -279,9 +282,12 @@ export async function PipelineList({
     return m ? `${m[2]}/${m[3]}/${m[1]}` : "—";
   };
   // msgplane status text under the ID: lowercase, hyphenated, plain gray.
-  const statusText = (status: LoadStatus) => {
-    if (status === "hold" && stage === "order") return "on-hold-order";
-    return status.replace(/_/g, "-");
+  // Imported records show the OLD system's exact word (completed / lost /
+  // incomplete / on-hold-order); anything created here shows our own status.
+  const statusText = (load: Load) => {
+    if (load.msgplane_status) return load.msgplane_status;
+    if (load.status === "hold" && stage === "order") return "on-hold-order";
+    return load.status.replace(/_/g, "-");
   };
 
   // The tab's renamed date column value: timestamps get the 2-line
@@ -348,13 +354,37 @@ export async function PipelineList({
               );
             })}
           </div>
-          {/* msgplane's top-right list controls: rep filter + "0-100 ›". */}
+          {/* msgplane's top-right list controls: rep filter + "0-100 ‹ ›". */}
           <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
             {canSeeMargin && (
               <RepSelect reps={repsForBar} current={rep} profileId={profile.id} />
             )}
-            <span className="tabular-nums">0-{loads.length}</span>
-            <span aria-hidden="true">›</span>
+            <span className="tabular-nums">
+              {totalRows === 0 ? "0-0" : `${from + 1}-${Math.min(from + PAGE_SIZE, totalRows)}`}
+              <span className="ml-1 text-muted-foreground/70">of {totalRows}</span>
+            </span>
+            {page > 0 ? (
+              <Link
+                href={tabHref(activeTab.key, page - 1)}
+                aria-label="Previous page"
+                className="px-1 text-base hover:text-foreground"
+              >
+                ‹
+              </Link>
+            ) : (
+              <span className="px-1 text-base opacity-30" aria-hidden="true">‹</span>
+            )}
+            {from + PAGE_SIZE < totalRows ? (
+              <Link
+                href={tabHref(activeTab.key, page + 1)}
+                aria-label="Next page"
+                className="px-1 text-base hover:text-foreground"
+              >
+                ›
+              </Link>
+            ) : (
+              <span className="px-1 text-base opacity-30" aria-hidden="true">›</span>
+            )}
           </div>
         </div>
       )}
@@ -420,7 +450,7 @@ export async function PipelineList({
                       {load.load_number}
                     </Link>
                     <p className="mt-1 text-[13px] lowercase text-muted-foreground">
-                      {statusText(load.status)}
+                      {statusText(load)}
                     </p>
                     {load.follow_up_at && (
                       <span
@@ -610,7 +640,7 @@ export async function PipelineList({
                         {usDateOnly(load.pickup_ready_date)}
                       </td>
                       <td className="px-3 py-4 lowercase text-muted-foreground">
-                        {statusText(load.status)}
+                        {statusText(load)}
                       </td>
                     </>
                   )}
