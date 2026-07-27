@@ -183,6 +183,21 @@ Workspace domain; sending bulk from it would put real business email at risk.
 (Its root SPF also has a typo — `include:_spf.google.com~all` is missing the
 space before `~all`, making the include unresolvable. Registrar is Squarespace.)
 
+## Imported book of business (2026-07-27)
+
+441 real records migrated from msgplane with their ORIGINAL order numbers
+(searchable): 100 quotes, 100 ready orders, 50 hold (all they had), 100
+archived, 91 "Issues" (msgplane status `incomplete` → rests at `delivered`
+here; each carries an import note with its original status + assigned rep).
+423 customers deduped by email/phone, 495 vehicles. All imported loads have
+`sales_owner_id` NULL — managers see everything, sales reps see none of them
+until assigned. Re-runnable importer (idempotent on load_number):
+`node <scratchpad>/import-msgplane.mjs` reading Downloads/msgplane-*.json.
+Export path that works: in-page fetch of each record's editview → parse
+name/value fields (card fields excluded in-browser) → file download from the
+page (Chrome PNA blocks localhost POSTs from HTTPS pages now — the old
+127.0.0.1 receiver trick no longer works in real Chrome).
+
 ## Carrier directory
 
 ~4.7k carrier companies imported from the old system (migration 0016 added
