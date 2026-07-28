@@ -2,17 +2,17 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { CalendarCheck2, Mail, MessageSquareText, User, X } from "lucide-react";
+import { Ban, CalendarCheck2, Mail, MessageSquareText, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
 import { TemplateSheet } from "@/components/messaging/template-sheet";
 import { useSelection } from "./selection-context";
-import { bulkEmail, bulkReassign, bulkSetFollowUp, bulkSmsChunk } from "@/app/(app)/loads/actions";
+import { bulkCancel, bulkEmail, bulkReassign, bulkSetFollowUp, bulkSmsChunk } from "@/app/(app)/loads/actions";
 import { finalizeSmsBlast } from "@/app/(app)/messages/actions";
 import { SMS_CHUNK_MAX } from "@/lib/messaging/sms-bulk";
 
 type Rep = { id: string; name: string };
-type Panel = "reassign" | "followup" | "sms" | "email" | null;
+type Panel = "reassign" | "followup" | "sms" | "email" | "cancel" | null;
 
 const FOLLOW_UP_PRESETS: { key: string; label: string }[] = [
   { key: "1d", label: "1 Day" },
@@ -29,6 +29,7 @@ export function BulkActionBar({ reps, canReassign }: { reps: Rep[]; canReassign:
   const [panel, setPanel] = useState<Panel>(null);
   const [pending, start] = useTransition();
   const [repId, setRepId] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
 
   const ids = [...selected];
   if (ids.length === 0) return null;
@@ -188,6 +189,42 @@ export function BulkActionBar({ reps, canReassign }: { reps: Rep[]; canReassign:
             </div>
           )}
 
+          {panel === "cancel" && (
+            // Cancelling a hundred records is not undoable from the UI, so it
+            // asks once and says the number out loud rather than relying on
+            // the operator remembering what they had selected.
+            <div className="flex flex-wrap items-center gap-2 border-b p-3">
+              <span className="text-sm">
+                Cancel {ids.length} record{ids.length === 1 ? "" : "s"}?
+              </span>
+              <input
+                type="text"
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Reason (optional) — e.g. opted out of messaging"
+                className="h-12 min-w-56 flex-1 rounded-md border border-input bg-transparent px-2.5 text-[16px] outline-none md:h-8 md:text-sm"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-12 md:h-7 border-destructive/40 text-destructive hover:bg-destructive/10"
+                disabled={pending}
+                onClick={() =>
+                  start(async () => {
+                    const r = await bulkCancel(ids, cancelReason);
+                    setCancelReason("");
+                    done(
+                      `Cancelled ${r.cancelled} record${r.cancelled === 1 ? "" : "s"}` +
+                        (r.skipped ? ` — ${r.skipped} were already cancelled.` : ".")
+                    );
+                  })
+                }
+              >
+                {pending ? "Cancelling…" : "Yes, cancel them"}
+              </Button>
+            </div>
+          )}
+
           {/* The four labels plus the clear button measure ~359px, which does
               not fit a 375px screen: the group wrapped to two 48px rows and
               the count took a third, leaving a ~150px bar sitting on top of
@@ -238,6 +275,15 @@ export function BulkActionBar({ reps, canReassign }: { reps: Rep[]; canReassign:
               >
                 <CalendarCheck2 className="size-5 md:hidden" aria-hidden="true" />
                 <span className="max-md:sr-only">Next Follow Up</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-12 max-md:w-12 md:h-7 border-destructive/40 text-destructive hover:bg-destructive/10"
+                onClick={() => togglePanel("cancel")}
+              >
+                <Ban className="size-5 md:hidden" aria-hidden="true" />
+                <span className="max-md:sr-only">Cancel</span>
               </Button>
               <Button
                 size="icon"

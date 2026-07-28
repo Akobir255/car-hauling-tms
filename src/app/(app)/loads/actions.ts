@@ -1398,6 +1398,54 @@ export async function bulkSetFollowUp(loadIds: string[], preset: string): Promis
   revalidatePipeline();
 }
 
+// Bulk cancel, the old system's "Selected records have been cancelled".
+//
+// The reason this exists on the bar rather than only per-record: the common
+// use is filtering the list to people who opted out of messaging and closing
+// all of them at once. Working through a hundred records one at a time is how
+// a rep ends up texting someone who asked them to stop.
+//
+// Already-cancelled rows are skipped rather than re-stamped, so the history
+// keeps the date they were actually cancelled.
+export async function bulkCancel(
+  loadIds: string[],
+  reason?: string
+): Promise<{ cancelled: number; skipped: number }> {
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  if (loadIds.length === 0) return { cancelled: 0, skipped: 0 };
+  const supabase = await createClient();
+
+  // RLS scopes this: a sales rep can only cancel loads they can already see.
+  const { data: rows } = await supabase
+    .from("loads")
+    .select("id, status")
+    .in("id", loadIds);
+
+  const target = (rows ?? []).filter((l) => l.status !== "cancelled").map((l) => l.id);
+  const skipped = (rows ?? []).length - target.length;
+  if (target.length === 0) return { cancelled: 0, skipped };
+
+  const { error } = await supabase
+    .from("loads")
+    .update({ status: "cancelled", cancelled_reason: reason?.slice(0, 200) || null })
+    .in("id", target);
+  if (error) return { cancelled: 0, skipped };
+
+  // Same trail a single cancel leaves, so a bulk action is not invisible in
+  // the record's history.
+  await supabase.from("load_status_history").insert(
+    target.map((id) => ({
+      load_id: id,
+      status: "cancelled" as const,
+      changed_by: profile.id,
+      note: reason?.slice(0, 200) || "Cancelled in bulk from the list",
+    }))
+  );
+
+  revalidatePipeline();
+  return { cancelled: target.length, skipped };
+}
+
 // Flag/unflag a customer as blacklisted (from the order ⋯ menu).
 export async function toggleBlacklist(customerId: string, on: boolean): Promise<void> {
   await requireRole("admin", "dispatcher");
