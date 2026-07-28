@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { normalizeVehicleImageParams, wikiTitleCandidates } from "@/lib/vehicles/image";
+import { normalizeVehicleImageParams, standInForType, wikiTitleCandidates } from "@/lib/vehicles/image";
 
 // Vehicle photo proxy — resolves make/model to a Wikipedia page image and
 // streams the bytes back from OUR origin (same pattern as msgplane's
@@ -52,12 +52,16 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const params = normalizeVehicleImageParams(
-    req.nextUrl.searchParams.get("make"),
-    req.nextUrl.searchParams.get("model")
-  );
+  // The record's own make/model first; failing that, a representative model
+  // for the body type. The old system never shows a drawing in this column, so
+  // neither do we — see standInForType for what that trade costs.
+  const params =
+    normalizeVehicleImageParams(
+      req.nextUrl.searchParams.get("make"),
+      req.nextUrl.searchParams.get("model")
+    ) ?? standInForType(req.nextUrl.searchParams.get("type"));
   if (!params) {
-    return NextResponse.json({ error: "make and model are required" }, { status: 400 });
+    return NextResponse.json({ error: "make and model, or a known type, are required" }, { status: 400 });
   }
 
   try {
