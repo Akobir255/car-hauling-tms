@@ -176,6 +176,9 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
 
   const boundDelete = deleteLoad.bind(null, load.id);
   const stage = stageOf(load.status);
+  // Leads and quotes are pre-agreement: no contract, no payment, no dispatch.
+  // The old system only offers Convert to Order at this point.
+  const isPreOrder = stage === "lead" || stage === "quote";
   const backPath = BACK_PATH[stage];
   const requests = (requestRows ?? []) as LoadRequest[];
   const versions = (versionRows ?? []) as ContractVersion[];
@@ -305,6 +308,11 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
       {/* Single full-width column, msgplane-style: E-Sign directly under the
           header, then the banded sections stacked. */}
       <div className="space-y-5">
+          {/* A contract belongs to an ORDER. In the old system a lead or quote
+              offers Convert to Order and nothing else — you cannot send an
+              agreement for work the customer has not agreed to yet. Showing the
+              band here invited a rep to send a contract on a live quote. */}
+          {!isPreOrder && (
           <SectionBand title="E-Sign">
             <EsignPanel
               loadId={load.id}
@@ -321,6 +329,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               events={contractEvents ?? []}
             />
           </SectionBand>
+          )}
 
           <SectionBand title="Order Information">
             <div className="grid gap-8 sm:grid-cols-2">
@@ -599,7 +608,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
             </div>
             <div className="border-t px-5 py-3">
               <Link
-                href={`/messages/thread/${load.customer_id}`}
+                href={`/customers/${load.customer_id}`}
                 className="text-sm text-msg-link hover:underline"
               >
                 Open conversation →

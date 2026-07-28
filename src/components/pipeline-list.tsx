@@ -421,7 +421,10 @@ export async function PipelineList({
             {tabs.map((t) => {
               const active = activeTab.key === t.key;
               const count = tabCount(t);
-              const showBadge = (t.badge || t.followUpDue) && count > 0;
+              // No badge on the follow-up queue. Nearly every open quote is due
+              // or overdue, so the number reads in the thousands — it tells a
+              // rep nothing they can act on and the old system never showed it.
+              const showBadge = t.badge && !t.followUpDue && count > 0;
               return (
                 <Link
                   key={t.key}
