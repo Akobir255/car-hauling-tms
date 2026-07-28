@@ -236,7 +236,11 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
     "No vehicles";
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5">
+    // Full width, no centered column: msgplane's bands run edge to edge, and
+    // on a 1920px monitor a max-w-7xl page left ~320px of white on each side
+    // while the record itself sat in the middle. The top bar's own p-4/p-6
+    // gutter is the only inset.
+    <div className="space-y-5">
       {/* msgplane puts the Load Requests notebook ABOVE the record header on
           every order — carrier offers are the first thing a dispatcher sees. */}
       {stage === "order" && (

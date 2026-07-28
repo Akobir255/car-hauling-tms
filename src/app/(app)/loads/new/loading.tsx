@@ -3,7 +3,7 @@
 // Next streams this in while the page loads.
 export default function Loading() {
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="space-y-8">
       {[0, 1, 2, 3].map((i) => (
         // bg-border, not bg-muted: #fafafa on a white card is a 1.04:1 step, so
         // the bars were invisible and animate-pulse was only modulating the

@@ -327,7 +327,7 @@ export function NewLoadForm() {
         const target = e.target as HTMLElement;
         if (e.key === "Enter" && target.tagName === "INPUT") e.preventDefault();
       }}
-      className="mx-auto max-w-5xl space-y-8"
+      className="space-y-8"
     >
       <FormSection icon={User} title="Shipper">
         <div className="grid gap-4 sm:grid-cols-3">
@@ -515,7 +515,7 @@ export function NewLoadForm() {
           main's gutter — which halves below md. Never exceed it: a bleed wider
           than the padding scrolls the document sideways. */}
       <div className="sticky bottom-0 z-10 -mx-6 border-t bg-card/95 px-6 py-3 backdrop-blur max-md:-mx-4 max-md:px-4">
-        <div className="mx-auto flex max-w-5xl items-center justify-end gap-3 max-md:flex-wrap">
+        <div className="flex items-center justify-end gap-3 max-md:flex-wrap">
           {/* mr-auto puts the error leftmost, so without its own row it is the
               first thing squeezed out of a narrow bar. */}
           {state.error && (

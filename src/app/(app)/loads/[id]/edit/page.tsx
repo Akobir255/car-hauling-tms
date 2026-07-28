@@ -61,7 +61,9 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
   const boundSaveTariffs = saveVehicleTariffs.bind(null, load.id);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    // Full width, matching the order page it is reached from — see the note
+    // there. A 1024px column was the narrowest page in the app.
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 rounded-md border bg-card px-4 py-3">
         <span className="tabular-nums text-msg-link">{load.load_number}</span>
         <StatusBadge status={load.status} />

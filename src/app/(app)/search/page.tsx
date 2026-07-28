@@ -31,7 +31,7 @@ export default async function SearchPage({
 
   if (raw.length < 2) {
     return (
-      <div className="mx-auto max-w-5xl">
+      <div>
         <h1 className="text-[15px]">Search</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Type at least two characters in the search box and press Enter.
@@ -87,7 +87,7 @@ export default async function SearchPage({
   const customerById = new Map(customers.map((c) => [c.id, c]));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
+    <div className="space-y-5">
       <div>
         <h1 className="text-[15px]">Search results</h1>
         <p className="text-sm text-muted-foreground">

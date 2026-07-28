@@ -44,7 +44,7 @@ export default async function DispatchSheetPage({ params }: { params: Promise<{ 
   const canDispatch = ["posted_cd", "posted_sd", "booked"].includes(load.status);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
+    <div className="space-y-5">
       <div className="flex items-center justify-between max-md:flex-wrap max-md:gap-2">
         <h1 className="text-[15px]">Edit Dispatch Sheet for order #{load.load_number}</h1>
         <div className="flex items-center gap-2 max-md:gap-3">

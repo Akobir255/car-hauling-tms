@@ -44,7 +44,7 @@ export default async function TicketDetailPage({
   const canDelete = profile.role === "admin" || profile.role === "dispatcher";
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
+    <div className="space-y-5">
       <div className="rounded-lg border bg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">

@@ -6,7 +6,7 @@ export default async function NewLoadPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="mx-auto max-w-5xl text-[15px]">New load</h1>
+      <h1 className="text-[15px]">New load</h1>
       <NewLoadForm />
     </div>
   );
