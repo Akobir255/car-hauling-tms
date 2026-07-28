@@ -41,16 +41,22 @@ export function VehiclePhoto({
 }) {
   const [failed, setFailed] = useState(false);
 
-  // The drawing is now the LAST resort, not the second one. The old system
-  // shows a photograph on every row, so a blank make no longer drops straight
-  // to a silhouette — the API serves a representative model for the body type
-  // and only a genuine lookup failure lands here.
+  // A LIST shows the body type's stock photo and nothing else — no lookup, no
+  // network, no failure state. The supplied cutouts are the point: an
+  // encyclopedia photograph is a car parked on a street, and a column of those
+  // reads as noise. The real model belongs on the order page.
+  //
+  // An uploaded photo is the exception, because that is a picture of THIS
+  // vehicle rather than a stand-in for its shape.
+  if (generic && !(hasOverride && vehicleId)) {
+    return <VehicleThumb type={type} className={className} />;
+  }
+
+  // On a detail page the lookup can still miss; the stock photo catches it.
   if (failed) {
     return <VehicleThumb type={type} className={className} />;
   }
 
-  // An uploaded photo is of THIS vehicle, so it wins even in a list — that is
-  // a real picture of the car, not a stand-in for its shape.
   const useModel = !generic || (hasOverride && Boolean(vehicleId));
 
   const query = new URLSearchParams();
