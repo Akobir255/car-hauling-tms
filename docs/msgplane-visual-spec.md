@@ -76,6 +76,13 @@ them exactly would make the app worse:
    works this app by keyboard all day. The global `outline-ring` runs at full
    opacity because it overrides the browser's own two-tone ring, and hand-rolled
    links and buttons carry an explicit `focus-ring` utility.
+5. **Type runs one step larger.** The scale is still three sizes and still
+   proportional, but 12/14/15 became 13/15/16. msgplane's 12px was designed for
+   a wide desk monitor; on a laptop it is hard work, and this team reads these
+   screens all day. Body leading is 1.55 and smoothing is grayscale rather than
+   subpixel — Lato at weight 400 renders thin and ragged on Windows otherwise,
+   which is where the team works. What makes the app feel like the old system is
+   the three-size discipline and the proportions, not the absolute values.
 4. **One display size.** msgplane's largest type is the 15px root, because it
    has no dashboard. Ours does, and a KPI value that reads at 15px is not a KPI.
    `text-xl` is the only size above the 12 / 14 / 15 scale, it stays at weight

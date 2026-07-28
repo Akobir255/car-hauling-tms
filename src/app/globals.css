@@ -66,12 +66,16 @@
   /* Ink for text sitting ON a --destructive tint. --destructive itself is only
      4.3:1 once composited over its own /10 fill. */
   --color-destructive-ink: var(--destructive-ink);
-  /* msgplane's whole type scale is three sizes. Pinning them in px keeps
-     text-xs/text-sm/text-base on 12/14/15 no matter what the root is, so the
-     measured values survive the 15px root below. */
-  --text-xs: 12px;
-  --text-sm: 14px;
-  --text-base: 15px;
+  /* msgplane's whole type scale is three sizes, pinned in px so they survive
+     the 15px root below.
+     Each is one step above the measured value. msgplane's 12px is genuinely
+     small — fine on the wide monitor it was designed for, hard work on a
+     laptop, and this team reads these screens all day. The proportions and
+     the three-size discipline are what make it feel like the old system; the
+     absolute values are not, and legibility wins where they conflict. */
+  --text-xs: 13px;
+  --text-sm: 15px;
+  --text-base: 16px;
   /* msgplane has exactly one radius. The old scale multiplied the base, which
      at 3px would have spread rounded-sm through rounded-4xl across 1.8–7.8px;
      every step resolves flat so a Badge and a Card agree on their corners. */
@@ -247,6 +251,10 @@
        from Shipper", and nowhere else. The old semibold default is why several
        components still carry font-normal purely to undo it. */
     @apply bg-background text-foreground;
+    /* Lato is a humanist face with fairly tight default leading. At the sizes
+       this app runs (12-15px, read all day), the stock line-height crowds rows
+       enough that scanning a list is measurably harder. */
+    line-height: 1.55;
   }
   html {
     /* The measured root. Every rem-based utility keys off it, which is why the
@@ -254,6 +262,12 @@
        values, not multiples of the root. */
     font-size: 15px;
     @apply font-sans;
+    /* Grayscale smoothing rather than subpixel: Lato at 400 renders thin and
+       slightly ragged on Windows, which is where this team works. This is what
+       makes the text read as smooth instead of brittle. */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 }
 
