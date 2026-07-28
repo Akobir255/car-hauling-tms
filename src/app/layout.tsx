@@ -28,7 +28,10 @@ export default function RootLayout({
     // before hydration, so the server markup deliberately differs.
     <html
       lang="en"
-      className={`${lato.variable} h-full antialiased`}
+      // No `antialiased` — see the font-smoothing note in globals.css. On
+      // Windows it thins every glyph, and this team compares these screens
+      // side by side with the system being replaced.
+      className={`${lato.variable} h-full`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">

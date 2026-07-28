@@ -67,7 +67,7 @@ export function DispatchSheetForm({
   return (
     <form action={formAction} className="space-y-6">
       {/* Dates */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         <div className="space-y-1.5">
           <FieldLabel htmlFor="pickup_ready_date">1st avail / pickup date</FieldLabel>
           <Input id="pickup_ready_date" name="pickup_ready_date" type="date" defaultValue={load.pickup_ready_date ?? ""} />
@@ -88,6 +88,7 @@ export function DispatchSheetForm({
               onChange={setCarrierName}
               onPick={setPicked}
               placeholder="Search the carrier directory…"
+              className="max-md:[&_input]:min-h-12"
             />
             <input type="hidden" name="carrier_id" value={picked?.id ?? ""} />
             {requests.length > 0 && !picked && (
@@ -98,7 +99,7 @@ export function DispatchSheetForm({
                     {i > 0 && " · "}
                     <button
                       type="button"
-                      className="text-msg-link hover:underline"
+                      className="text-msg-link hover:underline max-md:min-h-12"
                       onClick={() => {
                         setCarrierName(r.carrier_name);
                         if (r.carrier_id) {
@@ -121,7 +122,7 @@ export function DispatchSheetForm({
               </p>
             )}
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
             <div className="space-y-1.5">
               <FieldLabel htmlFor="driver_first_name">Driver&apos;s first name</FieldLabel>
               <Input id="driver_first_name" name="driver_first_name" defaultValue={load.driver_first_name ?? ""} />
@@ -172,7 +173,7 @@ export function DispatchSheetForm({
       </div>
 
       {/* Pricing + terms */}
-      <div className="grid grid-cols-2 gap-4 border-t pt-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 border-t pt-4 md:grid-cols-2 lg:grid-cols-3">
         <div className="space-y-1.5">
           <FieldLabel htmlFor="customer_rate">Total tariff ($)</FieldLabel>
           <Input id="customer_rate" name="customer_rate" inputMode="decimal" defaultValue={load.customer_rate ?? ""} />
@@ -228,9 +229,13 @@ export function DispatchSheetForm({
         />
       </div>
 
-      <div className="flex items-center justify-end gap-2 border-t pt-4">
-        {state.error && <p className="mr-auto text-sm text-destructive">{state.error}</p>}
-        <Button type="submit" variant="secondary" disabled={pending}>
+      <div className="flex items-center justify-end gap-2 border-t pt-4 max-md:flex-wrap max-md:gap-3">
+        {/* mr-auto puts the error leftmost, i.e. first off the edge — give it
+            its own line before the row can push it out. */}
+        {state.error && (
+          <p className="mr-auto text-sm text-destructive max-md:basis-full">{state.error}</p>
+        )}
+        <Button type="submit" variant="secondary" className="max-md:min-h-12" disabled={pending}>
           {pending ? "Saving…" : "Save"}
         </Button>
         {canDispatch && (
@@ -239,7 +244,7 @@ export function DispatchSheetForm({
             name="dispatch"
             value="1"
             disabled={pending || !picked}
-            className="bg-chart-5 uppercase text-msg-selected-foreground hover:bg-chart-5/85"
+            className="bg-chart-5 uppercase text-msg-selected-foreground hover:bg-chart-5/85 max-md:min-h-12"
           >
             Save and dispatch
           </Button>

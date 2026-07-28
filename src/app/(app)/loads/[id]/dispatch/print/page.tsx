@@ -164,44 +164,50 @@ export default async function DispatchSheetPrintPage({
         </tbody>
       </table>
 
-      {/* Vehicles */}
-      <table className="mb-3 w-full border-collapse">
-        <thead>
-          <tr className="bg-black text-white">
-            <th className={`${cell} text-left`}>Year</th>
-            <th className={`${cell} text-left`}>Make</th>
-            <th className={`${cell} text-left`}>Model</th>
-            <th className={`${cell} text-left`}>Type</th>
-            <th className={`${cell} text-left`}>VIN</th>
-            <th className={`${cell} text-left`}>Plate</th>
-            <th className={`${cell} text-left`}>Lot #</th>
-            <th className={`${cell} text-left`}>Runs</th>
-          </tr>
-        </thead>
-        <tbody>
-          {vehicles.map((v) => (
-            <tr key={v.id}>
-              <td className={cell}>{v.year ?? "—"}</td>
-              <td className={cell}>{v.make ?? "—"}</td>
-              <td className={cell}>{v.model ?? "—"}</td>
-              <td className={cell}>{v.vehicle_type}</td>
-              <td className={cell}>{v.vin ?? "—"}</td>
-              <td className={cell}>
-                {[v.plate, v.plate_state].filter(Boolean).join(" ") || "—"}
-              </td>
-              <td className={cell}>{v.lot_number ?? "—"}</td>
-              <td className={cell}>{v.condition === "non_running" ? "NO" : "Yes"}</td>
+      {/* Vehicles — the only table here wide enough to put the document itself
+          on a horizontal scrollbar (a VIN alone is ~105px of unbreakable
+          min-content), so below md it pans inside its own scroller. Print
+          media measures the paper box, not the viewport, so the sheet is
+          unaffected. */}
+      <div className="max-md:overflow-x-auto">
+        <table className="mb-3 w-full border-collapse">
+          <thead>
+            <tr className="bg-black text-white">
+              <th className={`${cell} text-left`}>Year</th>
+              <th className={`${cell} text-left`}>Make</th>
+              <th className={`${cell} text-left`}>Model</th>
+              <th className={`${cell} text-left`}>Type</th>
+              <th className={`${cell} text-left`}>VIN</th>
+              <th className={`${cell} text-left`}>Plate</th>
+              <th className={`${cell} text-left`}>Lot #</th>
+              <th className={`${cell} text-left`}>Runs</th>
             </tr>
-          ))}
-          {vehicles.length === 0 && (
-            <tr>
-              <td className={cell} colSpan={8}>
-                No vehicles listed.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {vehicles.map((v) => (
+              <tr key={v.id}>
+                <td className={cell}>{v.year ?? "—"}</td>
+                <td className={cell}>{v.make ?? "—"}</td>
+                <td className={cell}>{v.model ?? "—"}</td>
+                <td className={cell}>{v.vehicle_type}</td>
+                <td className={cell}>{v.vin ?? "—"}</td>
+                <td className={cell}>
+                  {[v.plate, v.plate_state].filter(Boolean).join(" ") || "—"}
+                </td>
+                <td className={cell}>{v.lot_number ?? "—"}</td>
+                <td className={cell}>{v.condition === "non_running" ? "NO" : "Yes"}</td>
+              </tr>
+            ))}
+            {vehicles.length === 0 && (
+              <tr>
+                <td className={cell} colSpan={8}>
+                  No vehicles listed.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
       <table className="mb-3 w-full border-collapse">
         <tbody>

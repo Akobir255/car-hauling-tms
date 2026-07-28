@@ -241,11 +241,17 @@ export function BulkCompose({
       ))}
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between max-md:flex-wrap max-md:gap-2">
           <h2 className="text-sm text-msg-header">
             Recipients — {effectiveSelected.length} selected
           </h2>
-          <Button type="button" variant="outline" size="sm" onClick={toggleAllVisible}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="max-md:min-h-12"
+            onClick={toggleAllVisible}
+          >
             Select all shown ({visible.length})
           </Button>
         </div>
@@ -261,11 +267,13 @@ export function BulkCompose({
             {isEmail ? "email" : "SMS"}).
           </p>
         )}
-        <div className="max-h-96 space-y-1 overflow-y-auto rounded-md border p-2">
+        {/* A fixed 384px scroller eats more than half a phone screen and the
+            page still scrolls behind it. */}
+        <div className="max-h-96 space-y-1 overflow-y-auto rounded-md border p-2 max-md:max-h-[50vh]">
           {visible.map((c) => (
             <label
               key={c.id}
-              className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-msg-hover"
+              className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-msg-hover max-md:min-h-12 max-md:flex-wrap"
             >
               <input
                 type="checkbox"
@@ -273,7 +281,10 @@ export function BulkCompose({
                 onChange={() => toggle(c.id)}
               />
               <span>{c.contact_name}</span>
-              <span className="truncate text-muted-foreground">
+              {/* Company/phone is the disambiguator between two same-named
+                  customers, so it gets its own line rather than truncating to
+                  nothing beside the name. */}
+              <span className="truncate text-muted-foreground max-md:w-full">
                 {c.company_name ? `${c.company_name} · ` : ""}
                 {isEmail ? c.email : c.phone}
               </span>
@@ -299,9 +310,11 @@ export function BulkCompose({
               onClick={() => setChannel(c)}
               className={
                 // Selected segment takes the coral, same as the list tabs.
+                // max-md:py-3 rather than a min-height: these are plain buttons,
+                // so padding is what keeps the label centred in the taller box.
                 channel === c
-                  ? "rounded-md bg-msg-selected px-3 py-1 text-sm text-msg-selected-foreground"
-                  : "rounded-md px-3 py-1 text-sm text-muted-foreground hover:text-foreground"
+                  ? "rounded-md bg-msg-selected px-3 py-1 text-sm text-msg-selected-foreground max-md:py-3"
+                  : "rounded-md px-3 py-1 text-sm text-muted-foreground hover:text-foreground max-md:py-3"
               }
             >
               {c === "sms" ? "SMS" : "Email"}
@@ -377,19 +390,25 @@ export function BulkCompose({
               : ""}
           </p>
         </div>
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1 max-md:gap-2">
           {TEMPLATE_VARIABLES.map((v) => (
+            // Sized at the call site, not in ui/badge.tsx — these ten are
+            // clickable inserts; the status badges elsewhere are not.
             <Badge
               key={v}
               variant="outline"
-              className="cursor-pointer"
+              className="cursor-pointer max-md:h-12 max-md:px-3"
               onClick={() => setBody((prev) => `${prev}{{${v}}}`)}
             >
               {`{{${v}}}`}
             </Badge>
           ))}
         </div>
-        <Button type="submit" disabled={busy || effectiveSelected.length === 0}>
+        <Button
+          type="submit"
+          className="max-md:min-h-12 max-md:w-full"
+          disabled={busy || effectiveSelected.length === 0}
+        >
           {busy
             ? "Sending..."
             : `Send to ${effectiveSelected.length} recipient${effectiveSelected.length === 1 ? "" : "s"}`}

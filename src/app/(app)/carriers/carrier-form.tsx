@@ -24,8 +24,10 @@ export function CarrierForm({
 
   return (
     <form action={formAction} className="max-w-2xl space-y-6">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2 space-y-1.5">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {/* Both col-span-2 cells are demoted in step with the base grid — a
+            2-wide span in a 1-column grid opens an implicit second column. */}
+        <div className="col-span-1 space-y-1.5 md:col-span-2">
           <Label htmlFor="company_name">Company name *</Label>
           <Input id="company_name" name="company_name" defaultValue={carrier?.company_name} required />
         </div>
@@ -53,7 +55,7 @@ export function CarrierForm({
           <Label htmlFor="safety_rating">Safety rating</Label>
           <Input id="safety_rating" name="safety_rating" defaultValue={carrier?.safety_rating ?? ""} />
         </div>
-        <div className="col-span-2 space-y-1.5">
+        <div className="col-span-1 space-y-1.5 md:col-span-2">
           <Label htmlFor="address">Address</Label>
           <Input id="address" name="address" defaultValue={carrier?.address ?? ""} />
         </div>
@@ -82,9 +84,11 @@ export function CarrierForm({
 
       <div className="space-y-1.5">
         <Label>Equipment types</Label>
-        <div className="flex gap-4">
+        {/* The label wraps the box, so the whole 44px row is the hit area and
+            the checkbox glyph itself never moves. */}
+        <div className="flex gap-4 max-md:flex-wrap">
           {EQUIPMENT_OPTIONS.map((opt) => (
-            <label key={opt} className="flex items-center gap-2 text-sm">
+            <label key={opt} className="flex items-center gap-2 text-sm max-md:min-h-12">
               <input
                 type="checkbox"
                 name="equipment_types"
@@ -97,12 +101,12 @@ export function CarrierForm({
         </div>
       </div>
 
-      <div className="flex gap-6">
-        <label className="flex items-center gap-2 text-sm">
+      <div className="flex gap-6 max-md:flex-wrap">
+        <label className="flex items-center gap-2 text-sm max-md:min-h-12">
           <input type="checkbox" name="preferred" defaultChecked={carrier?.preferred} />
           Preferred carrier
         </label>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm max-md:min-h-12">
           <input type="checkbox" name="blacklisted" defaultChecked={carrier?.blacklisted} />
           Blacklisted
         </label>
@@ -116,10 +120,15 @@ export function CarrierForm({
       {state.error && <p className="text-sm text-destructive">{state.error}</p>}
 
       <div className="flex gap-3">
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" className="max-md:min-h-12" disabled={pending}>
           {pending ? "Saving..." : carrier ? "Save changes" : "Create carrier"}
         </Button>
-        <Button type="button" variant="outline" render={<Link href="/carriers" />}>
+        <Button
+          type="button"
+          variant="outline"
+          className="max-md:min-h-12"
+          render={<Link href="/carriers" />}
+        >
           Cancel
         </Button>
       </div>

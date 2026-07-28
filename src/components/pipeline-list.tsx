@@ -13,9 +13,10 @@ import { endOfBusinessDay } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { SelectionProvider } from "@/components/pipeline/selection-context";
 import { RepSelect } from "@/components/pipeline/rep-select";
-import { QuickView } from "@/components/pipeline/quick-view";
+import { QuickView, type QuickViewData } from "@/components/pipeline/quick-view";
 import { FilterBar, type FilterValues } from "@/components/pipeline/filter-bar";
 import { RowCheckbox, SelectAllCheckbox } from "@/components/pipeline/row-checkbox";
+import { PhoneOnly } from "@/components/pipeline/phone-only";
 import { statusTone } from "@/components/pipeline/status-tone";
 import { BulkActionBar } from "@/components/pipeline/bulk-action-bar";
 import { EmptyState } from "@/components/empty-state";
@@ -401,6 +402,59 @@ export async function PipelineList({
     return { date: usDateOnly(raw), time: null };
   };
 
+  // Built in one place because two layouts now render the same load: the
+  // desktop table row and the mobile card. Drift here would show a rep
+  // different facts depending on which device they opened.
+  const quickViewFor = (
+    load: Load,
+    customer: NonNullable<ReturnType<typeof customerById.get>>,
+    rp: ReturnType<typeof repById.get>,
+    loadVehicles: LoadVehicle[]
+  ): QuickViewData => ({
+    loadId: load.id,
+    loadNumber: load.load_number,
+    status: statusText(load),
+    customerName: customer.contact_name,
+    phone: customer.phone,
+    email: customer.email,
+    origin: [load.pickup_city, load.pickup_state, load.pickup_zip].filter(Boolean).join(" "),
+    destination: [load.delivery_city, load.delivery_state, load.delivery_zip]
+      .filter(Boolean)
+      .join(" "),
+    vehicles:
+      loadVehicles
+        .map((v) => [v.year, v.make, v.model].filter(Boolean).join(" "))
+        .filter(Boolean)
+        .join(", ") || "—",
+    tariff: load.customer_rate,
+    deposit: load.deposit_amount,
+    carrierPay: canSeeMargin ? load.carrier_pay : null,
+    firstAvail: load.pickup_ready_date,
+    shipperInfo: load.shipper_info,
+    notes: load.notes,
+    assignedTo: rp ? rp.full_name || rp.email : null,
+  });
+
+  // Shared by the table's empty row and the card list's.
+  const emptyState = activeTab.followUpDue ? (
+    <EmptyState
+      icon={CalendarCheck2}
+      title="Queue clear"
+      hint="No follow-ups due today. Anything you schedule lands here on its day."
+    />
+  ) : (
+    <EmptyState
+      icon={Inbox}
+      title="Nothing here yet"
+      hint={`New ${stage}s will show up in this list.`}
+      action={
+        <Button size="sm" className="h-12 md:h-7" render={<Link href="/loads/new" />}>
+          New {stage}
+        </Button>
+      }
+    />
+  );
+
   const repsForBar = ((reps ?? []) as Pick<Profile, "id" | "full_name" | "email">[]).map((r) => ({
     id: r.id,
     name: r.full_name || r.email,
@@ -416,7 +470,10 @@ export async function PipelineList({
       {/* msgplane tab bar: plain labels, coral active chip, a count badge
           ONLY where attention is needed (their Issues-style badge). */}
       {tabs.length > 1 && (
-        <div className="flex items-center justify-between gap-3 pb-1">
+        // Below md the controls drop to their own line rather than starving
+        // the tab strip, which carries overflow-x-auto and so has no automatic
+        // minimum size of its own to defend with.
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-1 md:flex-nowrap">
           <div className="flex items-center gap-2 overflow-x-auto">
             {tabs.map((t) => {
               const active = activeTab.key === t.key;
@@ -433,8 +490,11 @@ export async function PipelineList({
                   className={cn(
                     // The measured tab is a white chip, 14px, padding 1px 3px.
                     // That leaves a 22px pointer target, so a 24px floor is
-                    // added — it moves the chip's edge, never its ink.
-                    "focus-ring flex min-h-6 items-center gap-1.5 whitespace-nowrap rounded-md px-[3px] py-px text-sm transition-colors",
+                    // added — it moves the chip's edge, never its ink. On a
+                    // phone the same chip is the list's primary navigation, so
+                    // it takes a 45px thumb target until md hands the mouse
+                    // geometry back. (The root is 15px: min-h-11 is 41px.)
+                    "focus-ring flex min-h-12 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-px text-sm transition-colors md:min-h-6 md:px-[3px]",
                     active
                       ? "bg-msg-selected text-msg-selected-foreground"
                       : "text-foreground hover:bg-msg-hover"
@@ -460,7 +520,7 @@ export async function PipelineList({
             })}
           </div>
           {/* msgplane's top-right list controls: rep filter + "0-100 ‹ ›". */}
-          <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground md:shrink-0">
             {canSeeMargin && (
               <RepSelect reps={repsForBar} current={rep} profileId={profile.id} />
             )}
@@ -469,27 +529,40 @@ export async function PipelineList({
               {/* Was muted/70, which composites to msgplane's own 2.7:1 gray. */}
               <span className="ml-1">of {totalRows}</span>
             </span>
+            {/* Two single-glyph targets 8px apart, and a mis-tap silently
+                loads a different 100 records — so below md each takes a 45px
+                box. md:inline + md:size-auto + md:px-1 is the current glyph. */}
             {page > 0 ? (
               <Link
                 href={tabHref(activeTab.key, page - 1)}
                 aria-label="Previous page"
-                className="px-1 text-[15px] hover:text-foreground"
+                className="inline-flex size-12 items-center justify-center text-[15px] hover:text-foreground md:inline md:size-auto md:px-1"
               >
                 ‹
               </Link>
             ) : (
-              <span className="px-1 text-[15px] opacity-30" aria-hidden="true">‹</span>
+              <span
+                className="inline-flex size-12 items-center justify-center text-[15px] opacity-30 md:inline md:size-auto md:px-1"
+                aria-hidden="true"
+              >
+                ‹
+              </span>
             )}
             {from + PAGE_SIZE < totalRows ? (
               <Link
                 href={tabHref(activeTab.key, page + 1)}
                 aria-label="Next page"
-                className="px-1 text-[15px] hover:text-foreground"
+                className="inline-flex size-12 items-center justify-center text-[15px] hover:text-foreground md:inline md:size-auto md:px-1"
               >
                 ›
               </Link>
             ) : (
-              <span className="px-1 text-[15px] opacity-30" aria-hidden="true">›</span>
+              <span
+                className="inline-flex size-12 items-center justify-center text-[15px] opacity-30 md:inline md:size-auto md:px-1"
+                aria-hidden="true"
+              >
+                ›
+              </span>
             )}
           </div>
         </div>
@@ -501,7 +574,11 @@ export async function PipelineList({
 
       {/* No shadow — the nav bar is the only thing in msgplane that carries
           one, so the border gray is what makes the list read as a region. */}
-      <div className="overflow-x-auto rounded-md border bg-card">
+      {/* Eleven columns have a min-content width of ~1250px against ~330px of
+          phone, so below md this whole region is replaced by the card list
+          under it. Everything inside stays exactly as it was — the table is
+          desktop's, untouched. */}
+      <div className="hidden overflow-x-auto rounded-md border bg-card md:block">
         {/* Cells are pinned in px: the file also carries 12px sub-lines, and a
             rem step would drift away from them if the root size ever moves. */}
         <table className="w-full border-collapse text-[14px]">
@@ -740,32 +817,7 @@ export async function PipelineList({
                             the record's key facts, without leaving the list. */}
                         <QuickView
                           canSeeMargin={canSeeMargin}
-                          data={{
-                            loadId: load.id,
-                            loadNumber: load.load_number,
-                            status: statusText(load),
-                            customerName: customer.contact_name,
-                            phone: customer.phone,
-                            email: customer.email,
-                            origin: [load.pickup_city, load.pickup_state, load.pickup_zip]
-                              .filter(Boolean)
-                              .join(" "),
-                            destination: [load.delivery_city, load.delivery_state, load.delivery_zip]
-                              .filter(Boolean)
-                              .join(" "),
-                            vehicles:
-                              loadVehicles
-                                .map((v) => [v.year, v.make, v.model].filter(Boolean).join(" "))
-                                .filter(Boolean)
-                                .join(", ") || "—",
-                            tariff: load.customer_rate,
-                            deposit: load.deposit_amount,
-                            carrierPay: canSeeMargin ? load.carrier_pay : null,
-                            firstAvail: load.pickup_ready_date,
-                            shipperInfo: load.shipper_info,
-                            notes: load.notes,
-                            assignedTo: rp ? rp.full_name || rp.email : null,
-                          }}
+                          data={quickViewFor(load, customer, rp, loadVehicles)}
                         />
                       </div>
                     ) : (
@@ -859,41 +911,318 @@ export async function PipelineList({
             })}
             {loads.length === 0 && (
               <tr>
-                <td colSpan={11}>
-                  {activeTab.followUpDue ? (
-                    <EmptyState
-                      icon={CalendarCheck2}
-                      title="Queue clear"
-                      hint="No follow-ups due today. Anything you schedule lands here on its day."
-                    />
-                  ) : (
-                    <EmptyState
-                      icon={Inbox}
-                      title="Nothing here yet"
-                      hint={`New ${stage}s will show up in this list.`}
-                      action={
-                        <Button size="sm" render={<Link href="/loads/new" />}>
-                          New {stage}
-                        </Button>
-                      }
-                    />
-                  )}
-                </td>
+                <td colSpan={11}>{emptyState}</td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
 
+      {/* The phone layout of the same rows, fed by the same already-fetched
+          data. Order follows what a rep checks between sessions: ID + status,
+          shipper, route, price, date — then the secondary block. Sub-lines use
+          the sanctioned 13px rather than the table's 12px, which is only
+          legible at a desk. */}
+      <ul className="divide-y divide-msg-rule overflow-hidden rounded-md border bg-card text-sm max-md:mb-28 md:hidden">
+        {loads.map((load) => {
+          const customer = customerById.get(load.customer_id);
+          const rp = load.sales_owner_id ? repById.get(load.sales_owner_id) : undefined;
+          const loadVehicles = vehiclesByLoad.get(load.id) ?? [];
+          const colDate = tabDate(load);
+          const rowCarrier = load.carrier_id ? carrierById.get(load.carrier_id) : undefined;
+          const unread = unreadByCustomer.get(load.customer_id) ?? 0;
+          const offers = requestCountByLoad.get(load.id) ?? 0;
+          return (
+            <li key={load.id} className="relative p-3">
+              {/* The card is one tap target. Controls that do something OTHER
+                  than open the record take z-10 to sit above this overlay. */}
+              <Link
+                href={`/loads/${load.id}`}
+                aria-label={`Open ${load.load_number}`}
+                className="focus-ring absolute inset-0"
+              />
+
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="tabular-nums text-msg-link">{load.load_number}</span>
+                    <span className={cn("text-xs lowercase", statusTone(statusText(load)))}>
+                      {statusText(load)}
+                    </span>
+                  </div>
+                  {customer && (customer.sms_opt_out || customer.email_opt_out) && (
+                    <p className="text-xs font-bold lowercase text-destructive">
+                      opted out
+                      {customer.sms_opt_out && customer.email_opt_out
+                        ? ""
+                        : customer.sms_opt_out
+                          ? " (sms)"
+                          : " (email)"}
+                    </p>
+                  )}
+                  {load.follow_up_at && (
+                    <span
+                      title={load.follow_up_note ?? undefined}
+                      className={cn(
+                        "inline-block rounded-md px-2 py-0.5 text-xs ring-1 ring-inset",
+                        new Date(load.follow_up_at) < new Date()
+                          ? "bg-destructive/10 text-destructive-ink ring-destructive/25"
+                          : "bg-chart-2/15 text-foreground ring-chart-2/40"
+                      )}
+                    >
+                      FU {formatDate(load.follow_up_at)}
+                    </span>
+                  )}
+                </div>
+                {/* The label, not the 15px box, is what gets tapped — and it
+                    is server-rendered, so the box holds its size while the
+                    checkbox inside it waits for hydration. */}
+                <label className="relative z-10 -my-1 -mr-1 flex size-12 shrink-0 cursor-pointer items-center justify-center">
+                  <PhoneOnly>
+                    <RowCheckbox id={load.id} label={`Select ${load.load_number}`} />
+                  </PhoneOnly>
+                </label>
+              </div>
+
+              {customer ? (
+                <div className="mt-2 space-y-1">
+                  <p className="flex items-center gap-1.5">
+                    <User className="size-4 shrink-0 text-msg-shipper" aria-hidden="true" />
+                    <span className="min-w-0 break-words text-foreground">
+                      {customer.contact_name}
+                    </span>
+                    {customer.blacklisted && (
+                      <span className="shrink-0 rounded-md bg-destructive px-1.5 py-0.5 text-xs uppercase leading-none text-background">
+                        blacklisted
+                      </span>
+                    )}
+                  </p>
+                  {customer.phone && (
+                    <p className="flex items-center gap-1.5 tabular-nums">
+                      <Phone className="size-3.5 shrink-0 text-foreground" aria-hidden="true" />
+                      <span
+                        className={customer.sms_opt_out ? "line-through opacity-60" : undefined}
+                      >
+                        {formatPhone(customer.phone)}
+                      </span>
+                      {customer.sms_opt_out ? (
+                        <span
+                          title="Replied STOP — texting this number is not allowed"
+                          className="shrink-0 rounded-md bg-destructive px-1.5 py-0.5 text-xs uppercase leading-none text-background"
+                        >
+                          STOP
+                        </span>
+                      ) : (
+                        // The chip is 15px tall and sits beside a phone number
+                        // iOS already treats as a call target, so on the card
+                        // it grows to a real 45px button. Sized from here
+                        // rather than by wrapping it: a wrapper span would be
+                        // padding, not hit area.
+                        <span className="relative z-10 flex size-12 shrink-0 items-center [&>button]:h-12 [&>button]:w-12 [&>button]:justify-center [&>button]:rounded-md">
+                          <PhoneOnly>
+                            <RowMessageButton
+                              channel="sms"
+                              loadId={load.id}
+                              customerId={customer.id}
+                              customerName={customer.contact_name}
+                            />
+                          </PhoneOnly>
+                        </span>
+                      )}
+                    </p>
+                  )}
+                  {customer.email && (
+                    <p className="flex items-center gap-1.5">
+                      {customer.email_opt_out ? (
+                        <span
+                          title="Unsubscribed from email"
+                          className="shrink-0 rounded-md bg-destructive px-1.5 py-0.5 text-xs uppercase leading-none text-background"
+                        >
+                          UNSUB
+                        </span>
+                      ) : (
+                        <span className="relative z-10 flex size-12 shrink-0 items-center [&>button]:size-12 [&>button]:justify-center">
+                          <PhoneOnly>
+                            <RowMessageButton
+                              channel="email"
+                              loadId={load.id}
+                              customerId={customer.id}
+                              customerName={customer.contact_name}
+                            />
+                          </PhoneOnly>
+                        </span>
+                      )}
+                      {/* No 165px cap here — that is a table-column constraint,
+                          and half an address identifies nobody. */}
+                      <span
+                        className={cn(
+                          "min-w-0 break-all",
+                          customer.email_opt_out && "line-through opacity-60"
+                        )}
+                      >
+                        {customer.email}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-2 text-muted-foreground">—</p>
+              )}
+
+              <div className="mt-2 space-y-0.5">
+                <p className="flex items-start gap-1.5">
+                  <MapPin
+                    className="mt-1 size-3.5 shrink-0 text-msg-shipper"
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0">
+                    {load.pickup_city || "—"} {load.pickup_state || ""} {load.pickup_zip || ""}
+                  </span>
+                </p>
+                <p className="flex items-start gap-1.5">
+                  <MapPin className="mt-1 size-3.5 shrink-0 text-destructive" aria-hidden="true" />
+                  <span className="min-w-0">
+                    {load.delivery_city || "—"} {load.delivery_state || ""}{" "}
+                    {load.delivery_zip || ""}
+                  </span>
+                </p>
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-start justify-between gap-x-4 gap-y-1 tabular-nums">
+                <div>
+                  <QuoteCell load={load} canSeeMargin={canSeeMargin} />
+                </div>
+                <div className="text-right text-xs">
+                  <p>
+                    <span className="text-muted-foreground">
+                      {stage === "order" ? (activeTab.dateCol?.label ?? "Converted") : "Quoted"}
+                    </span>{" "}
+                    {colDate ? colDate.date : "—"}
+                    {colDate?.time ? ` ${colDate.time}` : ""}
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">
+                      {stage === "order" ? "1st avail" : "Est. ship"}
+                    </span>{" "}
+                    {usDateOnly(load.pickup_ready_date)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Secondary: still here, just smaller and below the glance. */}
+              <div className="mt-2 space-y-2 border-t border-msg-rule pt-2 text-xs">
+                {loadVehicles.length > 0 && (
+                  <div className="space-y-1">
+                    {loadVehicles.map((v) => (
+                      <div key={v.id} className="flex items-center gap-2">
+                        <VehiclePhoto
+                          year={v.year}
+                          make={v.make}
+                          model={v.model}
+                          type={v.vehicle_type}
+                          className="h-8 w-12"
+                        />
+                        <div className="min-w-0 leading-tight">
+                          <p className="text-muted-foreground">
+                            {[v.year, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}
+                          </p>
+                          <p className="text-foreground">
+                            {VEHICLE_TYPE_LABELS[v.vehicle_type] ?? v.vehicle_type}
+                            {load.transport_type === "enclosed" && (
+                              <span className="text-destructive"> · enclosed</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {activeTab.carrierCol && rowCarrier && (
+                  <p className="flex flex-wrap items-center gap-x-2">
+                    <span className="text-muted-foreground">Carrier</span>
+                    <span className="relative z-10">
+                      <Link
+                        href={`/carriers/${rowCarrier.id}`}
+                        className="focus-ring inline-flex min-h-12 items-center text-msg-link"
+                      >
+                        {rowCarrier.company_name}
+                      </Link>
+                    </span>
+                    {rowCarrier.phone && (
+                      <span className="tabular-nums text-muted-foreground">
+                        {formatPhone(rowCarrier.phone)}
+                      </span>
+                    )}
+                  </p>
+                )}
+
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <User className="size-3.5 shrink-0 text-msg-header" aria-hidden="true" />
+                    <span className="text-foreground">{rp ? rp.full_name || rp.email : "—"}</span>
+                  </span>
+
+                  {activeTab.requestCount && offers > 0 && (
+                    <span className="inline-flex items-center rounded-md border px-1.5 py-0.5 tabular-nums">
+                      {offers} offer{offers === 1 ? "" : "s"}
+                    </span>
+                  )}
+
+                  <span
+                    title="Unread messages from this customer"
+                    className={cn(
+                      "inline-flex min-w-6 justify-center rounded-md border px-1.5 py-0.5 tabular-nums",
+                      unread > 0
+                        ? "border-destructive/40 bg-destructive/10 text-destructive-ink"
+                        : "text-muted-foreground"
+                    )}
+                  >
+                    {unread}
+                  </span>
+
+                  {/* gap-4, not the table's gap-1: two small chips 4px apart on
+                      a touch screen is a mis-tap. The counter chip is 22px in
+                      both directions, so it is sized from here — see the SMS
+                      chip above for why a wrapper would not do it. */}
+                  <span className="relative z-10 flex min-h-12 items-center gap-4 [&>button]:h-12 [&>button]:min-w-12">
+                    <PhoneOnly>
+                      <NotesQuickButton
+                        loadId={load.id}
+                        loadNumber={load.load_number}
+                        count={notesByLoad.get(load.id) ?? 0}
+                      />
+                      {customer && (
+                        <QuickView
+                          canSeeMargin={canSeeMargin}
+                          data={quickViewFor(load, customer, rp, loadVehicles)}
+                        />
+                      )}
+                    </PhoneOnly>
+                  </span>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+        {loads.length === 0 && <li className="p-3">{emptyState}</li>}
+      </ul>
+
       <BulkActionBar reps={repsForBar} canReassign={canSeeMargin} />
 
       {/* msgplane's floating quick-create — always reachable, even mid-scroll.
-          z-30 keeps it under the bulk bar (z-40) when a selection is active. */}
+          z-30 keeps it under the bulk bar (z-40) when a selection is active.
+          On desktop the bar is a centred 720px card and the two never meet; on
+          a phone it is edge to edge, so the button lifts clear of it (and of
+          Safari's bottom toolbar) until md puts it back at bottom-6.
+          bottom-32 is measured against the phone bulk bar: 15px offset + a
+          ~90px two-row bar puts its top edge at ~105px, and the list above
+          carries the matching max-md:mb-28. */}
       <Link
         href="/loads/new"
         aria-label={`New ${stage}`}
         title={`New ${stage}`}
-        className="focus-ring fixed bottom-6 right-6 z-30 flex size-12 items-center justify-center rounded-md bg-primary text-primary-foreground transition-transform hover:scale-105"
+        className="focus-ring fixed bottom-32 right-6 z-30 flex size-12 items-center justify-center rounded-md bg-primary text-primary-foreground transition-transform hover:scale-105 md:bottom-6"
       >
         <Plus className="size-6" aria-hidden="true" />
       </Link>

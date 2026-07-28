@@ -32,7 +32,7 @@ export function OrderMoreMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="outline" size="sm" className="w-full" disabled={pending} />
+          <Button variant="outline" size="sm" className="w-full max-md:min-h-12" disabled={pending} />
         }
       >
         <MoreHorizontal className="size-4" />

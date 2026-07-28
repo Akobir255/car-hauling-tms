@@ -292,7 +292,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                 rather than white, which is only 3.2:1 on that fill. */}
             <Button
               size="sm"
-              className="h-8 bg-chart-5 text-xs uppercase text-msg-selected-foreground hover:bg-chart-5/85"
+              className="h-8 bg-chart-5 text-xs uppercase text-msg-selected-foreground hover:bg-chart-5/85 max-md:min-h-12"
               render={<Link href={`/loads/${load.id}/edit`} />}
             >
               Edit
@@ -355,7 +355,11 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                         </p>
                       )}
                       {customer.email && (
-                        <p className="truncate text-sm text-muted-foreground">{customer.email}</p>
+                        // Truncation is a desktop affordance — in the one-column
+                        // phone layout a half-shown address identifies nobody.
+                        <p className="truncate text-sm text-muted-foreground max-md:whitespace-normal max-md:break-all">
+                          {customer.email}
+                        </p>
                       )}
                     </div>
                   ) : (
@@ -429,11 +433,14 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
 
           <SectionBand title="Shipping Information">
             <div className="grid gap-8 sm:grid-cols-2">
+              {/* pre-wrap only breaks at spaces: a pasted URL or an unspaced
+                  auction reference overflows the narrow phone column, and the
+                  band's overflow-hidden clips it rather than scrolling. */}
               <Field label="Information for shipper">
-                <span className="whitespace-pre-wrap">{load.shipper_info || "—"}</span>
+                <span className="whitespace-pre-wrap max-md:break-words">{load.shipper_info || "—"}</span>
               </Field>
               <Field label="Notes from Shipper">
-                <span className="whitespace-pre-wrap">{load.notes || "—"}</span>
+                <span className="whitespace-pre-wrap max-md:break-words">{load.notes || "—"}</span>
               </Field>
             </div>
           </SectionBand>
@@ -449,16 +456,16 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               title="Dispatch Information"
               action={
                 canManageCarrier ? (
-                  <span className="flex items-center gap-3">
+                  <span className="flex items-center gap-3 max-md:flex-wrap">
                     <Link
                       href={`/loads/${load.id}/dispatch/print`}
-                      className="text-xs uppercase text-primary-foreground hover:underline"
+                      className="text-xs uppercase text-primary-foreground hover:underline max-md:inline-flex max-md:min-h-12 max-md:items-center"
                     >
                       Print sheet
                     </Link>
                     <Link
                       href={`/loads/${load.id}/dispatch`}
-                      className="text-xs uppercase text-primary-foreground hover:underline"
+                      className="text-xs uppercase text-primary-foreground hover:underline max-md:inline-flex max-md:min-h-12 max-md:items-center"
                     >
                       Edit dispatch sheet
                     </Link>
@@ -511,7 +518,9 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                   </Field>
                   {load.dispatch_instructions && (
                     <Field label="Dispatch instructions">
-                      <span className="whitespace-pre-wrap">{load.dispatch_instructions}</span>
+                      <span className="whitespace-pre-wrap max-md:break-words">
+                        {load.dispatch_instructions}
+                      </span>
                     </Field>
                   )}
                 </div>
@@ -530,7 +539,10 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               Subject / Created By / Created, newest first. */}
           <SectionBand title="Messages" bodyClassName="p-0">
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
+              {/* Squeezed to min-content on a phone the Subject column drops to
+                  a word per line, so below md the table pans in the scroller it
+                  already has instead of compressing. */}
+              <table className="w-full border-collapse text-sm max-md:min-w-[42rem]">
                 <thead>
                   <tr className="border-b text-left text-msg-header [&>th]:px-4 [&>th]:py-2 [&>th]:font-normal">
                     <th className="w-14">Type</th>
@@ -643,9 +655,10 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
           </SectionBand>
       </div>
 
-      {/* Record footer, as in the old system: more options on the left,
-          back to the list on the right. */}
-      <div className="flex items-center gap-2 border-t pt-3">
+      {/* Record footer, as in the old system: more options on the left, back to
+          the list on the right. More is w-full (see order-more-menu), so below
+          md the row has to wrap or the rest lays out past the right edge. */}
+      <div className="flex items-center gap-2 border-t pt-3 max-md:flex-wrap max-md:gap-3 max-md:[&_button]:min-h-12">
         <OrderMoreMenu
           loadId={load.id}
           customerId={load.customer_id}
@@ -659,14 +672,19 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
           />
         )}
         <span className="ml-auto" />
-        <Button variant="secondary" size="sm" render={<Link href={backPath} />}>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="max-md:min-h-12"
+          render={<Link href={backPath} />}
+        >
           Back to list
         </Button>
         {/* msgplane's orange NEXT — straight to the next record in this list. */}
         {nextRow?.id && (
           <Button
             size="sm"
-            className="bg-chart-2 uppercase text-msg-selected-foreground hover:bg-chart-2/85"
+            className="bg-chart-2 uppercase text-msg-selected-foreground hover:bg-chart-2/85 max-md:min-h-12"
             render={<Link href={`/loads/${nextRow.id}`} />}
           >
             Next

@@ -108,10 +108,11 @@ export function OrderActionBar({
     <div className={cn("flex flex-col gap-2", stack ? "items-stretch" : "items-end")}>
       <div
         className={cn(
-          "gap-2 [&_button]:h-8 [&_button]:text-xs [&_button]:uppercase",
+          "gap-2 [&_button]:h-8 [&_button]:text-xs [&_button]:uppercase max-md:[&_button]:min-h-12",
           stack
             ? "flex flex-col [&_button]:w-full [&_button]:justify-center"
-            : "flex flex-wrap items-center justify-end"
+            // Right-aligned, these wrap into a ragged staircase on a phone.
+            : "flex flex-wrap items-center justify-end max-md:justify-start"
         )}
       >
         {actions.map((a) => {
@@ -138,7 +139,12 @@ export function OrderActionBar({
       </div>
 
       {openPanel === "post" && (
-        <div className={cn("flex flex-wrap items-center gap-2 rounded-md border bg-card p-2", stack && "w-full")}>
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-2 rounded-md border bg-card p-2 max-md:gap-3 max-md:[&_button]:min-h-12",
+            stack && "w-full"
+          )}
+        >
           <span className="text-xs text-muted-foreground">
             Post to{loadboard ? ` (order is set to ${LOADBOARD_LABEL[loadboard] ?? loadboard})` : ""}:
           </span>
@@ -176,7 +182,14 @@ function PaymentPanel({ loadId, onDone, full }: { loadId: string; onDone: () => 
     }
   }, [state, onDone]);
   return (
-    <form ref={ref} action={formAction} className={cn("flex flex-wrap items-end gap-2 rounded-md border bg-card p-2", full && "w-full")}>
+    <form
+      ref={ref}
+      action={formAction}
+      className={cn(
+        "flex flex-wrap items-end gap-2 rounded-md border bg-card p-2 max-md:gap-3",
+        full && "w-full"
+      )}
+    >
       <div className="space-y-1">
         <FieldLabel>Amount ($)</FieldLabel>
         <Input name="amount" inputMode="decimal" required className="w-28" />
@@ -185,7 +198,7 @@ function PaymentPanel({ loadId, onDone, full }: { loadId: string; onDone: () => 
         <FieldLabel>Method</FieldLabel>
         <Input name="method" placeholder="Card / Zelle…" className="w-32" />
       </div>
-      <Button type="submit" size="sm" disabled={pending}>
+      <Button type="submit" size="sm" className="max-md:min-h-12" disabled={pending}>
         {pending ? "Saving…" : "Record"}
       </Button>
     </form>
@@ -202,12 +215,24 @@ function LostPanel({ loadId, onDone, full }: { loadId: string; onDone: () => voi
     }
   }, [state, onDone]);
   return (
-    <form action={formAction} className={cn("flex flex-wrap items-end gap-2 rounded-md border bg-card p-2", full && "w-full")}>
-      <div className="space-y-1 flex-1">
+    <form
+      action={formAction}
+      className={cn(
+        "flex flex-wrap items-end gap-2 rounded-md border bg-card p-2 max-md:gap-3",
+        full && "w-full"
+      )}
+    >
+      <div className="space-y-1 flex-1 max-md:basis-full">
         <FieldLabel>Reason (optional)</FieldLabel>
         <Input name="lost_reason" placeholder="Went with another broker…" className="w-full min-w-40" />
       </div>
-      <Button type="submit" size="sm" variant="outline" className="text-destructive" disabled={pending}>
+      <Button
+        type="submit"
+        size="sm"
+        variant="outline"
+        className="text-destructive max-md:min-h-12"
+        disabled={pending}
+      >
         {pending ? "Saving…" : "Confirm lost"}
       </Button>
     </form>

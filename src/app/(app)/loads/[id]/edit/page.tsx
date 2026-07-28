@@ -69,14 +69,21 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
           <span className="text-sm text-muted-foreground">{customer.contact_name}</span>
         )}
         <div className="ml-auto">
-          <Button variant="outline" size="sm" render={<Link href={`/loads/${load.id}`} />}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="max-md:min-h-12"
+            render={<Link href={`/loads/${load.id}`} />}
+          >
             ‹ Back to order
           </Button>
         </div>
       </div>
 
+      {/* Padding compounds three deep on this page (main, band, FormSection),
+          which is what starves the field grids on a phone. */}
       {customer && (
-        <SectionBand title="Shipper Information">
+        <SectionBand title="Shipper Information" bodyClassName="p-4 md:p-6">
           <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
             {/* Label/value tiering by color, the way msgplane does it —
                 weight stays at 400. */}
@@ -92,7 +99,7 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
             </span>
             <Link
               href={`/customers/${customer.id}`}
-              className="ml-auto text-msg-link hover:underline"
+              className="ml-auto text-msg-link hover:underline max-md:inline-flex max-md:min-h-12 max-md:items-center"
             >
               Edit shipper details →
             </Link>
@@ -100,7 +107,7 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
         </SectionBand>
       )}
 
-      <SectionBand title="Contacts, Addresses, Rate & Notes" bodyClassName="p-5">
+      <SectionBand title="Contacts, Addresses, Rate & Notes" bodyClassName="p-3 md:p-5">
         <LoadDetailsForm
           action={boundUpdate}
           load={load}
@@ -110,7 +117,7 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
         />
       </SectionBand>
 
-      <SectionBand title="Vehicles" bodyClassName="p-5">
+      <SectionBand title="Vehicles" bodyClassName="p-3 md:p-5">
         <VehiclesEditor
           vehicles={vehicles}
           addAction={boundAddVehicle}
@@ -120,10 +127,10 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
       </SectionBand>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <SectionBand title="Update Status" bodyClassName="p-5">
+        <SectionBand title="Update Status" bodyClassName="p-3 md:p-5">
           <StatusForm currentStatus={load.status} action={boundStatusUpdate} />
         </SectionBand>
-        <SectionBand title="Follow-up" bodyClassName="p-5">
+        <SectionBand title="Follow-up" bodyClassName="p-3 md:p-5">
           <FollowUpForm load={load} action={boundSetFollowUp} onClear={boundClearFollowUp} />
         </SectionBand>
       </div>

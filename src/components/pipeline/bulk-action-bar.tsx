@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { X } from "lucide-react";
+import { CalendarCheck2, Mail, MessageSquareText, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
 import { TemplateSheet } from "@/components/messaging/template-sheet";
@@ -134,10 +134,13 @@ export function BulkActionBar({ reps, canReassign }: { reps: Rep[]; canReassign:
         <div className="w-full max-w-3xl rounded-md border bg-msg-rail">
           {panel === "reassign" && (
             <div className="flex flex-wrap items-end gap-2 border-b p-3">
+              {/* Every control in this bar fires an irreversible action on up
+                  to 100 records, so below md each one takes a 45px box; the
+                  md: value is the size variant's own height, verbatim. */}
               <NativeSelect
                 value={repId}
                 onChange={(e) => setRepId(e.target.value)}
-                className="max-w-56"
+                className="h-12 max-w-56 md:h-8"
               >
                 <option value="">Unassigned</option>
                 {reps.map((r) => (
@@ -148,6 +151,7 @@ export function BulkActionBar({ reps, canReassign }: { reps: Rep[]; canReassign:
               </NativeSelect>
               <Button
                 size="sm"
+                className="h-12 md:h-7"
                 disabled={pending}
                 onClick={() =>
                   start(async () => {
@@ -169,6 +173,7 @@ export function BulkActionBar({ reps, canReassign }: { reps: Rep[]; canReassign:
                   key={p.key}
                   size="sm"
                   variant="outline"
+                  className="h-12 md:h-7"
                   disabled={pending}
                   onClick={() =>
                     start(async () => {
@@ -183,26 +188,64 @@ export function BulkActionBar({ reps, canReassign }: { reps: Rep[]; canReassign:
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-2 p-2 pl-4">
-            <span className="text-sm">
+          {/* The four labels plus the clear button measure ~359px, which does
+              not fit a 375px screen: the group wrapped to two 48px rows and
+              the count took a third, leaving a ~150px bar sitting on top of
+              the list. Below md the labels go to sr-only and each control
+              becomes a 45px square (5 x 45 + gaps = 255px, one row), and the
+              count takes its own line rather than competing for the 60px that
+              were left. pipeline-list's list margin and FAB offset are
+              measured against the ~90px this produces. */}
+          <div className="flex flex-wrap items-center gap-2 p-2 pl-4 max-md:pl-2">
+            <span className="text-sm max-md:basis-full">
               {ids.length} record{ids.length === 1 ? "" : "s"} selected
             </span>
-            <div className="ml-auto flex flex-wrap items-center gap-2">
+            <div className="ml-auto flex flex-wrap items-center gap-2 max-md:ml-0">
               {canReassign && (
-                <Button size="sm" variant="outline" onClick={() => togglePanel("reassign")}>
-                  Reassign
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-12 max-md:w-12 md:h-7"
+                  onClick={() => togglePanel("reassign")}
+                >
+                  <User className="size-5 md:hidden" aria-hidden="true" />
+                  <span className="max-md:sr-only">Reassign</span>
                 </Button>
               )}
-              <Button size="sm" variant="outline" onClick={() => togglePanel("sms")}>
-                SMS
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-12 max-md:w-12 md:h-7"
+                onClick={() => togglePanel("sms")}
+              >
+                <MessageSquareText className="size-5 md:hidden" aria-hidden="true" />
+                <span className="max-md:sr-only">SMS</span>
               </Button>
-              <Button size="sm" variant="outline" onClick={() => togglePanel("email")}>
-                Email
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-12 max-md:w-12 md:h-7"
+                onClick={() => togglePanel("email")}
+              >
+                <Mail className="size-5 md:hidden" aria-hidden="true" />
+                <span className="max-md:sr-only">Email</span>
               </Button>
-              <Button size="sm" variant="outline" onClick={() => togglePanel("followup")}>
-                Next Follow Up
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-12 max-md:w-12 md:h-7"
+                onClick={() => togglePanel("followup")}
+              >
+                <CalendarCheck2 className="size-5 md:hidden" aria-hidden="true" />
+                <span className="max-md:sr-only">Next Follow Up</span>
               </Button>
-              <Button size="icon" variant="ghost" onClick={clear} aria-label="Clear selection">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-12 md:size-8"
+                onClick={clear}
+                aria-label="Clear selection"
+              >
                 <X className="size-4" />
               </Button>
             </div>

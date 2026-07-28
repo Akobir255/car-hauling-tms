@@ -57,7 +57,11 @@ export function VehiclesFieldArray({
       {vehicles.map((v, i) => (
         <div
           key={i}
-          className="grid grid-cols-2 items-end gap-2 rounded-md bg-muted p-3 sm:grid-cols-6 lg:grid-cols-12"
+          // One field per row on a phone: at two tracks the cell is ~126px, which
+          // is narrower than a VIN and narrower than the Make/Model suggestion
+          // popover that sizes to it. Every col-span here is lg:-prefixed, so
+          // the base track count moves on its own.
+          className="grid grid-cols-1 items-end gap-2 rounded-md bg-muted p-3 sm:grid-cols-6 lg:grid-cols-12"
         >
           <div className="space-y-1 lg:col-span-1">
             <FieldLabel>Year</FieldLabel>
@@ -109,6 +113,7 @@ export function VehiclesFieldArray({
               type="button"
               variant="ghost"
               size="sm"
+              className="max-md:min-h-12 max-md:w-full"
               disabled={vehicles.length === 1}
               onClick={() => setVehicles((prev) => prev.filter((_, idx) => idx !== i))}
             >
@@ -117,11 +122,12 @@ export function VehiclesFieldArray({
           </div>
         </div>
       ))}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 max-md:flex-wrap">
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="max-md:min-h-12"
           onClick={() => setVehicles((prev) => [...prev, { ...EMPTY_ROW }])}
         >
           Add another vehicle

@@ -29,7 +29,11 @@ export default async function CarriersPage() {
             {carriers.length} carrier{carriers.length === 1 ? "" : "s"} on file
           </p>
         </div>
-        {canManage && <Button render={<Link href="/carriers/new" />}>Add carrier</Button>}
+        {canManage && (
+          <Button className="max-md:min-h-12" render={<Link href="/carriers/new" />}>
+            Add carrier
+          </Button>
+        )}
       </div>
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
@@ -52,9 +56,10 @@ export default async function CarriersPage() {
             {carriers.map((carrier) => (
               <tr key={carrier.id} className="border-b last:border-b-0 hover:bg-msg-hover">
                 <td className="px-4 py-3.5">
+                  {/* The row's only tap target — an inline link is ~23px tall. */}
                   <Link
                     href={`/carriers/${carrier.id}`}
-                    className="text-msg-link hover:underline"
+                    className="text-msg-link hover:underline max-md:inline-flex max-md:min-h-12 max-md:items-center"
                   >
                     {carrier.company_name}
                   </Link>
@@ -95,7 +100,11 @@ export default async function CarriersPage() {
                     hint="Add the carriers you dispatch loads to — MC/DOT, insurance, and contact info live here."
                     action={
                       canManage ? (
-                        <Button size="sm" render={<Link href="/carriers/new" />}>
+                        <Button
+                          size="sm"
+                          className="max-md:min-h-12"
+                          render={<Link href="/carriers/new" />}
+                        >
                           Add carrier
                         </Button>
                       ) : undefined

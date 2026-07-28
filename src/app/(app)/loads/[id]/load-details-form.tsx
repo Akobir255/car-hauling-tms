@@ -48,8 +48,11 @@ function EndpointFields({
         <FieldLabel htmlFor={`${prefix}_address`}>Address</FieldLabel>
         <Input id={`${prefix}_address`} name={`${prefix}_address`} defaultValue={v(`${prefix}_address`)} />
       </div>
-      <div className="grid grid-cols-6 gap-2">
-        <div className="col-span-3 space-y-1.5">
+      {/* Six tracks inside the nested edit page leave the State field about one
+          glyph wide on a phone, so below md City takes a row and State/ZIP
+          share the next. The md: template is today's verbatim. */}
+      <div className="grid grid-cols-4 gap-2 md:grid-cols-6">
+        <div className="col-span-4 space-y-1.5 md:col-span-3">
           <FieldLabel htmlFor={`${prefix}_city`}>City</FieldLabel>
           <Input id={`${prefix}_city`} name={`${prefix}_city`} defaultValue={v(`${prefix}_city`)} />
         </div>
@@ -57,12 +60,12 @@ function EndpointFields({
           <FieldLabel htmlFor={`${prefix}_state`}>State</FieldLabel>
           <Input id={`${prefix}_state`} name={`${prefix}_state`} maxLength={2} defaultValue={v(`${prefix}_state`)} />
         </div>
-        <div className="col-span-2 space-y-1.5">
+        <div className="col-span-3 space-y-1.5 md:col-span-2">
           <FieldLabel htmlFor={`${prefix}_zip`}>ZIP</FieldLabel>
           <Input id={`${prefix}_zip`} name={`${prefix}_zip`} defaultValue={v(`${prefix}_zip`)} />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
         <div className="space-y-1.5">
           <FieldLabel htmlFor={`${prefix}_contact_name`}>Contact</FieldLabel>
           <Input id={`${prefix}_contact_name`} name={`${prefix}_contact_name`} defaultValue={v(`${prefix}_contact_name`)} />
@@ -90,10 +93,18 @@ function EndpointFields({
           />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
         <div className="space-y-1.5">
           <FieldLabel htmlFor={dateField}>{dateLabel}</FieldLabel>
-          <Input id={dateField} name={dateField} type="date" defaultValue={load[dateField] ?? ""} className="w-44" />
+          {/* The fixed 176px beats its track on a phone and overlaps Buyer
+              number, which the section's overflow-hidden then clips. */}
+          <Input
+            id={dateField}
+            name={dateField}
+            type="date"
+            defaultValue={load[dateField] ?? ""}
+            className="w-44 max-md:w-full"
+          />
         </div>
         <div className="space-y-1.5">
           <FieldLabel htmlFor={`${prefix}_buyer_number`}>Buyer number</FieldLabel>
@@ -208,7 +219,7 @@ export function LoadDetailsForm({
       <FormSection icon={Truck} title="Shipping">
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
               <div className="space-y-1.5">
                 <FieldLabel htmlFor="transport_type">Transport type</FieldLabel>
                 <NativeSelect id="transport_type" name="transport_type" defaultValue={load.transport_type}>
@@ -228,7 +239,7 @@ export function LoadDetailsForm({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
               <div className="space-y-1.5">
                 <FieldLabel htmlFor="customer_rate">Rate ($)</FieldLabel>
                 <Input id="customer_rate" name="customer_rate" inputMode="decimal" defaultValue={load.customer_rate ?? ""} />
@@ -278,7 +289,9 @@ export function LoadDetailsForm({
                 contract's signing page asks the customer for card details.
                 The marker input keeps partial forms from resetting the flag. */}
             <input type="hidden" name="require_card_present" value="1" />
-            <label className="flex items-center gap-2 text-sm">
+            {/* The label wraps the box, so the whole 44px row is the hit area
+                and the checkbox glyph itself is untouched. */}
+            <label className="flex items-center gap-2 text-sm max-md:min-h-12">
               <input
                 type="checkbox"
                 name="contract_requires_card"
@@ -302,7 +315,9 @@ export function LoadDetailsForm({
           carrier gets paid, and who's driving. Free to edit for any staff —
           these are contract terms, not margin. */}
       <FormSection icon={ClipboardList} title="Dispatch & payment terms">
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+        {/* These selects hold strings like "Broker check on delivery" — a
+            two-column phone track truncates them to a few characters. */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           <TermsSelect
             name="balance_paid_by"
             label="Balance paid by"
@@ -345,7 +360,7 @@ export function LoadDetailsForm({
             value={load.invoice_payment_method}
           />
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1.5">
             <FieldLabel htmlFor="driver_first_name">Driver&apos;s first name</FieldLabel>
             <Input id="driver_first_name" name="driver_first_name" defaultValue={load.driver_first_name ?? ""} />
@@ -374,8 +389,10 @@ export function LoadDetailsForm({
 
       {canManageCarrier && (
         <FormSection icon={Handshake} title="Carrier assignment">
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <div className="col-span-2 space-y-1.5">
+          {/* col-span-2 has to drop with the base template: left at 2 inside a
+              single-column grid it would create an implicit second column. */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="col-span-1 space-y-1.5 md:col-span-2">
               <FieldLabel htmlFor="carrier_id">Carrier</FieldLabel>
               <NativeSelect id="carrier_id" name="carrier_id" defaultValue={load.carrier_id ?? ""}>
                 <option value="">Unassigned</option>
@@ -397,18 +414,33 @@ export function LoadDetailsForm({
       {/* Sticky action bar: the one place Save lives, always in reach. */}
       {/* bg-card, not bg-background: the two were different colors only while
           the page was gray, and this bar sits inside a card. */}
-      <div className="sticky bottom-0 z-10 -mx-6 border-t bg-card/95 px-6 py-3 backdrop-blur">
-        <div className="flex items-center justify-end gap-3">
-          {state.error && <p className="mr-auto text-sm text-destructive">{state.error}</p>}
+      {/* The negative margin bleeds the bar to the wrapping band's edge, so it
+          has to track that band's padding — p-3 below md, p-5 above (see
+          edit/page.tsx). Overshooting is clipped, not scrolled. */}
+      <div className="sticky bottom-0 z-10 -mx-6 border-t bg-card/95 px-6 py-3 backdrop-blur max-md:-mx-3 max-md:px-3">
+        {/* justify-end pushes overflow off the LEFT edge, where the band's
+            overflow-hidden clips it — and the error is the leftmost item, so a
+            failed save would show nothing at all on a phone. */}
+        <div className="flex items-center justify-end gap-3 max-md:flex-wrap">
+          {state.error && (
+            <p className="mr-auto text-sm text-destructive max-md:basis-full">{state.error}</p>
+          )}
           {dirty && !pending && !state.error && (
             <span className="text-xs text-muted-foreground">Unsaved changes</span>
           )}
           {(load.status === "lead" || load.status === "quote") && (
-            <Button type="submit" name="convert" value="1" variant="outline" disabled={pending}>
+            <Button
+              type="submit"
+              name="convert"
+              value="1"
+              variant="outline"
+              className="max-md:min-h-12"
+              disabled={pending}
+            >
               Save and convert to order
             </Button>
           )}
-          <Button type="submit" disabled={pending}>
+          <Button type="submit" className="max-md:min-h-12" disabled={pending}>
             {pending ? "Saving..." : "Save"}
           </Button>
         </div>

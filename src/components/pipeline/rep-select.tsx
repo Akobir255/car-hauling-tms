@@ -28,7 +28,11 @@ export function RepSelect({
         else next.delete("rep");
         router.push(`?${next.toString()}`);
       }}
-      className="h-[30px] w-auto min-w-20 text-sm"
+      // No text-sm: the base class is text-[16px] md:text-sm, and passing
+      // text-sm here makes tailwind-merge drop the 16px step that keeps mobile
+      // Safari from zooming the viewport on focus. max-w keeps a long rep name
+      // from widening this w-auto select past the row on a phone.
+      className="h-12 w-auto min-w-20 max-w-40 md:h-[30px] md:max-w-none"
     >
       <option value="">All</option>
       <option value={profileId}>My</option>

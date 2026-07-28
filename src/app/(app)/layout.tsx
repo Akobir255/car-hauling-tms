@@ -23,8 +23,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         signOut={signOut}
       />
       {/* No overflow on main: tables scroll in their own wrappers, and a
-          scroll container here would break position:sticky on form pages. */}
-      <main className="min-w-0 flex-1 p-6">{children}</main>
+          scroll container here would break position:sticky on form pages.
+          The 22.5px gutter costs a phone 12% of its width, so it halves below
+          md. Anything that bleeds to this edge with -mx-6 has to match it —
+          today that is the new-load sticky bar, which pairs max-md:-mx-4. */}
+      <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
     </div>
   );
 }

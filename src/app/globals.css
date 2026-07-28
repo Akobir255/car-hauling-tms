@@ -262,11 +262,16 @@
        values, not multiples of the root. */
     font-size: 15px;
     @apply font-sans;
-    /* Grayscale smoothing rather than subpixel: Lato at 400 renders thin and
-       slightly ragged on Windows, which is where this team works. This is what
-       makes the text read as smooth instead of brittle. */
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    /* DO NOT set -webkit-font-smoothing: antialiased here. It was tried, and
+       reverted after comparing screenshots of the two systems side by side:
+       on Windows, where this team works, grayscale smoothing THINS every
+       glyph, and the app read as spindly next to the old system. msgplane
+       sets no smoothing at all and therefore gets the heavier subpixel
+       default — matching it is what makes the text look right.
+       Leaving these explicit so the next reader knows the value is deliberate
+       rather than missing. */
+    -webkit-font-smoothing: auto;
+    -moz-osx-font-smoothing: auto;
     text-rendering: optimizeLegibility;
   }
 }

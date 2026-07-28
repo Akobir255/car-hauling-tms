@@ -65,10 +65,20 @@ export function TemplateSheet({
     !busy && body.trim().length > 0 && (!requireSubject || subject.trim().length > 0);
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-4">
+    // A sheet hanging off the bottom edge is the wrong shape once a keyboard
+    // is up: iOS leaves fixed elements pinned to the layout viewport, so the
+    // composer and its send button end up behind the keys. Below md it hangs
+    // from the top instead, where the ~476px that stay visible are the part
+    // the rep is working in.
+    <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-4 max-md:bottom-auto max-md:top-0 max-md:pb-0 max-md:pt-4">
       {/* No shadow: the nav bar is the only raised surface in msgplane, so the
-          border gray is what lifts the sheet off the list behind it. */}
-      <div className="w-full max-w-3xl rounded-md border border-border bg-card">
+          border gray is what lifts the sheet off the list behind it.
+          Below sm the grid stacks, and an email template runs 650-950px of
+          content in an 812px viewport — with the sheet pinned to the bottom
+          edge that put the template picker and Subject off the TOP of the
+          screen, unreachable. Capping the height and scrolling inside gets
+          them back. */}
+      <div className="w-full max-w-3xl rounded-md border border-border bg-card max-md:max-h-[85dvh] max-md:overflow-y-auto">
         <div className="flex items-center gap-2 border-b px-4 py-2.5">
           <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
           <h2 className="text-sm">{title}</h2>
@@ -79,7 +89,7 @@ export function TemplateSheet({
             type="button"
             variant="ghost"
             size="sm"
-            className="ml-auto h-7 px-2"
+            className="ml-auto h-7 px-2 max-md:min-h-12 max-md:min-w-12"
             aria-label="Close"
             onClick={onClose}
           >
@@ -105,7 +115,9 @@ export function TemplateSheet({
                   type="button"
                   onClick={() => pick(t)}
                   className={cn(
-                    "block w-full truncate rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                    // Padding rather than a min-height: `block` is what keeps
+                    // truncate's ellipsis working on the template name.
+                    "block w-full truncate rounded-md px-2 py-1.5 text-left text-sm transition-colors max-md:py-3.5",
                     pickedId === t.id
                       ? "bg-primary text-primary-foreground"
                       : "hover:bg-msg-hover"
@@ -117,7 +129,9 @@ export function TemplateSheet({
             </div>
           </div>
 
-          <div className="space-y-2">
+          {/* max-md keeps flex (and so `order`) off the desktop box entirely:
+              at >=768px this stays a plain block with space-y-2. */}
+          <div className="space-y-2 max-md:flex max-md:flex-col max-md:gap-2 max-md:space-y-0">
             {requireSubject && (
               <div className="space-y-1">
                 <FieldLabel>Subject</FieldLabel>
@@ -141,10 +155,15 @@ export function TemplateSheet({
                 }
               />
             </div>
-            <div className="flex items-center gap-3">
+            {/* Last element of a bottom-anchored panel is the one place the
+                send button must not be. Below md it leads the composer and
+                sticks to the top of the sheet's scroller, so it stays on
+                screen while the rep types. */}
+            <div className="flex items-center gap-3 max-md:sticky max-md:top-0 max-md:z-10 max-md:order-first max-md:-mx-4 max-md:border-b max-md:bg-card max-md:px-4 max-md:py-2">
               <Button
                 type="button"
                 size="sm"
+                className="max-md:min-h-12 max-md:px-4"
                 disabled={!canSend}
                 onClick={() => onSend({ body: body.trim(), subject: subject.trim() })}
               >

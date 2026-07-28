@@ -79,10 +79,17 @@ them exactly would make the app worse:
 5. **Type runs one step larger.** The scale is still three sizes and still
    proportional, but 12/14/15 became 13/15/16. msgplane's 12px was designed for
    a wide desk monitor; on a laptop it is hard work, and this team reads these
-   screens all day. Body leading is 1.55 and smoothing is grayscale rather than
-   subpixel — Lato at weight 400 renders thin and ragged on Windows otherwise,
-   which is where the team works. What makes the app feel like the old system is
-   the three-size discipline and the proportions, not the absolute values.
+   screens all day. Body leading is 1.55. What makes the app feel like the old
+   system is the three-size discipline and the proportions, not the absolute
+   values.
+
+   **Font smoothing stays at the browser default — do not set `antialiased`.**
+   An earlier revision of this document claimed the opposite, and it was wrong.
+   Grayscale smoothing THINS glyphs on Windows, which is where this team works;
+   set side by side with msgplane, the app read as spindly. msgplane sets no
+   smoothing at all and gets the heavier subpixel default. Matching that is the
+   whole fix. This was reverted once by an agent citing the old wording, so:
+   the value is deliberate, and screenshots settled it.
 4. **One display size.** msgplane's largest type is the 15px root, because it
    has no dashboard. Ours does, and a KPI value that reads at 15px is not a KPI.
    `text-xl` is the only size above the 12 / 14 / 15 scale, it stays at weight

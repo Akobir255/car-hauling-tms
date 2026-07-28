@@ -27,7 +27,9 @@ export default async function CustomersPage() {
             {customers.length} customer{customers.length === 1 ? "" : "s"}
           </p>
         </div>
-        <Button render={<Link href="/customers/new" />}>Add customer</Button>
+        <Button className="max-md:min-h-12" render={<Link href="/customers/new" />}>
+          Add customer
+        </Button>
       </div>
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
@@ -49,9 +51,10 @@ export default async function CustomersPage() {
             {customers.map((customer) => (
               <tr key={customer.id} className="border-b last:border-b-0 hover:bg-msg-hover">
                 <td className="px-4 py-3.5">
+                  {/* The row's only tap target — an inline link is ~23px tall. */}
                   <Link
                     href={`/customers/${customer.id}`}
-                    className="text-msg-link hover:underline"
+                    className="text-msg-link hover:underline max-md:inline-flex max-md:min-h-12 max-md:items-center"
                   >
                     {customer.contact_name}
                   </Link>
@@ -97,7 +100,11 @@ export default async function CustomersPage() {
                     title="No customers yet"
                     hint="Customers are created automatically when you make a lead, or add one manually."
                     action={
-                      <Button size="sm" render={<Link href="/customers/new" />}>
+                      <Button
+                        size="sm"
+                        className="max-md:min-h-12"
+                        render={<Link href="/customers/new" />}
+                      >
                         Add customer
                       </Button>
                     }

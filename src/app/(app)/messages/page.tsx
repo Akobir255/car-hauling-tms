@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { isSmsConfigured } from "@/lib/messaging/ringcentral";
+import { formatRelativeTime } from "@/lib/format";
 import { markAllMessagesRead } from "./actions";
 import { WebhookSyncButton } from "./webhook-sync-button";
 import { WebhookDiagnostics } from "./webhook-diagnostics";
@@ -57,16 +58,22 @@ export default async function MessagesPage() {
         <div className="flex flex-wrap gap-2">
           {unreadCount > 0 && (
             <form action={markAllMessagesRead}>
-              <Button type="submit" variant="outline">
+              <Button type="submit" variant="outline" className="max-md:min-h-12">
                 Mark all read ({unreadCount})
               </Button>
             </form>
           )}
           {profile.role === "admin" && <WebhookSyncButton />}
-          <Button variant="outline" render={<Link href="/messages/templates" />}>
+          <Button
+            variant="outline"
+            className="max-md:min-h-12"
+            render={<Link href="/messages/templates" />}
+          >
             Templates
           </Button>
-          <Button render={<Link href="/messages/new" />}>New blast</Button>
+          <Button className="max-md:min-h-12" render={<Link href="/messages/new" />}>
+            New blast
+          </Button>
         </div>
       </div>
 
@@ -74,6 +81,16 @@ export default async function MessagesPage() {
 
       {profile.role === "admin" && <WebhookDiagnostics />}
 
+      {/* Six columns of `whitespace-nowrap` plus a max-w-md body come to ~900px
+          of min-content. It scrolls in the Table's own container so the page
+          never does, but on a phone that puts Customer and Message — the two
+          a rep opens this page for — behind a horizontal pan on every row.
+          Same rows, same order, as cards below md. */}
+      {/* Both layouts share one space-y slot on purpose: `space-y-*` puts its
+          margin on `:not(:last-child)`, so leaving the card list as a bare
+          sibling would hand the desktop table a bottom margin it never had. */}
+      <div>
+      <div className="hidden md:block">
       <Table>
         <TableHeader>
           <TableRow>
@@ -141,6 +158,53 @@ export default async function MessagesPage() {
           )}
         </TableBody>
       </Table>
+      </div>
+
+      <ul className="divide-y divide-msg-rule overflow-hidden rounded-md border bg-card md:hidden">
+        {messages.map((m) => {
+          const unread = m.direction === "inbound" && !m.read_at;
+          const addr = (m.direction === "inbound" ? m.from_addr : m.to_addr) || "—";
+          return (
+            <li key={m.id} className={cn("p-3", unread && "border-l-4 border-l-primary")}>
+              <div className="flex flex-wrap items-center gap-2">
+                {m.direction === "inbound" ? (
+                  <Badge variant="default">↓ In{unread ? " · new" : ""}</Badge>
+                ) : (
+                  <Badge variant="outline">↑ Out</Badge>
+                )}
+                {m.customer_id ? (
+                  <Link
+                    href={`/customers/${m.customer_id}`}
+                    className="focus-ring inline-flex min-h-12 min-w-0 items-center break-words text-msg-link"
+                  >
+                    {customerById.get(m.customer_id)?.contact_name ?? "—"}
+                  </Link>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+                <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">
+                  {formatRelativeTime(m.created_at)}
+                </span>
+              </div>
+              {/* No max-w-md cap: that is a table-column constraint, and the
+                  body is what the rep came to read. */}
+              <p className="line-clamp-6 break-words text-sm text-muted-foreground">{m.body}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Badge variant={STATUS_VARIANT[m.status] ?? "outline"}>{m.status}</Badge>
+                <span className="min-w-0 break-all text-xs tabular-nums text-muted-foreground">
+                  {addr}
+                </span>
+              </div>
+            </li>
+          );
+        })}
+        {messages.length === 0 && (
+          <li className="p-3 text-center text-muted-foreground">
+            No messages yet — send your first blast.
+          </li>
+        )}
+      </ul>
+      </div>
     </div>
   );
 }

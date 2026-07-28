@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Filter, X } from "lucide-react";
+import { ChevronDown, Filter, X } from "lucide-react";
 import { NativeSelect } from "@/components/ui/native-select";
+import { cn } from "@/lib/utils";
 
 // Filters that narrow a list to a workable set — who opted out, whose
 // paperwork is signed, who has documents on file. Everything lives in the
@@ -66,6 +68,11 @@ export function FilterBar({ values, matched }: { values: FilterValues; matched: 
   const router = useRouter();
   const params = useSearchParams();
   const active = FILTERS.filter((f) => values[f.key]);
+  // Mobile only: each label+select group needs ~205-285px, so all four wrap to
+  // their own line and the filter chrome buries the list before a single
+  // record is visible. Desktop never reads this — the group wrapper is
+  // display:contents at md.
+  const [open, setOpen] = useState(false);
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(params.toString());
@@ -89,23 +96,49 @@ export function FilterBar({ values, matched }: { values: FilterValues; matched: 
         Filter
       </span>
 
-      {FILTERS.map((f) => (
-        <label key={f.key} className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">{f.label}</span>
-          <NativeSelect
-            aria-label={f.label}
-            value={values[f.key] ?? ""}
-            onChange={(e) => setParam(f.key, e.target.value)}
-            className="h-[30px] w-auto min-w-32 text-sm"
-          >
-            {f.options.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </NativeSelect>
-        </label>
-      ))}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="focus-ring -my-2 inline-flex min-h-12 items-center gap-1 text-muted-foreground hover:text-foreground md:hidden"
+      >
+        {active.length > 0 ? `${active.length} set` : "none set"}
+        <ChevronDown
+          className={cn("size-3.5 transition-transform", open && "rotate-180")}
+          aria-hidden="true"
+        />
+      </button>
+
+      {/* md:contents removes this box from the layout entirely at >=768px, so
+          the four labels stay direct flex children of the bar with the bar's
+          own gaps — the desktop row is the same row it always was. */}
+      <div
+        className={cn(
+          "w-full flex-wrap items-center gap-x-4 gap-y-2 md:contents",
+          open ? "flex" : "hidden"
+        )}
+      >
+        {FILTERS.map((f) => (
+          <label key={f.key} className="flex items-center gap-1.5">
+            <span className="text-muted-foreground">{f.label}</span>
+            {/* No text-sm here: the base class is text-[16px] md:text-sm, and
+                tailwind-merge would drop the 16px step that keeps mobile
+                Safari from zooming the viewport on focus. */}
+            <NativeSelect
+              aria-label={f.label}
+              value={values[f.key] ?? ""}
+              onChange={(e) => setParam(f.key, e.target.value)}
+              className="h-12 w-auto min-w-32 md:h-[30px]"
+            >
+              {f.options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </NativeSelect>
+          </label>
+        ))}
+      </div>
 
       {active.length > 0 && (
         <>
@@ -113,7 +146,7 @@ export function FilterBar({ values, matched }: { values: FilterValues; matched: 
           <button
             type="button"
             onClick={clearAll}
-            className="focus-ring inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+            className="focus-ring -my-2 inline-flex min-h-12 items-center gap-1 text-muted-foreground hover:text-foreground md:my-0 md:min-h-0"
           >
             <X className="size-3.5" aria-hidden="true" />
             clear

@@ -33,6 +33,7 @@ function RemoveVehicleButton({
       type="button"
       variant="ghost"
       size="sm"
+      className="max-md:min-h-12"
       disabled={pending || disabled}
       onClick={() => {
         if (!confirm("Remove this vehicle from the load?")) return;
@@ -148,7 +149,13 @@ export function VehiclesEditor({
         </div>
         {vehicles.length > 0 && (
           <div className="flex items-center gap-4">
-            <Button type="submit" size="sm" variant="outline" disabled={tariffPending}>
+            <Button
+              type="submit"
+              size="sm"
+              variant="outline"
+              className="max-md:min-h-12"
+              disabled={tariffPending}
+            >
               {tariffPending ? "Saving..." : "Save vehicles"}
             </Button>
             <p className="text-sm">
@@ -163,7 +170,7 @@ export function VehiclesEditor({
       <form
         ref={formRef}
         action={formAction}
-        className="flex flex-wrap items-end gap-2 rounded-md bg-muted p-3"
+        className="flex flex-wrap items-end gap-2 rounded-md bg-muted p-3 max-md:gap-3"
       >
         <div className="space-y-1">
           <FieldLabel>Year</FieldLabel>
@@ -218,7 +225,7 @@ export function VehiclesEditor({
           <FieldLabel>Tariff ($)</FieldLabel>
           <Input name="tariff" inputMode="decimal" className="w-24" />
         </div>
-        <Button type="submit" size="sm" disabled={pending}>
+        <Button type="submit" size="sm" className="max-md:min-h-12" disabled={pending}>
           {pending ? "Adding..." : "Add vehicle"}
         </Button>
       </form>

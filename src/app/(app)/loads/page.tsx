@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { NativeSelect } from "@/components/ui/native-select";
 import { StatusBadge } from "@/components/status-badge";
 import { formatCurrency, formatDate, titleCase } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -118,12 +119,14 @@ export default async function LoadsPage({
             {statusFilter ? ` · ${titleCase(statusFilter)}` : ""}
           </p>
         </div>
-        <Button render={<Link href="/loads/new" />}>New load</Button>
+        <Button className="max-md:min-h-12" render={<Link href="/loads/new" />}>
+          New load
+        </Button>
       </div>
 
       {/* msgplane-style section tabs: boxed buttons with a coral selected
           fill and per-status counts. The strip carries no rule of its own. */}
-      <div className="flex items-end justify-between gap-3">
+      <div className="flex items-end justify-between gap-3 max-md:flex-wrap">
         <div className="flex flex-wrap items-center gap-1">
           <StatusTab href={tabHref(null)} label="All" count={totalCount} active={!statusFilter} />
           {LOAD_STATUSES.map((s) => (
@@ -139,10 +142,16 @@ export default async function LoadsPage({
         {canSeeMargin && (reps ?? []).length > 0 && (
           <form className="mb-1.5 shrink-0" action="/loads" method="get">
             {statusFilter && <input type="hidden" name="status" value={statusFilter} />}
-            <select
+            {/* Was a raw select with its own geometry, which also missed the
+                16px mobile step NativeSelect carries to stop Safari zooming
+                the viewport on focus. h-7 was the old height; md:h-7 keeps it. */}
+            <NativeSelect
               name="rep"
               defaultValue={repParam ?? ""}
-              className="h-7 rounded-md border border-input bg-transparent px-2 text-sm dark:bg-input/30"
+              // No text-sm here: the base is text-[16px] md:text-sm and passing
+              // text-sm would make tailwind-merge drop the 16px step. md:px-2
+              // pins the desk padding to the raw select's own px-2.
+              className="h-12 w-auto max-w-40 md:h-7 md:max-w-none md:px-2"
             >
               <option value="">All reps</option>
               {(reps ?? []).map((r) => (
@@ -150,8 +159,13 @@ export default async function LoadsPage({
                   {r.full_name || r.email}
                 </option>
               ))}
-            </select>
-            <Button type="submit" variant="ghost" size="sm" className="ml-1">
+            </NativeSelect>
+            <Button
+              type="submit"
+              variant="ghost"
+              size="sm"
+              className="ml-1 max-md:min-h-12 max-md:px-4"
+            >
               Filter
             </Button>
           </form>
@@ -160,6 +174,14 @@ export default async function LoadsPage({
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
 
+      {/* Nine columns, every cell whitespace-nowrap: the only loads list left
+          that was pan-only on a phone, while /leads, /quotes and /orders all
+          reflow through PipelineList. Same rows as cards below md. */}
+      {/* One space-y slot for both layouts: `space-y-*` margins land on
+          `:not(:last-child)`, so a bare card-list sibling would give the
+          desktop table a bottom margin it never had. */}
+      <div>
+      <div className="hidden md:block">
       <Table>
         <TableHeader>
           <TableRow>
@@ -264,6 +286,91 @@ export default async function LoadsPage({
           )}
         </TableBody>
       </Table>
+      </div>
+
+      <ul className="divide-y divide-msg-rule overflow-hidden rounded-md border bg-card text-sm md:hidden">
+        {loads.map((load) => {
+          const customer = customerById.get(load.customer_id);
+          const carrier = load.carrier_id ? carrierById.get(load.carrier_id) : undefined;
+          const rep = load.sales_owner_id ? repById.get(load.sales_owner_id) : undefined;
+          const loadVehicles = vehiclesByLoad.get(load.id) ?? [];
+          return (
+            <li key={load.id} className="relative p-3">
+              {/* The card is one tap target, the way the pipeline cards are. */}
+              <Link
+                href={`/loads/${load.id}`}
+                aria-label={`Open ${load.load_number}`}
+                className="focus-ring absolute inset-0"
+              />
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="tabular-nums text-msg-link">{load.load_number}</span>
+                <StatusBadge status={load.status} />
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {formatDate(load.created_at)}
+                </span>
+              </div>
+
+              <p className="mt-2 break-words">{customer?.contact_name ?? "—"}</p>
+              {customer?.phone && (
+                <p className="tabular-nums text-muted-foreground">{customer.phone}</p>
+              )}
+              {customer?.email && (
+                <p className="break-all text-muted-foreground">{customer.email}</p>
+              )}
+
+              <div className="mt-2 space-y-0.5">
+                <p>
+                  <span className="mr-1 inline-block size-2 rounded-full border-2 border-msg-shipper" />
+                  {load.pickup_city || "—"} {load.pickup_state || ""} {load.pickup_zip || ""}
+                </p>
+                <p>
+                  <span className="mr-1 inline-block size-2 rounded-full bg-destructive" />
+                  {load.delivery_city || "—"} {load.delivery_state || ""} {load.delivery_zip || ""}
+                </p>
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-start justify-between gap-x-4 gap-y-1 text-xs tabular-nums">
+                <div>
+                  <p>Tariff: {formatCurrency(load.customer_rate)}</p>
+                  <p className="text-muted-foreground">
+                    Deposit: {formatCurrency(load.deposit_amount)}
+                  </p>
+                  {canSeeMargin && (
+                    <p className="text-muted-foreground">
+                      Carrier: {formatCurrency(load.carrier_pay)}
+                      {carrier ? ` (${carrier.company_name})` : ""}
+                    </p>
+                  )}
+                </div>
+                <p className="text-right text-muted-foreground">
+                  Est. ship {formatDate(load.pickup_ready_date)}
+                </p>
+              </div>
+
+              <div className="mt-2 space-y-1 border-t border-msg-rule pt-2 text-xs text-muted-foreground">
+                {loadVehicles.map((v) => (
+                  <p key={v.id}>
+                    {[v.year, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}
+                    {" · "}
+                    {titleCase(v.vehicle_type)}
+                    {v.condition === "non_running" ? " · Non-running" : ""}
+                    {load.transport_type === "enclosed" ? (
+                      <span className="text-destructive"> · enclosed</span>
+                    ) : null}
+                  </p>
+                ))}
+                <p>{rep ? rep.full_name || rep.email : "—"}</p>
+              </div>
+            </li>
+          );
+        })}
+        {loads.length === 0 && (
+          <li className="p-3 text-center text-muted-foreground">
+            No loads{statusFilter ? ` with status ${titleCase(statusFilter)}` : ""} yet.
+          </li>
+        )}
+      </ul>
+      </div>
     </div>
   );
 }
@@ -284,7 +391,11 @@ function StatusTab({
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "focus-ring flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-0.5 text-sm transition-colors",
+        // Eleven of these are the page's primary navigation; below md each
+        // takes a thumb target, the way pipeline-list's tab strip already
+        // does. md:min-h-6 is under the chip's natural height, so the desk
+        // box is untouched.
+        "focus-ring flex min-h-12 items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-0.5 text-sm transition-colors md:min-h-6",
         active
           ? "border-msg-selected bg-msg-selected text-msg-selected-foreground"
           : "bg-card text-foreground hover:bg-msg-hover"

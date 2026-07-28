@@ -91,20 +91,20 @@ export function NotesThread({ loadId, notes }: { loadId: string; notes: ThreadNo
           onChange={(e) => setBody(e.target.value)}
           placeholder="Add an internal note…"
         />
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 max-md:gap-3">
           {["Left message", "Spoke to someone"].map((quick) => (
             <Button
               key={quick}
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 px-2 text-xs text-muted-foreground"
+              className="h-7 px-2 text-xs text-muted-foreground max-md:min-h-12"
               onClick={() => setBody(quick)}
             >
               {quick}
             </Button>
           ))}
-          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-msg-hover">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-msg-hover max-md:min-h-12">
             <Paperclip className="size-3.5" aria-hidden="true" />
             Attach files
             <input
@@ -117,7 +117,12 @@ export function NotesThread({ loadId, notes }: { loadId: string; notes: ThreadNo
               }
             />
           </label>
-          <Button type="submit" size="sm" className="ml-auto" disabled={pending}>
+          <Button
+            type="submit"
+            size="sm"
+            className="ml-auto max-md:min-h-12 max-md:w-full"
+            disabled={pending}
+          >
             {pending ? "Saving…" : "Save note"}
           </Button>
         </div>
@@ -138,8 +143,10 @@ export function NotesThread({ loadId, notes }: { loadId: string; notes: ThreadNo
               <span className="text-foreground">{note.authorName}</span>
               <span className="tabular-nums">{stamp(note.created_at)}</span>
               {note.updated_at !== note.created_at && <span>(edited)</span>}
+              {/* remove deletes the note and its files — it must not sit a few
+                  px from edit under a thumb. */}
               {note.canEdit && (
-                <span className="ml-auto flex items-center gap-1">
+                <span className="ml-auto flex items-center gap-1 max-md:gap-3">
                   <button
                     type="button"
                     disabled={busy}
@@ -147,7 +154,7 @@ export function NotesThread({ loadId, notes }: { loadId: string; notes: ThreadNo
                       setEditingId(note.id);
                       setEditBody(note.body);
                     }}
-                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-msg-hover hover:text-foreground"
+                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-msg-hover hover:text-foreground max-md:min-h-12 max-md:px-3"
                   >
                     <Pencil className="size-3" aria-hidden="true" /> edit
                   </button>
@@ -155,7 +162,7 @@ export function NotesThread({ loadId, notes }: { loadId: string; notes: ThreadNo
                     type="button"
                     disabled={busy}
                     onClick={() => remove(note.id)}
-                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-destructive hover:bg-destructive/10"
+                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-destructive hover:bg-destructive/10 max-md:min-h-12 max-md:px-3"
                   >
                     <Trash2 className="size-3" aria-hidden="true" /> remove
                   </button>
@@ -170,13 +177,19 @@ export function NotesThread({ loadId, notes }: { loadId: string; notes: ThreadNo
                   value={editBody}
                   onChange={(e) => setEditBody(e.target.value)}
                 />
-                <div className="flex gap-2">
-                  <Button size="sm" disabled={busy} onClick={() => saveEdit(note.id)}>
+                <div className="flex gap-2 max-md:gap-3">
+                  <Button
+                    size="sm"
+                    className="max-md:min-h-12"
+                    disabled={busy}
+                    onClick={() => saveEdit(note.id)}
+                  >
                     Save
                   </Button>
                   <Button
                     size="sm"
                     variant="ghost"
+                    className="max-md:min-h-12"
                     disabled={busy}
                     onClick={() => setEditingId(null)}
                   >
@@ -196,7 +209,7 @@ export function NotesThread({ loadId, notes }: { loadId: string; notes: ThreadNo
                     type="button"
                     disabled={busy}
                     onClick={() => open(note, a)}
-                    className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-muted px-2 py-1 text-xs text-msg-link hover:bg-secondary"
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-muted px-2 py-1 text-xs text-msg-link hover:bg-secondary max-md:min-h-12"
                   >
                     <Paperclip className="size-3 shrink-0" aria-hidden="true" />
                     <span className="truncate">{a.file_name ?? "attachment"}</span>

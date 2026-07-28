@@ -52,8 +52,8 @@ export function VehiclePhotoEditor({
         hasOverride={hasOverride}
         className="h-20 w-32 rounded-md"
       />
-      <form ref={formRef} action={formAction} className="flex items-center gap-2 text-xs">
-        <label className="inline-flex cursor-pointer items-center gap-1 text-muted-foreground hover:text-foreground hover:underline">
+      <form ref={formRef} action={formAction} className="flex items-center gap-2 text-xs max-md:gap-4">
+        <label className="inline-flex cursor-pointer items-center gap-1 text-muted-foreground hover:text-foreground hover:underline max-md:min-h-12">
           <Camera className="size-3" aria-hidden="true" />
           {pending ? "uploading…" : hasOverride ? "replace photo" : "use real photo"}
           <input
@@ -67,7 +67,7 @@ export function VehiclePhotoEditor({
         {hasOverride && (
           <button
             type="button"
-            className="text-muted-foreground hover:text-destructive hover:underline"
+            className="text-muted-foreground hover:text-destructive hover:underline max-md:min-h-12"
             disabled={busy}
             onClick={() =>
               start(async () => {

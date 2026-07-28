@@ -46,7 +46,10 @@ export function DonutChart({
 
   return (
     <div className="flex flex-wrap items-center gap-6">
-      <div className="relative shrink-0">
+      {/* mx-auto, not basis-full: the absolutely-positioned total below is
+          inset-0 on this box, so widening it would move the total off the
+          ring. The legend is what forces the wrap. */}
+      <div className="relative shrink-0 max-md:mx-auto">
         <svg
           viewBox={`0 0 ${SIZE} ${SIZE}`}
           width={SIZE}
@@ -85,7 +88,11 @@ export function DonutChart({
         </div>
       </div>
 
-      <ul className="min-w-0 flex-1 space-y-1.5">
+      {/* flex-wrap never engaged: the ring is shrink-0 and the legend just
+          squeezed, down to ~29px for the label — a single letter and an
+          ellipsis, which leaves the chart identified by colour alone. Taking
+          the full row below md restores the labels the comment above promises. */}
+      <ul className="min-w-0 flex-1 space-y-1.5 max-md:basis-full">
         {segments.map((seg, i) => (
           <li
             key={seg.label}

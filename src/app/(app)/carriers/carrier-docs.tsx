@@ -85,20 +85,22 @@ export function CarrierDocs({
     <div className="space-y-4">
       {canManage && (
         <form ref={formRef} action={formAction} className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
+          {/* Width lives on the wrapper too: the fixed w-44 is what sizes this
+              flex item, so the field can only go full-bleed if both give. */}
+          <div className="space-y-1 max-md:w-full">
             <FieldLabel>Type</FieldLabel>
-            <NativeSelect name="doc_type" defaultValue="coi_insurance" className="w-44">
+            <NativeSelect name="doc_type" defaultValue="coi_insurance" className="w-44 max-md:w-full">
               <option value="coi_insurance">COI (insurance)</option>
               <option value="w9">W-9</option>
               <option value="mc_authority">MC authority</option>
               <option value="other">Other</option>
             </NativeSelect>
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1 max-md:w-full">
             <FieldLabel>Expires (COI)</FieldLabel>
-            <Input type="date" name="expires_at" className="w-40" />
+            <Input type="date" name="expires_at" className="w-40 max-md:w-full" />
           </div>
-          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-2 text-sm text-muted-foreground hover:bg-msg-hover">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-2 text-sm text-muted-foreground hover:bg-msg-hover max-md:min-h-12">
             <Paperclip className="size-4" aria-hidden="true" />
             Pick files
             <input
@@ -109,7 +111,12 @@ export function CarrierDocs({
               onChange={(e) => setFileNames(Array.from(e.target.files ?? []).map((f) => f.name))}
             />
           </label>
-          <Button type="submit" size="sm" disabled={pending || fileNames.length === 0}>
+          <Button
+            type="submit"
+            size="sm"
+            className="max-md:min-h-12"
+            disabled={pending || fileNames.length === 0}
+          >
             {pending ? "Uploading…" : `Attach${fileNames.length ? ` ${fileNames.length}` : ""}`}
           </Button>
           {fileNames.length > 0 && (
@@ -130,7 +137,7 @@ export function CarrierDocs({
               type="button"
               disabled={busy}
               onClick={() => open(d)}
-              className="inline-flex items-center gap-1.5 text-msg-link hover:underline"
+              className="inline-flex items-center gap-1.5 text-msg-link hover:underline max-md:min-h-12"
             >
               <FileText className="size-4 shrink-0" aria-hidden="true" />
               {d.file_name ?? "document"}
@@ -161,7 +168,10 @@ export function CarrierDocs({
                 disabled={busy}
                 onClick={() => remove(d)}
                 aria-label={`Remove ${d.file_name ?? "document"}`}
-                className="text-destructive hover:opacity-70"
+                // Grows into a real box on touch rather than a bare 15px glyph;
+                // the display switch is mobile-only so the desktop baseline of
+                // the icon in this row is untouched.
+                className="text-destructive hover:opacity-70 max-md:flex max-md:size-12 max-md:items-center max-md:justify-center"
               >
                 <Trash2 className="size-4" aria-hidden="true" />
               </button>

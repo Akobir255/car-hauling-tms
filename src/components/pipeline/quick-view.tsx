@@ -52,11 +52,14 @@ export function QuickView({ data, canSeeMargin }: { data: QuickViewData; canSeeM
   };
 
   // `emphatic` is the one label msgplane sets apart — see the call below.
+  // Below md the label stacks over its value: a 105px label column is a third
+  // of a phone-width panel, and "Notes from Shipper" wraps to three lines
+  // beside a squeezed value.
   const row = (label: string, value: React.ReactNode, emphatic = false) => (
-    <div className="flex gap-3 border-b border-msg-rule py-1.5 last:border-0">
+    <div className="flex flex-col gap-0.5 border-b border-msg-rule py-1.5 last:border-0 md:flex-row md:gap-3">
       <span
         className={cn(
-          "w-28 shrink-0",
+          "w-auto shrink-0 md:w-28",
           emphatic ? "font-bold text-msg-link" : "text-muted-foreground"
         )}
       >
@@ -72,7 +75,7 @@ export function QuickView({ data, canSeeMargin }: { data: QuickViewData; canSeeM
         ref={btnRef}
         type="button"
         onClick={() => (open ? setPos(null) : place())}
-        className="focus-ring flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground"
+        className="focus-ring flex min-h-12 items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground md:min-h-0"
       >
         <SquareArrowOutUpRight className="size-3" aria-hidden="true" />
         quick view
@@ -82,24 +85,34 @@ export function QuickView({ data, canSeeMargin }: { data: QuickViewData; canSeeM
         <>
           <div className="fixed inset-0 z-40" onClick={() => setPos(null)} />
           {/* No shadow anywhere but the nav bar, so the popup separates on the
-              border gray — the same device the list container uses. */}
+              border gray — the same device the list container uses.
+              A fixed 420px panel anchored to a row hangs 53px off a 375px
+              screen and can run past the fold, so below md it docks to the
+              bottom edge instead. The anchor point rides in custom properties
+              rather than top/left so the md rules can win without !important —
+              at >=768px this computes to exactly today's fixed 420px box at
+              exactly today's top/left. */}
           <div
-            className="fixed z-50 w-[420px] rounded-md border bg-popover p-3 text-sm"
-            style={{ top: pos.top, left: pos.left }}
+            className="fixed bottom-2 left-2 right-2 z-50 max-h-[85vh] overflow-y-auto rounded-md border bg-popover p-3 text-sm md:bottom-auto md:right-auto md:left-[var(--qv-left)] md:top-[var(--qv-top)] md:max-h-none md:w-[420px] md:overflow-visible"
+            style={
+              { "--qv-top": `${pos.top}px`, "--qv-left": `${pos.left}px` } as React.CSSProperties
+            }
           >
             <div className="mb-2 flex items-center gap-2 border-b pb-2">
               <Link
                 href={`/loads/${data.loadId}`}
-                className="tabular-nums text-msg-link"
+                className="inline-flex min-h-12 items-center tabular-nums text-msg-link md:inline md:min-h-0"
               >
                 {data.loadNumber}
               </Link>
               <span className={cn("lowercase", statusTone(data.status))}>{data.status}</span>
+              {/* p-4 around a 15px glyph is the 45px close target; md:p-0 is
+                  the current bare icon. ml-auto is untouched either way. */}
               <button
                 type="button"
                 onClick={() => setPos(null)}
                 aria-label="Close quick view"
-                className="focus-ring ml-auto text-muted-foreground hover:text-foreground"
+                className="focus-ring ml-auto p-4 text-muted-foreground hover:text-foreground md:p-0"
               >
                 <X className="size-4" aria-hidden="true" />
               </button>
@@ -134,7 +147,7 @@ export function QuickView({ data, canSeeMargin }: { data: QuickViewData; canSeeM
             <div className="mt-2 border-t pt-2">
               <Link
                 href={`/loads/${data.loadId}`}
-                className="text-[12px] text-msg-link"
+                className="inline-flex min-h-12 items-center text-[12px] text-msg-link md:inline md:min-h-0"
               >
                 Open full record →
               </Link>

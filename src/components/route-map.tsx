@@ -16,6 +16,19 @@ export type RouteEndpoint = { city: string; state: string; zip: string };
 
 type RouteResult = { miles: number; hours: number };
 
+// The map is a 270px band in the middle of the edit form, and Leaflet claims
+// one-finger drags for panning — so a rep scrolling the form gets caught in it
+// with no way out. Below md the gesture goes back to the page; the route is
+// fitted to bounds on draw, so there is nothing to pan to. Unchanged at the
+// desk, where dragging is on by default.
+const DESK = "(min-width: 48rem)";
+
+function syncDragging(map: LeafletMap | null) {
+  if (!map) return;
+  if (window.matchMedia(DESK).matches) map.dragging.enable();
+  else map.dragging.disable();
+}
+
 function endpointText(p: RouteEndpoint): string {
   return [[p.city, p.state].filter(Boolean).join(", "), p.zip].filter(Boolean).join(" ").trim();
 }
@@ -55,6 +68,7 @@ export function RouteMap({
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
           maxZoom: 18,
         }).addTo(mapRef.current);
+        syncDragging(mapRef.current);
       }
       const map = mapRef.current;
       if (!map) return;
@@ -114,6 +128,14 @@ export function RouteMap({
     return () => clearTimeout(t);
   }, [calculate, getEndpoints]);
 
+  // Rotating a phone into landscape crosses md, so the gesture follows.
+  useEffect(() => {
+    const mq = window.matchMedia(DESK);
+    const onChange = () => syncDragging(mapRef.current);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
   useEffect(() => {
     return () => {
       mapRef.current?.remove();
@@ -131,7 +153,14 @@ export function RouteMap({
         aria-label="Route map"
       />
       <div className="flex flex-wrap items-center gap-3 text-sm">
-        <Button type="button" variant="outline" size="sm" onClick={calculate} disabled={busy}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="max-md:min-h-12 max-md:px-4"
+          onClick={calculate}
+          disabled={busy}
+        >
           {busy ? "Calculating..." : "Calculate route"}
         </Button>
         {result && (

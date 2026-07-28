@@ -43,7 +43,9 @@ export function SmsThread({
     <div className="space-y-3">
       <div
         ref={scrollRef}
-        className="max-h-96 space-y-2.5 overflow-y-auto rounded-lg border bg-muted p-4"
+        // A fixed 384px pane is over half a phone screen, so the reply box sits
+        // behind a scroll trap.
+        className="max-h-96 space-y-2.5 overflow-y-auto rounded-lg border bg-muted p-4 max-md:max-h-[50vh]"
       >
         {messages.length === 0 && (
           <p className="py-6 text-center text-sm text-muted-foreground">
@@ -108,7 +110,7 @@ export function SmsThread({
               }
             }}
           />
-          <Button type="submit" disabled={pending}>
+          <Button type="submit" className="max-md:min-h-12" disabled={pending}>
             {pending ? "Sending..." : "Send"}
           </Button>
         </form>

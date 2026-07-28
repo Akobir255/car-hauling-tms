@@ -42,26 +42,44 @@ export function RevenueChart({ points }: { points: RevenuePoint[] }) {
   const tickEvery = Math.ceil(points.length / 5);
   const hovered = hover != null ? points[hover] : null;
 
-  function onMove(e: React.MouseEvent<SVGSVGElement>) {
+  function pick(clientX: number) {
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const px = ((e.clientX - rect.left) / rect.width) * W;
+    const px = ((clientX - rect.left) / rect.width) * W;
     const i = Math.round(((px - PAD.left) / innerW) * (points.length - 1));
     setHover(Math.max(0, Math.min(points.length - 1, i)));
   }
+
+  const latest = points[points.length - 1];
 
   return (
     // --chart-1 is msgplane's structural blue (#1565c0 / #64b5f6 dark); every
     // other tile on this dashboard drives its color from the chart-* tokens.
     <div className="relative text-chart-1">
+      {/* At 311px of card the 640-unit viewBox scales to 0.486, which draws
+          the in-chart labels at ~6px. Below md they come off and the number
+          they existed to carry is stated in real type instead. */}
+      <p className="mb-1 flex items-baseline gap-2 text-sm md:hidden">
+        <span className="tabular-nums text-foreground">
+          ${latest.value.toLocaleString("en-US")}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {dateLabel(points[0].date)} – {dateLabel(latest.date)}
+        </span>
+      </p>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
         className="w-full"
         role="img"
         aria-label="Cumulative revenue over the last 30 days"
-        onMouseMove={onMove}
+        onMouseMove={(e) => pick(e.clientX)}
         onMouseLeave={() => setHover(null)}
+        // Additive: a crosshair reachable only by hover leaves a touch reader
+        // with an unlabelled blue shape. No preventDefault, so a vertical drag
+        // still scrolls the page.
+        onTouchStart={(e) => pick(e.touches[0].clientX)}
+        onTouchMove={(e) => pick(e.touches[0].clientX)}
       >
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
@@ -84,7 +102,7 @@ export function RevenueChart({ points }: { points: RevenuePoint[] }) {
               x={PAD.left - 8}
               y={y(v) + 3}
               textAnchor="end"
-              className="fill-muted-foreground text-xs tabular-nums"
+              className="fill-muted-foreground text-xs tabular-nums max-md:hidden"
             >
               {money(v)}
             </text>
@@ -106,7 +124,7 @@ export function RevenueChart({ points }: { points: RevenuePoint[] }) {
               x={x(i)}
               y={H - 6}
               textAnchor="middle"
-              className="fill-muted-foreground text-xs"
+              className="fill-muted-foreground text-xs max-md:hidden"
             >
               {dateLabel(p.date)}
             </text>

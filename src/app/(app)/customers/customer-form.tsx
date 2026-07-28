@@ -27,7 +27,7 @@ export function CustomerForm({
 
   return (
     <form action={formAction} className="max-w-2xl space-y-6">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="contact_name">Contact name *</Label>
           <Input id="contact_name" name="contact_name" defaultValue={customer?.contact_name} required />
@@ -44,7 +44,9 @@ export function CustomerForm({
           <Label htmlFor="email">Email</Label>
           <Input id="email" name="email" type="email" defaultValue={customer?.email ?? ""} />
         </div>
-        <div className="col-span-2 space-y-1.5">
+        {/* col-span demoted in step with the base grid — a 2-wide span in a
+            1-column grid would open an implicit second column. */}
+        <div className="col-span-1 space-y-1.5 md:col-span-2">
           <Label htmlFor="billing_address">Billing address</Label>
           <Input id="billing_address" name="billing_address" defaultValue={customer?.billing_address ?? ""} />
         </div>
@@ -76,12 +78,14 @@ export function CustomerForm({
         <Textarea id="notes" name="notes" rows={3} defaultValue={customer?.notes ?? ""} />
       </div>
 
-      <div className="flex gap-6">
-        <label className="flex items-center gap-2 text-sm">
+      {/* The label wraps the box, so the whole 44px row is the hit area and the
+          checkbox glyph itself never moves. */}
+      <div className="flex gap-6 max-md:flex-wrap">
+        <label className="flex items-center gap-2 text-sm max-md:min-h-12">
           <input type="checkbox" name="sms_opt_out" defaultChecked={customer?.sms_opt_out} />
           Opted out of SMS
         </label>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm max-md:min-h-12">
           <input type="checkbox" name="email_opt_out" defaultChecked={customer?.email_opt_out} />
           Opted out of email
         </label>
@@ -90,10 +94,15 @@ export function CustomerForm({
       {state.error && <p className="text-sm text-destructive">{state.error}</p>}
 
       <div className="flex gap-3">
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" className="max-md:min-h-12" disabled={pending}>
           {pending ? "Saving..." : customer ? "Save changes" : "Create customer"}
         </Button>
-        <Button type="button" variant="outline" render={<Link href="/customers" />}>
+        <Button
+          type="button"
+          variant="outline"
+          className="max-md:min-h-12"
+          render={<Link href="/customers" />}
+        >
           Cancel
         </Button>
       </div>

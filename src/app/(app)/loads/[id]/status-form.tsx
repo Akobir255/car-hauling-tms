@@ -28,9 +28,9 @@ export function StatusForm({
 
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
-      <div className="space-y-1.5">
+      <div className="space-y-1.5 max-md:w-full">
         <FieldLabel>New status</FieldLabel>
-        <NativeSelect name="status" defaultValue={currentStatus} className="w-44">
+        <NativeSelect name="status" defaultValue={currentStatus} className="w-44 max-md:w-full">
           {LOAD_STATUSES.map((s) => (
             <option key={s} value={s}>
               {titleCase(s)}
@@ -38,11 +38,11 @@ export function StatusForm({
           ))}
         </NativeSelect>
       </div>
-      <div className="flex-1 space-y-1.5">
+      <div className="flex-1 space-y-1.5 max-md:basis-full">
         <FieldLabel>Note (optional)</FieldLabel>
-        <Textarea name="note" rows={1} className="min-h-8" />
+        <Textarea name="note" rows={1} className="min-h-8 max-md:min-h-12" />
       </div>
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" className="max-md:min-h-12 max-md:w-full" disabled={pending}>
         {pending ? "Updating..." : "Update status"}
       </Button>
     </form>

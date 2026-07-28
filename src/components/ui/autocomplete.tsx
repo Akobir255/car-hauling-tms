@@ -133,7 +133,7 @@ export function Autocomplete({
         <ul
           id={listId}
           role="listbox"
-          className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-md border border-border bg-popover p-1 text-sm text-popover-foreground"
+          className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-md border border-border bg-popover p-1 text-sm text-popover-foreground max-md:max-h-80"
         >
           {options.map((opt, i) => (
             <li key={opt} id={`${listId}-${i}`} role="option" aria-selected={i === activeIndex}>
@@ -143,7 +143,12 @@ export function Autocomplete({
                 className={cn(
                   // rounded-md, not bare `rounded` — the latter is Tailwind's
                   // fixed 4px and would not follow --radius.
-                  "block w-full truncate rounded-md px-2 py-1 text-left hover:bg-accent hover:text-accent-foreground",
+                  // Adjacent options are often near-identical ("Camry" /
+                  // "Camry Hybrid", two carriers sharing a prefix) and picking
+                  // the wrong one silently changes a carrier on an offer, so
+                  // below md the row grows to a thumb. Padding, not min-h:
+                  // `block` is what keeps truncate's ellipsis working.
+                  "block w-full truncate rounded-md px-2 py-1 text-left hover:bg-accent hover:text-accent-foreground max-md:py-3.5",
                   i === activeIndex && "bg-accent text-accent-foreground"
                 )}
                 onMouseEnter={() => setActiveIndex(i)}

@@ -51,6 +51,14 @@ const NAV_BUTTON =
   "aria-expanded:bg-black/10 aria-expanded:text-white " +
   "focus-visible:border-white/70 focus-visible:ring-white/70";
 
+// The 44px touch floor for the band's controls, which are size="sm" (h-7) —
+// 26px, unreachable with a thumb. Pinned in px like the band's own h-[64px]:
+// the root is 15px, so min-h-11 would be 41.25px and still miss. max-md rather
+// than a min-h-0 reset at md, so nothing at all is emitted above 767.98px and
+// the measured desktop band keeps its computed styles exactly, not just its
+// geometry — min-height:auto on a flex item is not the same as 0.
+const TOUCH_TARGET = "max-md:min-h-[44px] max-md:min-w-[44px]";
+
 function Brand() {
   return (
     <Link href="/dashboard" className="flex shrink-0 items-center gap-2">
@@ -59,7 +67,10 @@ function Brand() {
       <span className="flex size-8 items-center justify-center rounded-lg bg-black/10">
         <Truck className="size-4.5 text-white" aria-hidden="true" />
       </span>
-      <span className="hidden leading-tight sm:block">
+      {/* Shown at every width: once the search field leaves the band below md
+          the row has the room, and without it a phone shows an unlabelled blue
+          bar with a bare truck square. >=640 already had it. */}
+      <span className="block leading-tight">
         <span className="block text-[15px] text-white">US Star</span>
         {/* Both lines are solid #ffffff: dimming the second one to white/80
             lands at 4.3:1 on the band, under the floor. Size and tracking
@@ -120,7 +131,10 @@ export function AppTopBar({
         // focus-ring utility would draw invisibly here (same reason NAV_BUTTON
         // overrides its ring below).
         "relative flex items-center gap-2 whitespace-nowrap text-[15px] text-white transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white",
-        stacked ? "rounded-md px-[15px] py-2" : "h-[64px] px-[15px]",
+        // Drawer rows are 38px (py-2 on a 23px line box) — under the touch
+        // floor. min-height only grows the box, so the label sits where it
+        // does now, and the 768-1279 drawer emits no rule at all.
+        stacked ? "rounded-md px-[15px] py-2 max-md:min-h-[44px]" : "h-[64px] px-[15px]",
         // The active module is marked by darkening the blue underneath it, as
         // measured — but rgba(0,0,0,0.1) on that blue is 1.17:1, so a sighted
         // user cannot actually see which module they are in. The 3px white
@@ -167,7 +181,7 @@ export function AppTopBar({
           size="sm"
           aria-label="Open navigation"
           aria-expanded={menuOpen}
-          className={cn(NAV_BUTTON, "xl:hidden")}
+          className={cn(NAV_BUTTON, TOUCH_TARGET, "xl:hidden")}
           onClick={() => setMenuOpen(true)}
         >
           <Menu className="size-5" aria-hidden="true" />
@@ -186,7 +200,12 @@ export function AppTopBar({
 
         {/* Search sits at the top RIGHT, as in the old system. */}
         <div className="ml-auto flex items-center gap-1.5">
-          <div className="w-48 sm:w-64 lg:w-80">
+          {/* Below md the field cannot shrink far enough to fit — an input's
+              automatic minimum size is its intrinsic width, so it holds ~203px
+              of a 345px row and pushes the band off-screen. It moves into the
+              drawer there instead. sm:w-64 already governs at md, so 768+ is
+              the same 240px/320px it is today. */}
+          <div className="w-48 sm:w-64 max-md:hidden lg:w-80">
             <GlobalSearch />
           </div>
           <Button
@@ -195,7 +214,7 @@ export function AppTopBar({
             size="sm"
             aria-label="Refresh"
             title="Refresh"
-            className={NAV_BUTTON}
+            className={cn(NAV_BUTTON, TOUCH_TARGET)}
             onClick={() => router.refresh()}
           >
             <RefreshCw className="size-4" aria-hidden="true" />
@@ -207,7 +226,7 @@ export function AppTopBar({
               size="sm"
               aria-label="Account"
               aria-expanded={accountOpen}
-              className={NAV_BUTTON}
+              className={cn(NAV_BUTTON, TOUCH_TARGET)}
               onClick={() => setAccountOpen((v) => !v)}
             >
               <UserCircle2 className="size-5" aria-hidden="true" />
@@ -230,7 +249,7 @@ export function AppTopBar({
                   <form action={signOut}>
                     <button
                       type="submit"
-                      className="focus-ring block w-full px-3 py-2 text-left text-sm hover:bg-msg-hover"
+                      className="focus-ring block w-full px-3 py-2 text-left text-sm hover:bg-msg-hover max-md:flex max-md:min-h-[44px] max-md:items-center"
                     >
                       Sign out
                     </button>
@@ -253,7 +272,10 @@ export function AppTopBar({
           />
           {/* The drawer is the band folded vertically — same blue, same
               darkening overlays — rather than the near-black panel it was. */}
-          <div className="absolute inset-y-0 left-0 flex w-64 flex-col gap-1 bg-primary p-3 dark:bg-[#0d47a1]">
+          {/* Scrolls because eight 44px rows plus the search overrun a phone in
+              landscape; inert whenever the content fits. overscroll-contain
+              keeps the page behind the scrim from taking over at the ends. */}
+          <div className="absolute inset-y-0 left-0 flex w-64 flex-col gap-1 bg-primary p-3 max-md:overflow-y-auto max-md:overscroll-contain dark:bg-[#0d47a1]">
             <div className="flex items-center justify-between pb-2">
               <Brand />
               <Button
@@ -261,11 +283,17 @@ export function AppTopBar({
                 variant="ghost"
                 size="sm"
                 aria-label="Close navigation"
-                className={NAV_BUTTON}
+                className={cn(NAV_BUTTON, TOUCH_TARGET)}
                 onClick={() => setMenuOpen(false)}
               >
                 <X className="size-5" aria-hidden="true" />
               </Button>
+            </div>
+            {/* The band drops the field below md, so the drawer carries it —
+                which is what onNavigate was written for. Hidden at md and up,
+                where the band still has it and this drawer must not change. */}
+            <div className="pb-1 md:hidden">
+              <GlobalSearch onNavigate={() => setMenuOpen(false)} />
             </div>
             {items.map((item) => (
               <NavLink key={item.href} item={item} stacked onClick={() => setMenuOpen(false)} />

@@ -61,8 +61,10 @@ function EndpointFields({
           onChange={(e) => onField("address", e.target.value)}
         />
       </div>
-      <div className="grid grid-cols-6 gap-2">
-        <div className="col-span-3 space-y-1.5">
+      {/* Six tracks would leave the State field ~19px of text box on a phone.
+          Two tracks put City on its own row with State and ZIP beneath it. */}
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
+        <div className="col-span-2 space-y-1.5 md:col-span-3">
           <FieldLabel htmlFor={`${prefix}_city`}>City</FieldLabel>
           <Input
             id={`${prefix}_city`}
@@ -81,7 +83,7 @@ function EndpointFields({
             maxLength={2}
           />
         </div>
-        <div className="col-span-2 space-y-1.5">
+        <div className="col-span-1 space-y-1.5 md:col-span-2">
           <FieldLabel htmlFor={`${prefix}_zip`}>ZIP</FieldLabel>
           <Input
             id={`${prefix}_zip`}
@@ -93,7 +95,7 @@ function EndpointFields({
           />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
         <div className="space-y-1.5">
           <FieldLabel htmlFor={`${prefix}_contact_name`}>Contact</FieldLabel>
           <Input
@@ -120,7 +122,7 @@ function EndpointFields({
           id={dateName}
           name={dateName}
           type="date"
-          className="w-44"
+          className="w-44 max-md:w-full"
           value={values.date}
           onChange={(e) => onField("date", e.target.value)}
         />
@@ -371,6 +373,7 @@ export function NewLoadForm() {
                     type="button"
                     size="sm"
                     variant="outline"
+                    className="max-md:min-h-12"
                     onClick={() => setRate(String(suggestion.price))}
                   >
                     Use ${suggestion.price.toLocaleString()}
@@ -402,16 +405,28 @@ export function NewLoadForm() {
 
       {/* bg-card: --background and --card are both white now, and in dark mode
           this bar belongs to the card surface, not the page. */}
-      <div className="sticky bottom-0 z-10 -mx-6 border-t bg-card/95 px-6 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-end gap-3">
-          {state.error && <p className="mr-auto text-sm text-destructive">{state.error}</p>}
+      {/* The negative margin bleeds the bar to main's edge, so it has to track
+          main's gutter — which halves below md. Never exceed it: a bleed wider
+          than the padding scrolls the document sideways. */}
+      <div className="sticky bottom-0 z-10 -mx-6 border-t bg-card/95 px-6 py-3 backdrop-blur max-md:-mx-4 max-md:px-4">
+        <div className="mx-auto flex max-w-5xl items-center justify-end gap-3 max-md:flex-wrap">
+          {/* mr-auto puts the error leftmost, so without its own row it is the
+              first thing squeezed out of a narrow bar. */}
+          {state.error && (
+            <p className="mr-auto text-sm text-destructive max-md:basis-full">{state.error}</p>
+          )}
           {dirty && !pending && !state.error && (
             <span className="text-xs text-muted-foreground">Unsaved changes</span>
           )}
-          <Button type="button" variant="outline" render={<Link href="/loads" />}>
+          <Button
+            type="button"
+            variant="outline"
+            className="max-md:min-h-12"
+            render={<Link href="/loads" />}
+          >
             Cancel
           </Button>
-          <Button type="submit" disabled={pending}>
+          <Button type="submit" className="max-md:min-h-12" disabled={pending}>
             {pending ? "Creating..." : "Create load"}
           </Button>
         </div>

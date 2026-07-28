@@ -12,7 +12,10 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
         // 14px is the spec's list-row size and a desktop measurement. The 16px
         // step below it is not decoration: mobile Safari zooms the viewport
         // whenever a focused field is under 16px and never zooms back out.
-        "h-8 w-full min-w-0 rounded-md border border-input bg-transparent px-2.5 py-1 text-[16px] transition-colors md:text-sm outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+        // 44px on phones is the smallest reliable touch target; md: restores
+        // the measured 32px so the desktop density is untouched. text-[16px]
+        // below md is what stops iOS zooming the page on focus.
+        "h-8 min-h-[44px] md:min-h-0 w-full min-w-0 rounded-md border border-input bg-transparent px-2.5 py-1 text-[16px] transition-colors md:text-sm outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
         className
       )}
       {...props}

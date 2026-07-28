@@ -75,8 +75,10 @@ export function EsignPanel({
   }, [state]);
 
   const signHref = token ? `/sign/${token}` : null;
+  // Two of these boxes void a contract, so below md they take the full touch
+  // target; a <button> centers its own label in the taller box.
   const boxBtn =
-    "h-8 rounded-md border bg-card px-3 text-sm lowercase text-foreground transition-colors hover:bg-msg-hover disabled:opacity-40";
+    "h-8 rounded-md border bg-card px-3 text-sm lowercase text-foreground transition-colors hover:bg-msg-hover disabled:opacity-40 max-md:min-h-12";
 
   return (
     <div className="space-y-3">
@@ -122,7 +124,7 @@ export function EsignPanel({
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 max-md:gap-3">
         {signHref && sentAt && (
           <a href={signHref} target="_blank" rel="noopener noreferrer" className={cn(boxBtn, "inline-flex items-center")}>
             open
@@ -275,25 +277,27 @@ function ChangeTermsPanel({
     <form action={formAction} className="flex flex-wrap items-end gap-3 rounded-md border bg-muted p-3">
       <div className="space-y-1">
         <FieldLabel>New tariff ($)</FieldLabel>
-        <Input name="tariff" inputMode="decimal" placeholder="keep current" className="h-8 w-28" />
+        <Input name="tariff" inputMode="decimal" placeholder="keep current" className="h-8 w-28 max-md:min-h-12" />
       </div>
       <div className="space-y-1">
         <FieldLabel>New deposit ($)</FieldLabel>
-        <Input name="deposit" inputMode="decimal" placeholder="keep current" className="h-8 w-28" />
+        <Input name="deposit" inputMode="decimal" placeholder="keep current" className="h-8 w-28 max-md:min-h-12" />
       </div>
-      <div className="min-w-40 flex-1 space-y-1">
+      <div className="min-w-40 flex-1 space-y-1 max-md:basis-full">
         <FieldLabel>Note (shown in view all)</FieldLabel>
-        <Input name="note" maxLength={300} placeholder="What changed…" className="h-8" />
+        <Input name="note" maxLength={300} placeholder="What changed…" className="h-8 max-md:min-h-12" />
       </div>
-      <label className="flex items-center gap-1.5 pb-1.5 text-sm">
+      {/* The label wraps the box, so the whole 44px row is the hit area and the
+          15px checkbox itself is untouched. */}
+      <label className="flex items-center gap-1.5 pb-1.5 text-sm max-md:min-h-12">
         <input type="checkbox" name="require_card" defaultChecked={requiresCard} className="size-4 accent-primary" />
         Require card info
       </label>
-      <label className="flex items-center gap-1.5 pb-1.5 text-sm">
+      <label className="flex items-center gap-1.5 pb-1.5 text-sm max-md:min-h-12">
         <input type="checkbox" name="also_sms" className="size-4 accent-primary" />
         Also SMS
       </label>
-      <Button type="submit" size="sm" disabled={pending}>
+      <Button type="submit" size="sm" className="max-md:min-h-12" disabled={pending}>
         {pending ? "Sending…" : "Send new version"}
       </Button>
       <p className="basis-full text-xs text-muted-foreground">
@@ -352,7 +356,7 @@ function ViewAllPanel({
                 ) : canManage && !signed ? (
                   <button
                     type="button"
-                    className="text-xs text-msg-link hover:underline disabled:opacity-50"
+                    className="text-xs text-msg-link hover:underline disabled:opacity-50 max-md:min-h-12"
                     disabled={pending}
                     onClick={() =>
                       start(async () => {
@@ -386,7 +390,7 @@ function ViewAllPanel({
                   href={`https://ipinfo.io/${encodeURIComponent(e.ip)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-msg-link hover:underline"
+                  className="text-msg-link hover:underline max-md:inline-flex max-md:min-h-12 max-md:items-center"
                 >
                   check location
                 </a>

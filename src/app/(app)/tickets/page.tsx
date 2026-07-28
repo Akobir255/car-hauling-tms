@@ -63,7 +63,9 @@ export default async function TicketsPage({
             Internal issues — carrier problems, damage claims, billing disputes.
           </p>
         </div>
-        <Button render={<Link href="/tickets/new" />}>New ticket</Button>
+        <Button className="max-md:min-h-12" render={<Link href="/tickets/new" />}>
+          New ticket
+        </Button>
       </div>
 
       {/* msgplane's tab strip: a row of plain boxed buttons with no rule
@@ -79,7 +81,11 @@ export default async function TicketsPage({
                 href={t.key === TABS[0].key ? "/tickets" : `/tickets?tab=${t.key}`}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "focus-ring flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-0.5 text-sm transition-colors",
+                  // These five are the only way to change what the page
+                  // lists, so below md the chip takes a thumb target the way
+                  // the pipeline tab strip already does; md: hands back the
+                  // measured 29px box unchanged.
+                  "focus-ring flex min-h-12 items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-0.5 text-sm transition-colors md:min-h-6",
                   isActive
                     ? "border-msg-selected bg-msg-selected text-msg-selected-foreground"
                     : "bg-card text-foreground hover:bg-msg-hover"
@@ -140,7 +146,11 @@ export default async function TicketsPage({
             title={active.key === "open" ? "No open tickets" : "Nothing here"}
             hint="Tickets track problems that need follow-up — a damaged vehicle, a carrier no-show, a billing dispute."
             action={
-              <Button size="sm" render={<Link href="/tickets/new" />}>
+              <Button
+                size="sm"
+                className="max-md:min-h-12 max-md:px-4"
+                render={<Link href="/tickets/new" />}
+              >
                 New ticket
               </Button>
             }
