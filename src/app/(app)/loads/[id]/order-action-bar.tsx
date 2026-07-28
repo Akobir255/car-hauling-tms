@@ -39,10 +39,27 @@ const INLINE: Partial<Record<OrderAction, (id: string) => Promise<ActionResult>>
   unpost: unpostOrder,
 };
 
+// Each board posts straight from its own box — no intermediate panel.
+const POST_BOARD: Partial<Record<OrderAction, "cd" | "sd" | "all">> = {
+  post_cd: "cd",
+  post_sd: "sd",
+  post_all: "all",
+};
+
+// Spelled out for the tooltip and the toast, where "All" alone reads as a
+// board name rather than as "both of them".
+const POST_TARGET: Record<"cd" | "sd" | "all", string> = {
+  cd: "Central Dispatch",
+  sd: "Super Dispatch",
+  all: "both boards",
+};
+
 const LABEL: Record<OrderAction, string> = {
   convert_to_quote: "Move to Quote",
   convert_to_order: "Convert to Order",
-  post: "Post",
+  post_cd: "Post CD",
+  post_sd: "Post SD",
+  post_all: "Post All",
   unpost: "Unpost",
   dispatch: "Dispatch",
   resend: "Resend",
@@ -53,7 +70,7 @@ const LABEL: Record<OrderAction, string> = {
   reactivate: "Reactivate",
 };
 
-const PANEL_ACTIONS: OrderAction[] = ["post", "record_payment", "mark_lost"];
+const PANEL_ACTIONS: OrderAction[] = ["record_payment", "mark_lost"];
 const CONFIRM: Partial<Record<OrderAction, string>> = {
   unpost: "Unpost this order and return it to Ready?",
 };
@@ -90,6 +107,14 @@ export function OrderActionBar({
       router.push(`/loads/${loadId}/dispatch`);
       return;
     }
+    const board = POST_BOARD[a];
+    if (board) {
+      start(async () => {
+        await postOrder(loadId, board);
+        toast.success(`Posted to ${POST_TARGET[board]}.`);
+      });
+      return;
+    }
     const fn = INLINE[a];
     if (!fn) return;
     if (CONFIRM[a] && !confirm(CONFIRM[a])) return;
@@ -119,11 +144,22 @@ export function OrderActionBar({
           // msgplane's header bar: every action is the same quiet gray box
           // (EDIT alone is green, rendered by the page). Lost keeps red text.
           const danger = a === "mark_lost";
+          // The boxes are all one color, so which board this order was MEANT
+          // for has to come from somewhere — the header's Loadboard field says
+          // it, and the tooltip repeats it where the mistake would happen.
+          const board = POST_BOARD[a];
+          const title = board
+            ? `Post to ${POST_TARGET[board]}` +
+              (loadboard && loadboard !== board
+                ? ` — this order's Loadboard is set to ${LOADBOARD_LABEL[loadboard] ?? loadboard}.`
+                : ".")
+            : undefined;
           return (
             <Button
               key={a}
               size="sm"
               variant="secondary"
+              title={title}
               className={danger ? "text-destructive hover:text-destructive" : undefined}
               disabled={pending}
               onClick={() =>
@@ -137,28 +173,6 @@ export function OrderActionBar({
           );
         })}
       </div>
-
-      {openPanel === "post" && (
-        <div
-          className={cn(
-            "flex flex-wrap items-center gap-2 rounded-md border bg-card p-2 max-md:gap-3 max-md:[&_button]:min-h-12",
-            stack && "w-full"
-          )}
-        >
-          <span className="text-xs text-muted-foreground">
-            Post to{loadboard ? ` (order is set to ${LOADBOARD_LABEL[loadboard] ?? loadboard})` : ""}:
-          </span>
-          <Button size="sm" variant={loadboard === "all" || !loadboard ? "default" : "secondary"} disabled={pending} onClick={() => start(async () => { await postOrder(loadId, "all"); toast.success("Posted."); })}>
-            All
-          </Button>
-          <Button size="sm" variant={loadboard === "cd" ? "default" : "outline"} disabled={pending} onClick={() => start(async () => { await postOrder(loadId, "cd"); toast.success("Posted."); })}>
-            Central Dispatch
-          </Button>
-          <Button size="sm" variant={loadboard === "sd" ? "default" : "outline"} disabled={pending} onClick={() => start(async () => { await postOrder(loadId, "sd"); toast.success("Posted."); })}>
-            Super Dispatch
-          </Button>
-        </div>
-      )}
 
       {openPanel === "record_payment" && (
         <PaymentPanel loadId={loadId} onDone={() => setOpenPanel(null)} full={stack} />

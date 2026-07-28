@@ -244,10 +244,15 @@ export const ORDER_TABS: OrderTab[] = [
 
 // Lifecycle actions available from each status. The detail page renders these
 // as the header action bar; every transition is re-validated server-side.
+// One action per board rather than a single "Post" that then asks which one:
+// msgplane puts the boards in the header as their own boxes, and posting is
+// the whole job on a ready order — it should not cost two clicks.
 export type OrderAction =
   | "convert_to_quote"
   | "convert_to_order"
-  | "post"
+  | "post_cd"
+  | "post_sd"
+  | "post_all"
   | "unpost"
   | "dispatch"
   | "resend"
@@ -268,10 +273,10 @@ export type OrderAction =
 export const ACTIONS_BY_STATUS: Record<LoadStatus, OrderAction[]> = {
   lead: ["convert_to_quote", "mark_lost"],
   quote: ["convert_to_order", "record_payment", "mark_lost"],
-  ready: ["record_payment", "post", "mark_lost", "hold"],
+  ready: ["record_payment", "post_cd", "post_sd", "post_all", "mark_lost", "hold"],
   posted_cd: ["dispatch", "record_payment", "resend", "unpost"],
   posted_sd: ["dispatch", "record_payment", "resend", "unpost"],
-  booked: ["dispatch", "record_payment", "post", "mark_lost"],
+  booked: ["dispatch", "record_payment", "post_cd", "post_sd", "post_all", "mark_lost"],
   dispatched: ["record_payment", "unpost"],
   picked_up: ["record_payment"],
   in_transit: ["record_payment"],

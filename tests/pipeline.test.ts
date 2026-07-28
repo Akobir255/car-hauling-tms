@@ -69,8 +69,15 @@ describe("actionsFor role filtering", () => {
 describe("stage discipline encoded in the action map", () => {
   it("no status offers a stage-skipping action", () => {
     expect(ACTIONS_BY_STATUS.lead).not.toContain("convert_to_order");
-    expect(ACTIONS_BY_STATUS.quote).not.toContain("post");
-    expect(ACTIONS_BY_STATUS.ready).toContain("post");
+    // Each board is its own action now, so "can this status post?" has to be
+    // asked of all three — a stray one added to quote would slip past a check
+    // that only looked for the old single "post".
+    const POST_ACTIONS = ["post_cd", "post_sd", "post_all"] as const;
+    for (const a of POST_ACTIONS) {
+      // A quote is pre-agreement: no board sees it until it is an order.
+      expect(ACTIONS_BY_STATUS.quote).not.toContain(a);
+      expect(ACTIONS_BY_STATUS.ready).toContain(a);
+    }
     // Post-dispatch statuses offer only payment (and unpost as the escape
     // hatch on dispatched) — progress comes from the carrier side.
     expect(ACTIONS_BY_STATUS.dispatched).toEqual(["record_payment", "unpost"]);
