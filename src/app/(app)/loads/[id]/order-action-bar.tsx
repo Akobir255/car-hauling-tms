@@ -133,7 +133,10 @@ export function OrderActionBar({
     <div className={cn("flex flex-col gap-2", stack ? "items-stretch" : "items-end")}>
       <div
         className={cn(
-          "gap-2 [&_button]:h-8 [&_button]:text-xs [&_button]:uppercase max-md:[&_button]:min-h-12",
+          // Materialize's .btn, which is what these were: uppercase, 500
+          // weight, half a pixel of tracking. The label is the whole button,
+          // so the letterform matters as much as the fill.
+          "gap-2 [&_button]:h-8 [&_button]:text-xs [&_button]:font-medium [&_button]:uppercase [&_button]:tracking-wide max-md:[&_button]:min-h-12",
           stack
             ? "flex flex-col [&_button]:w-full [&_button]:justify-center"
             // Right-aligned, these wrap into a ragged staircase on a phone.
@@ -141,9 +144,11 @@ export function OrderActionBar({
         )}
       >
         {actions.map((a) => {
-          // msgplane's header bar: every action is the same quiet gray box
-          // (EDIT alone is green, rendered by the page). Lost keeps red text.
-          const danger = a === "mark_lost";
+          // msgplane's header bar: EVERY action is the same solid gray box
+          // with a white uppercase label — including Mark as Lost, which used
+          // to carry red text. Red ink on this fill is unreadable, and the box
+          // opens a confirm panel rather than firing, so the warning lives
+          // there instead of in the color.
           // The boxes are all one color, so which board this order was MEANT
           // for has to come from somewhere — the header's Loadboard field says
           // it, and the tooltip repeats it where the mistake would happen.
@@ -158,9 +163,8 @@ export function OrderActionBar({
             <Button
               key={a}
               size="sm"
-              variant="secondary"
               title={title}
-              className={danger ? "text-destructive hover:text-destructive" : undefined}
+              className="bg-msg-btn text-msg-btn-foreground hover:bg-msg-btn-hover"
               disabled={pending}
               onClick={() =>
                 PANEL_ACTIONS.includes(a)

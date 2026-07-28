@@ -172,7 +172,8 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               ? "CD"
               : load.posted_to_super_dispatch_at
                 ? "SD"
-                : "—";
+                // Blank, not an em dash — same rule as Campaign above.
+                : " ";
 
   const boundDelete = deleteLoad.bind(null, load.id);
   const stage = stageOf(load.status);
@@ -263,9 +264,13 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                 {load.load_number}
               </Link>
             </Field>
+            {/* The status reads as the old system writes it — plain text, its
+                own stored word: "posted-cd", not a "Posted CD" pill. Every rep
+                on this team has been reading that vocabulary for years, and
+                the lists still carry the colored badge. */}
             <Field label="Status">
               <span className="flex items-center gap-2">
-                <StatusBadge status={load.status} />
+                <span className="text-[15px]">{load.status.replace(/_/g, "-")}</span>
                 {/* Safety affordance — a solid destructive fill so it stays
                     loud after the pills flattened to the 3px radius. */}
                 {customer?.blacklisted && (
@@ -275,11 +280,11 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                 )}
               </span>
             </Field>
-            <Field label="Campaign">{load.campaign || "—"}</Field>
+            {/* An empty Campaign is blank there, not an em dash — and there is
+                no Tariff in this strip at all; it already has a row of its own
+                in Payments & Dates below. */}
+            <Field label="Campaign">{load.campaign || " "}</Field>
             <Field label="Loadboard">{loadboard}</Field>
-            <Field label="Tariff">
-              <span className="tabular-nums">{formatCurrency(load.customer_rate)}</span>
-            </Field>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <OrderActionBar
@@ -287,12 +292,11 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               actions={actionsFor(load.status, profile.role)}
               loadboard={load.loadboard}
             />
-            {/* msgplane's one colored header button: green EDIT. The green is
-                the spec's accent (--chart-5); it takes the dark accent ink
-                rather than white, which is only 3.2:1 on that fill. */}
+            {/* The one colored box in the bar: green EDIT, light-green 500 with
+                a white label, same as the gray boxes beside it. */}
             <Button
               size="sm"
-              className="h-8 bg-chart-5 text-xs uppercase text-msg-selected-foreground hover:bg-chart-5/85 max-md:min-h-12"
+              className="h-8 bg-msg-btn-edit text-xs font-medium uppercase tracking-wide text-msg-btn-foreground hover:bg-msg-btn-edit-hover max-md:min-h-12"
               render={<Link href={`/loads/${load.id}/edit`} />}
             >
               Edit

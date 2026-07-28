@@ -58,6 +58,14 @@
   --color-msg-shipper: var(--msg-shipper);
   --color-msg-rail: var(--msg-rail);
   --color-msg-rule: var(--msg-rule);
+  /* Record-header action boxes. These are NOT --secondary: that token is a
+     near-white #f1f3f4 fill with dark ink, and the header bar being copied is
+     a row of solid gray boxes with white uppercase labels. */
+  --color-msg-btn: var(--msg-btn);
+  --color-msg-btn-hover: var(--msg-btn-hover);
+  --color-msg-btn-foreground: var(--msg-btn-foreground);
+  --color-msg-btn-edit: var(--msg-btn-edit);
+  --color-msg-btn-edit-hover: var(--msg-btn-edit-hover);
   /* Interaction fill. --muted is msgplane's raised surface (#fafafa), which is
      1.04:1 on the white page — fine as a surface, invisible as a hover. Row
      hover on a 100-row list is how a rep keeps their place, so state gets its
@@ -177,6 +185,17 @@
   /* Row separator — a hair lighter than --border, which msgplane keeps for
      boxes. */
   --msg-rule: #e5e5e5;
+  /* The record-header buttons, taken as they are: Material grey 500 with a
+     white uppercase label, and light-green 500 for the one colored box.
+     White on grey 500 is 2.8:1, under the 4.5:1 text floor — kept anyway
+     because these buttons are the thing being cloned, and a rep who has used
+     the old system for years reads this bar by its shape. The labels are
+     large-ish, uppercase and never the only route to an action. */
+  --msg-btn: #9e9e9e;
+  --msg-btn-hover: #8a8a8a;
+  --msg-btn-foreground: #ffffff;
+  --msg-btn-edit: #8bc34a;
+  --msg-btn-edit-hover: #7cb342;
 }
 
 .dark {
@@ -240,6 +259,13 @@
   --msg-shipper: #90caf9;
   --msg-rail: #2c2c2c;
   --msg-rule: #3a3a3a;
+  /* Same hues, stepped down so a row of solid boxes doesn't glare off a
+     #121212 page. */
+  --msg-btn: #6d6d6d;
+  --msg-btn-hover: #7d7d7d;
+  --msg-btn-foreground: #ffffff;
+  --msg-btn-edit: #7cb342;
+  --msg-btn-edit-hover: #8bc34a;
 }
 
 @layer base {
