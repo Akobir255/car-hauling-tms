@@ -104,7 +104,7 @@ export function NotesThread({ loadId, notes }: { loadId: string; notes: ThreadNo
               {quick}
             </Button>
           ))}
-          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-msg-hover">
             <Paperclip className="size-3.5" aria-hidden="true" />
             Attach files
             <input
@@ -135,7 +135,7 @@ export function NotesThread({ loadId, notes }: { loadId: string; notes: ThreadNo
         {notes.map((note) => (
           <div key={note.id} className="space-y-1.5 py-3">
             <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-              <span className="font-semibold text-foreground">{note.authorName}</span>
+              <span className="text-foreground">{note.authorName}</span>
               <span className="tabular-nums">{stamp(note.created_at)}</span>
               {note.updated_at !== note.created_at && <span>(edited)</span>}
               {note.canEdit && (
@@ -147,7 +147,7 @@ export function NotesThread({ loadId, notes }: { loadId: string; notes: ThreadNo
                       setEditingId(note.id);
                       setEditBody(note.body);
                     }}
-                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-muted hover:text-foreground"
+                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-msg-hover hover:text-foreground"
                   >
                     <Pencil className="size-3" aria-hidden="true" /> edit
                   </button>
@@ -155,7 +155,7 @@ export function NotesThread({ loadId, notes }: { loadId: string; notes: ThreadNo
                     type="button"
                     disabled={busy}
                     onClick={() => remove(note.id)}
-                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-destructive hover:bg-destructive/10"
+                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-destructive hover:bg-destructive/10"
                   >
                     <Trash2 className="size-3" aria-hidden="true" /> remove
                   </button>
@@ -196,7 +196,7 @@ export function NotesThread({ loadId, notes }: { loadId: string; notes: ThreadNo
                     type="button"
                     disabled={busy}
                     onClick={() => open(note, a)}
-                    className="inline-flex max-w-full items-center gap-1.5 rounded border bg-muted/40 px-2 py-1 text-xs text-primary hover:bg-muted"
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-muted px-2 py-1 text-xs text-msg-link hover:bg-secondary"
                   >
                     <Paperclip className="size-3 shrink-0" aria-hidden="true" />
                     <span className="truncate">{a.file_name ?? "attachment"}</span>

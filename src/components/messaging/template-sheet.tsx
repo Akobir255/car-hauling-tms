@@ -66,10 +66,12 @@ export function TemplateSheet({
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-4">
-      <div className="w-full max-w-3xl rounded-xl border bg-card shadow-2xl">
+      {/* No shadow: the nav bar is the only raised surface in msgplane, so the
+          border gray is what lifts the sheet off the list behind it. */}
+      <div className="w-full max-w-3xl rounded-md border border-border bg-card">
         <div className="flex items-center gap-2 border-b px-4 py-2.5">
           <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
-          <h2 className="text-sm font-semibold">{title}</h2>
+          <h2 className="text-sm">{title}</h2>
           <span className="text-xs text-muted-foreground">
             {recipientCount} recipient{recipientCount === 1 ? "" : "s"}
           </span>
@@ -103,10 +105,10 @@ export function TemplateSheet({
                   type="button"
                   onClick={() => pick(t)}
                   className={cn(
-                    "block w-full truncate rounded px-2 py-1.5 text-left text-sm transition-colors",
+                    "block w-full truncate rounded-md px-2 py-1.5 text-left text-sm transition-colors",
                     pickedId === t.id
-                      ? "bg-primary font-medium text-primary-foreground"
-                      : "hover:bg-muted"
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-msg-hover"
                   )}
                 >
                   {t.name}

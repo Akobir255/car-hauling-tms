@@ -98,7 +98,7 @@ export function CarrierDocs({
             <FieldLabel>Expires (COI)</FieldLabel>
             <Input type="date" name="expires_at" className="w-40" />
           </div>
-          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-2 text-sm text-muted-foreground hover:bg-msg-hover">
             <Paperclip className="size-4" aria-hidden="true" />
             Pick files
             <input
@@ -130,19 +130,21 @@ export function CarrierDocs({
               type="button"
               disabled={busy}
               onClick={() => open(d)}
-              className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
+              className="inline-flex items-center gap-1.5 text-msg-link hover:underline"
             >
               <FileText className="size-4 shrink-0" aria-hidden="true" />
               {d.file_name ?? "document"}
             </button>
-            <span className="rounded border px-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+            <span className="rounded-md border px-1.5 text-xs uppercase text-muted-foreground">
               {TYPE_LABEL[d.doc_type] ?? d.doc_type}
             </span>
             {d.expires_at && (
               <span
                 className={
+                  // Stale insurance has to stay loud, so EXPIRED keeps a solid
+                  // destructive fill rather than a tint.
                   expired(d)
-                    ? "rounded bg-red-100 px-1.5 text-xs font-semibold text-red-800 dark:bg-red-950 dark:text-red-300"
+                    ? "rounded-md bg-destructive px-1.5 text-xs text-background"
                     : "text-xs text-muted-foreground"
                 }
               >

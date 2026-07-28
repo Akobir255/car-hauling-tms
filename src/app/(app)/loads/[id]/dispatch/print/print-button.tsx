@@ -9,7 +9,7 @@ export function PrintButton() {
       <button
         type="button"
         onClick={() => window.print()}
-        className="inline-flex items-center gap-2 rounded bg-neutral-800 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-900"
+        className="inline-flex items-center gap-2 rounded-md bg-foreground px-4 py-2 text-sm text-background hover:opacity-90"
       >
         <Printer className="size-4" aria-hidden="true" />
         Print / Save as PDF
@@ -17,7 +17,7 @@ export function PrintButton() {
       <button
         type="button"
         onClick={() => window.history.back()}
-        className="rounded border px-4 py-2 text-sm font-medium hover:bg-neutral-100"
+        className="rounded-md border px-4 py-2 text-sm hover:bg-msg-hover"
       >
         Back
       </button>

@@ -47,7 +47,7 @@ export default async function MessagesPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Messages</h1>
+          <h1 className="text-[15px]">Messages</h1>
           <p className="text-sm text-muted-foreground">
             {isSmsConfigured()
               ? "RingCentral connected — messages send immediately."
@@ -89,7 +89,15 @@ export default async function MessagesPage() {
           {messages.map((m) => {
             const unread = m.direction === "inbound" && !m.read_at;
             return (
-              <TableRow key={m.id} className={cn(unread && "bg-blue-500/5 font-medium")}>
+              // A left bar rather than a row tint. Any tint strong enough to
+              // read drags --msg-link and --muted-foreground on that row under
+              // 4.5:1 — and these are the rows that most need reading. The bar
+              // is also a shape, so it survives a color-blind reader and a
+              // greyscale print, which the "· new" label below already backs up.
+              <TableRow
+                key={m.id}
+                className={cn(unread && "border-l-4 border-l-primary")}
+              >
                 <TableCell className="whitespace-nowrap text-muted-foreground">
                   {new Date(m.created_at).toLocaleString("en-US", {
                     dateStyle: "short",
@@ -105,7 +113,7 @@ export default async function MessagesPage() {
                 </TableCell>
                 <TableCell>
                   {m.customer_id ? (
-                    <Link href={`/customers/${m.customer_id}`} className="hover:underline">
+                    <Link href={`/customers/${m.customer_id}`} className="text-msg-link hover:underline">
                       {customerById.get(m.customer_id)?.contact_name ?? "—"}
                     </Link>
                   ) : (

@@ -44,7 +44,9 @@ export function VehiclePhoto({
   return (
     <span
       className={cn(
-        "flex h-9 w-14 shrink-0 items-center justify-center overflow-hidden rounded border bg-muted/60",
+        // rounded-md, not bare `rounded` — the latter is Tailwind's fixed 4px
+        // and would not follow --radius, which the spec pins at 3px.
+        "flex h-9 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted/60",
         className
       )}
     >

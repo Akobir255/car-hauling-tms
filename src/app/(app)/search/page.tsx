@@ -32,7 +32,7 @@ export default async function SearchPage({
   if (raw.length < 2) {
     return (
       <div className="mx-auto max-w-5xl">
-        <h1 className="text-2xl font-semibold">Search</h1>
+        <h1 className="text-[15px]">Search</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Type at least two characters in the search box and press Enter.
         </p>
@@ -89,7 +89,7 @@ export default async function SearchPage({
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold">Search results</h1>
+        <h1 className="text-[15px]">Search results</h1>
         <p className="text-sm text-muted-foreground">
           “{raw}” — {loads.length} order{loads.length === 1 ? "" : "s"}, {customers.length}{" "}
           shipper{customers.length === 1 ? "" : "s"}, {carriers?.length ?? 0} carrier
@@ -102,9 +102,9 @@ export default async function SearchPage({
           <p className="px-5 py-4 text-sm text-muted-foreground">No matching orders.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[15px]">
+            <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="border-b bg-muted/50 text-left text-sm font-bold uppercase tracking-wide">
+                <tr className="border-b text-left text-sm text-msg-header [&>th]:font-normal">
                   <th className="px-4 py-2.5">ID</th>
                   <th className="px-4 py-2.5">Status</th>
                   <th className="px-4 py-2.5">Shipper</th>
@@ -120,14 +120,17 @@ export default async function SearchPage({
                     <tr
                       key={l.id}
                       className={
-                        "border-b last:border-b-0 hover:bg-accent/60 " +
-                        (i % 2 === 1 ? "bg-muted/40" : "")
+                        // Zebra takes --secondary and hover the darker
+                        // --msg-hover, so hover still reads on a striped row.
+                        // --muted is 1.04:1 on white and showed as nothing.
+                        "border-b last:border-b-0 hover:bg-msg-hover " +
+                        (i % 2 === 1 ? "bg-secondary" : "")
                       }
                     >
                       <td className="px-4 py-3">
                         <Link
                           href={`/loads/${l.id}`}
-                          className="font-semibold tabular-nums text-primary hover:underline"
+                          className="tabular-nums text-msg-link hover:underline"
                         >
                           {l.load_number}
                         </Link>
@@ -162,9 +165,9 @@ export default async function SearchPage({
               <Link
                 key={c.id}
                 href={`/customers/${c.id}`}
-                className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3 text-sm hover:bg-accent/60"
+                className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3 text-sm hover:bg-msg-hover"
               >
-                <span className="font-semibold text-primary">{c.contact_name || "—"}</span>
+                <span className="text-msg-link">{c.contact_name || "—"}</span>
                 {c.company_name && <span className="text-muted-foreground">{c.company_name}</span>}
                 {c.phone && (
                   <span className="tabular-nums text-muted-foreground">{formatPhone(c.phone)}</span>
@@ -185,9 +188,9 @@ export default async function SearchPage({
               <Link
                 key={c.id}
                 href={`/carriers/${c.id}`}
-                className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3 text-sm hover:bg-accent/60"
+                className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3 text-sm hover:bg-msg-hover"
               >
-                <span className="font-semibold text-primary">{c.company_name}</span>
+                <span className="text-msg-link">{c.company_name}</span>
                 {c.contact_name && <span className="text-muted-foreground">{c.contact_name}</span>}
                 <span className="text-muted-foreground">
                   {[c.city, c.state].filter(Boolean).join(", ")}
@@ -196,7 +199,7 @@ export default async function SearchPage({
                   <span className="tabular-nums text-muted-foreground">{formatPhone(c.phone)}</span>
                 )}
                 {c.source && (
-                  <span className="rounded border px-1.5 text-[11px] uppercase text-muted-foreground">
+                  <span className="rounded-md border px-1.5 text-xs uppercase text-muted-foreground">
                     {c.source}
                   </span>
                 )}

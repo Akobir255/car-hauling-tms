@@ -18,12 +18,16 @@ export function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className={cn("overflow-hidden rounded-lg border bg-card shadow-sm", className)}>
+    // No shadow: the nav bar is the only raised surface in msgplane, so the
+    // border gray is what makes a section read as a box. Matches SectionBand,
+    // which renders the same chrome on the load-detail screens.
+    <section className={cn("overflow-hidden rounded-md border border-border bg-card", className)}>
       {/* Solid title bar — each field group announces itself, msgplane-style,
           so a long form never reads as one undivided sheet. */}
       <div className="flex items-center gap-2.5 bg-primary px-5 py-2.5 text-primary-foreground">
         <Icon className="size-4" aria-hidden="true" />
-        <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+        {/* 15px is the root size, and msgplane letter-spaces nothing. */}
+        <h2 className="text-[15px]">{title}</h2>
         {aside && <div className="ml-auto">{aside}</div>}
       </div>
       <div className="p-5">{children}</div>
@@ -31,8 +35,11 @@ export function FormSection({
   );
 }
 
-// Field label: uppercase, but big and bold enough to read at a glance —
-// 13px semibold, not the old 11px micro type that caused eye strain.
+// Field label: the same quiet brown micro-label SectionBand's Field uses, so
+// the new-load form and the load-detail screens agree. msgplane has no
+// uppercase, letter-spaced labels anywhere — and `uppercase` in particular is
+// something tailwind-merge cannot cancel from a caller's className, which is
+// how "Notes from Shipper" ended up shouting on the edit form only.
 export function FieldLabel({
   htmlFor,
   required,
@@ -47,10 +54,7 @@ export function FieldLabel({
   return (
     <label
       htmlFor={htmlFor}
-      className={cn(
-        "block text-[13px] font-semibold uppercase tracking-wide text-muted-foreground",
-        className
-      )}
+      className={cn("block text-xs text-msg-header", className)}
     >
       {children}
       {required && (

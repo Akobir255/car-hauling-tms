@@ -16,6 +16,7 @@ import { RepSelect } from "@/components/pipeline/rep-select";
 import { QuickView } from "@/components/pipeline/quick-view";
 import { FilterBar, type FilterValues } from "@/components/pipeline/filter-bar";
 import { RowCheckbox, SelectAllCheckbox } from "@/components/pipeline/row-checkbox";
+import { statusTone } from "@/components/pipeline/status-tone";
 import { BulkActionBar } from "@/components/pipeline/bulk-action-bar";
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -374,7 +375,8 @@ export async function PipelineList({
     const m = v?.match(/^(\d{4})-(\d{2})-(\d{2})/);
     return m ? `${m[2]}/${m[3]}/${m[1]}` : "—";
   };
-  // msgplane status text under the ID: lowercase, hyphenated, plain gray.
+  // msgplane status text under the ID: lowercase and hyphenated; statusTone
+  // decides its colour.
   // Imported records show the OLD system's exact word (completed / lost /
   // incomplete / on-hold-order); anything created here shows our own status.
   const statusText = (load: Load) => {
@@ -411,11 +413,11 @@ export async function PipelineList({
           bar; the floating "+" covers quick-create. */}
       <h1 className="sr-only">{title}</h1>
 
-      {/* msgplane tab bar: plain labels, coral active pill, a count badge
+      {/* msgplane tab bar: plain labels, coral active chip, a count badge
           ONLY where attention is needed (their Issues-style badge). */}
       {tabs.length > 1 && (
-        <div className="flex items-center justify-between gap-3 border-b pb-1">
-          <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex items-center justify-between gap-3 pb-1">
+          <div className="flex items-center gap-2 overflow-x-auto">
             {tabs.map((t) => {
               const active = activeTab.key === t.key;
               const count = tabCount(t);
@@ -426,18 +428,25 @@ export async function PipelineList({
                   href={tabHref(t.key)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm transition-colors",
+                    // The measured tab is a white chip, 14px, padding 1px 3px.
+                    // That leaves a 22px pointer target, so a 24px floor is
+                    // added — it moves the chip's edge, never its ink.
+                    "focus-ring flex min-h-6 items-center gap-1.5 whitespace-nowrap rounded-md px-[3px] py-px text-sm transition-colors",
                     active
-                      ? "bg-red-400 font-medium text-white"
-                      : "text-foreground/80 hover:bg-muted hover:text-foreground"
+                      ? "bg-msg-selected text-msg-selected-foreground"
+                      : "text-foreground hover:bg-msg-hover"
                   )}
                 >
                   {t.label}
                   {showBadge && (
                     <span
                       className={cn(
-                        "rounded px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums",
-                        active ? "bg-white/25 text-white" : "bg-red-100 text-red-700"
+                        "rounded-md px-1.5 py-0.5 text-[12px] leading-none tabular-nums",
+                        // On the coral the badge darkens rather than picking up
+                        // a second hue — msgplane's own active-state idiom.
+                        active
+                          ? "bg-black/10 text-msg-selected-foreground"
+                          : "bg-destructive/10 text-destructive-ink"
                       )}
                     >
                       {count}
@@ -454,29 +463,30 @@ export async function PipelineList({
             )}
             <span className="tabular-nums">
               {totalRows === 0 ? "0-0" : `${from + 1}-${Math.min(from + PAGE_SIZE, totalRows)}`}
-              <span className="ml-1 text-muted-foreground/70">of {totalRows}</span>
+              {/* Was muted/70, which composites to msgplane's own 2.7:1 gray. */}
+              <span className="ml-1">of {totalRows}</span>
             </span>
             {page > 0 ? (
               <Link
                 href={tabHref(activeTab.key, page - 1)}
                 aria-label="Previous page"
-                className="px-1 text-base hover:text-foreground"
+                className="px-1 text-[15px] hover:text-foreground"
               >
                 ‹
               </Link>
             ) : (
-              <span className="px-1 text-base opacity-30" aria-hidden="true">‹</span>
+              <span className="px-1 text-[15px] opacity-30" aria-hidden="true">‹</span>
             )}
             {from + PAGE_SIZE < totalRows ? (
               <Link
                 href={tabHref(activeTab.key, page + 1)}
                 aria-label="Next page"
-                className="px-1 text-base hover:text-foreground"
+                className="px-1 text-[15px] hover:text-foreground"
               >
                 ›
               </Link>
             ) : (
-              <span className="px-1 text-base opacity-30" aria-hidden="true">›</span>
+              <span className="px-1 text-[15px] opacity-30" aria-hidden="true">›</span>
             )}
           </div>
         </div>
@@ -486,14 +496,21 @@ export async function PipelineList({
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
 
-      <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
-        <table className="w-full border-collapse text-[15px]">
+      {/* No shadow — the nav bar is the only thing in msgplane that carries
+          one, so the border gray is what makes the list read as a region. */}
+      <div className="overflow-x-auto rounded-md border bg-card">
+        {/* Cells are pinned in px: the file also carries 12px sub-lines, and a
+            rem step would drift away from them if the root size ever moves. */}
+        <table className="w-full border-collapse text-[14px]">
           <thead>
             {/* msgplane header row: quiet Title-case labels; the date column
                 is renamed per tab (Converted/Posted/Sent/Signed/Delivered…),
                 and the parked/dispatched tabs add a Carrier column. Quotes
                 order theirs: Quote money, then Est. Ship, then Status. */}
-            <tr className="border-b text-left text-sm font-normal text-muted-foreground [&>th]:font-normal">
+            {/* Brown headers are msgplane's most recognisable tell. The th
+                override stays: the UA sheet bolds th and preflight never
+                resets it, so this is not the global weight it undoes. */}
+            <tr className="border-b border-msg-rule text-left text-msg-header [&>th]:font-normal">
               <th className="w-8 px-2 py-3">
                 <SelectAllCheckbox ids={loadIds} />
               </th>
@@ -529,22 +546,25 @@ export async function PipelineList({
               const colDate = tabDate(load);
               const rowCarrier = load.carrier_id ? carrierById.get(load.carrier_id) : undefined;
               return (
-                // Plain white rows with a thin rule — the msgplane look.
+                // Plain white rows with a thin rule — the msgplane look. The
+                // 88px is a minimum on a table row, so tall rows still grow.
                 <tr
                   key={load.id}
-                  className="border-b border-border align-top transition-colors last:border-b-0 hover:bg-accent/40"
+                  className="h-[88px] border-b border-msg-rule align-top transition-colors last:border-b-0 hover:bg-msg-hover"
                 >
                   <td className="px-2 py-4">
                     <RowCheckbox id={load.id} label={`Select ${load.load_number}`} />
                   </td>
                   <td className="px-3 py-4">
+                    {/* Order ID: light blue, no underline — msgplane never
+                        underlines it, even on hover. */}
                     <Link
                       href={`/loads/${load.id}`}
-                      className="font-medium tabular-nums text-primary hover:underline"
+                      className="focus-ring tabular-nums text-msg-link"
                     >
                       {load.load_number}
                     </Link>
-                    <p className="mt-1 text-[13px] lowercase text-muted-foreground">
+                    <p className={cn("mt-1 text-[12px] lowercase", statusTone(statusText(load)))}>
                       {statusText(load)}
                     </p>
                     {/* Right under the ID, where the eye already is: this
@@ -558,7 +578,12 @@ export async function PipelineList({
                               ? "Replied STOP — do not text"
                               : "Unsubscribed from email"
                         }
-                        className="mt-0.5 text-[13px] font-semibold lowercase text-red-600 dark:text-red-400"
+                        // The one place besides "Notes from Shipper" that the
+                        // app leaves weight 400, and it is spelled font-bold
+                        // rather than font-semibold because only 400 and 700
+                        // faces are loaded: this is the marker that stops a rep
+                        // texting someone who replied STOP.
+                        className="mt-0.5 text-[12px] font-bold lowercase text-destructive"
                       >
                         opted out
                         {customer.sms_opt_out && customer.email_opt_out
@@ -572,10 +597,12 @@ export async function PipelineList({
                       <span
                         title={load.follow_up_note ?? undefined}
                         className={cn(
-                          "mt-1.5 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset",
+                          "mt-1.5 inline-block rounded-md px-2 py-0.5 text-[12px] ring-1 ring-inset",
                           new Date(load.follow_up_at) < new Date()
-                            ? "bg-red-100 text-red-800 ring-red-600/20 dark:bg-red-400/15 dark:text-red-300"
-                            : "bg-amber-100 text-amber-800 ring-amber-600/20 dark:bg-amber-400/15 dark:text-amber-300"
+                            ? "bg-destructive/10 text-destructive-ink ring-destructive/25"
+                            // The spec's warning orange is 2.1:1 as text, so
+                            // the hue moves to the fill and the label takes ink.
+                            : "bg-chart-2/15 text-foreground ring-chart-2/40"
                         )}
                       >
                         FU {formatDate(load.follow_up_at)}
@@ -587,7 +614,7 @@ export async function PipelineList({
                       <>
                         <p className="tabular-nums text-foreground">{colDate.date}</p>
                         {colDate.time && (
-                          <p className="text-[13px] tabular-nums text-muted-foreground">
+                          <p className="text-[12px] tabular-nums text-muted-foreground">
                             {colDate.time}
                           </p>
                         )}
@@ -595,9 +622,9 @@ export async function PipelineList({
                     ) : (
                       <p className="text-muted-foreground">—</p>
                     )}
-                    {/* Requests tab: msgplane's circled offer count under the date. */}
+                    {/* Requests tab: msgplane's boxed offer count under the date. */}
                     {activeTab.requestCount && (requestCountByLoad.get(load.id) ?? 0) > 0 && (
-                      <span className="mt-1 inline-flex size-5 items-center justify-center rounded-full border border-foreground text-[12px] font-semibold tabular-nums">
+                      <span className="mt-1 inline-flex min-w-5 items-center justify-center rounded-md border px-1 text-[12px] tabular-nums">
                         {requestCountByLoad.get(load.id)}
                       </span>
                     )}
@@ -615,9 +642,9 @@ export async function PipelineList({
                       <span
                         title="Unread messages from this customer"
                         className={cn(
-                          "inline-flex min-w-6 justify-center rounded border px-1.5 py-0.5 text-[13px] tabular-nums",
+                          "inline-flex min-w-6 justify-center rounded-md border px-1.5 py-0.5 text-[12px] tabular-nums",
                           (unreadByCustomer.get(load.customer_id) ?? 0) > 0
-                            ? "border-red-300 bg-red-50 font-semibold text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
+                            ? "border-destructive/40 bg-destructive/10 text-destructive-ink"
                             : "text-muted-foreground"
                         )}
                       >
@@ -628,37 +655,44 @@ export async function PipelineList({
                   <td className="px-3 py-4">
                     {/* msgplane stacks the badge over the name. */}
                     <div className="flex flex-col items-center gap-0.5 text-center">
-                      <User className="size-4 text-muted-foreground" aria-hidden="true" />
+                      {/* account_box in msgplane, brown like the headers. */}
+                      <User className="size-4 text-msg-header" aria-hidden="true" />
                       <span className="text-foreground">{rp ? rp.full_name || rp.email : "—"}</span>
                     </div>
                   </td>
                   <td className="px-3 py-4">
                     {customer ? (
                       <div className="space-y-0.5">
+                        {/* Nothing in the list underlines; the link colour on
+                            hover is the affordance instead. */}
                         <Link
                           href={`/customers/${customer.id}`}
-                          className="flex items-center gap-1.5 text-foreground hover:underline"
+                          className="focus-ring flex items-center gap-1.5 text-foreground hover:text-msg-link"
                         >
-                          <User className="size-4 shrink-0 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                          <User className="size-4 shrink-0 text-msg-shipper" aria-hidden="true" />
                           {customer.contact_name}
                           {/* Anyone who asked us to stop, marked right on the
                               row so nobody texts them by accident. */}
                           {customer.blacklisted && (
-                            <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-white">
+                            <span className="rounded-md bg-destructive px-1.5 py-0.5 text-[12px] uppercase leading-none text-background">
                               blacklisted
                             </span>
                           )}
                         </Link>
                         {customer.phone && (
                           <p className="flex items-center gap-1.5 tabular-nums text-foreground">
-                            <Phone className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                            {/* msgplane's phone glyph is plain black. */}
+                            <Phone className="size-3.5 shrink-0 text-foreground" aria-hidden="true" />
                             <span className={customer.sms_opt_out ? "line-through opacity-60" : undefined}>
                               {formatPhone(customer.phone)}
                             </span>
                             {customer.sms_opt_out ? (
                               <span
                                 title="Replied STOP — texting this number is not allowed"
-                                className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-red-700 ring-1 ring-inset ring-red-600/30 dark:bg-red-950 dark:text-red-300"
+                                // Solid fill, like the blacklisted badge above:
+                                // on the /10 tint the red is 4.3:1, and this is
+                                // the loudest thing a rep needs to not miss.
+                                className="rounded-md bg-destructive px-1.5 py-0.5 text-[12px] uppercase leading-none text-background"
                               >
                                 STOP
                               </span>
@@ -677,7 +711,7 @@ export async function PipelineList({
                             {customer.email_opt_out ? (
                               <span
                                 title="Unsubscribed from email"
-                                className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-red-700 ring-1 ring-inset ring-red-600/30 dark:bg-red-950 dark:text-red-300"
+                                className="rounded-md bg-destructive px-1.5 py-0.5 text-[12px] uppercase leading-none text-background"
                               >
                                 UNSUB
                               </span>
@@ -752,11 +786,11 @@ export async function PipelineList({
                             <p className="text-muted-foreground">
                               {[v.year, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}
                             </p>
-                            <p className="text-[13px] text-foreground">
+                            <p className="text-[12px] text-foreground">
                               {VEHICLE_TYPE_LABELS[v.vehicle_type] ?? v.vehicle_type}
                             </p>
                             {load.transport_type === "enclosed" && (
-                              <p className="text-[13px] text-red-600 dark:text-red-400">enclosed</p>
+                              <p className="text-[12px] text-destructive">enclosed</p>
                             )}
                           </div>
                         </div>
@@ -766,11 +800,11 @@ export async function PipelineList({
                   <td className="whitespace-nowrap px-3 py-4">
                     {/* msgplane pins: blue origin, red destination. */}
                     <p className="flex items-center gap-1.5">
-                      <MapPin className="size-3.5 shrink-0 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                      <MapPin className="size-3.5 shrink-0 text-msg-shipper" aria-hidden="true" />
                       {load.pickup_city || "—"} {load.pickup_state || ""} {load.pickup_zip || ""}
                     </p>
                     <p className="mt-1 flex items-center gap-1.5">
-                      <MapPin className="size-3.5 shrink-0 text-red-600 dark:text-red-500" aria-hidden="true" />
+                      <MapPin className="size-3.5 shrink-0 text-destructive" aria-hidden="true" />
                       {load.delivery_city || "—"} {load.delivery_state || ""} {load.delivery_zip || ""}
                     </p>
                   </td>
@@ -785,12 +819,12 @@ export async function PipelineList({
                             <>
                               <Link
                                 href={`/carriers/${rowCarrier.id}`}
-                                className="text-primary hover:underline"
+                                className="text-msg-link"
                               >
                                 {rowCarrier.company_name}
                               </Link>
                               {rowCarrier.phone && (
-                                <p className="text-[13px] tabular-nums text-muted-foreground">
+                                <p className="text-[12px] tabular-nums text-muted-foreground">
                                   {formatPhone(rowCarrier.phone)}
                                 </p>
                               )}
@@ -812,7 +846,7 @@ export async function PipelineList({
                       <td className="whitespace-nowrap px-3 py-4 tabular-nums text-foreground">
                         {usDateOnly(load.pickup_ready_date)}
                       </td>
-                      <td className="px-3 py-4 lowercase text-muted-foreground">
+                      <td className={cn("px-3 py-4 lowercase", statusTone(statusText(load)))}>
                         {statusText(load)}
                       </td>
                     </>
@@ -856,7 +890,7 @@ export async function PipelineList({
         href="/loads/new"
         aria-label={`New ${stage}`}
         title={`New ${stage}`}
-        className="fixed bottom-6 right-6 z-30 flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105"
+        className="focus-ring fixed bottom-6 right-6 z-30 flex size-12 items-center justify-center rounded-md bg-primary text-primary-foreground transition-transform hover:scale-105"
       >
         <Plus className="size-6" aria-hidden="true" />
       </Link>

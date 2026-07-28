@@ -153,7 +153,7 @@ export function VehiclesEditor({
             </Button>
             <p className="text-sm">
               <span className="text-muted-foreground">Total tariff: </span>
-              <span className="font-semibold tabular-nums">{formatCurrency(totalTariff)}</span>
+              <span className="tabular-nums">{formatCurrency(totalTariff)}</span>
             </p>
           </div>
         )}
@@ -163,7 +163,7 @@ export function VehiclesEditor({
       <form
         ref={formRef}
         action={formAction}
-        className="flex flex-wrap items-end gap-2 rounded-md bg-muted/40 p-3"
+        className="flex flex-wrap items-end gap-2 rounded-md bg-muted p-3"
       >
         <div className="space-y-1">
           <FieldLabel>Year</FieldLabel>

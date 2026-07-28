@@ -57,7 +57,7 @@ export function VehiclesFieldArray({
       {vehicles.map((v, i) => (
         <div
           key={i}
-          className="grid grid-cols-2 items-end gap-2 rounded-md bg-muted/40 p-3 sm:grid-cols-6 lg:grid-cols-12"
+          className="grid grid-cols-2 items-end gap-2 rounded-md bg-muted p-3 sm:grid-cols-6 lg:grid-cols-12"
         >
           <div className="space-y-1 lg:col-span-1">
             <FieldLabel>Year</FieldLabel>
@@ -128,7 +128,7 @@ export function VehiclesFieldArray({
         </Button>
         <p className="text-sm">
           <span className="text-muted-foreground">Total tariff: </span>
-          <span className="font-semibold tabular-nums">
+          <span className="tabular-nums">
             ${totalTariff.toLocaleString("en-US", { minimumFractionDigits: 2 })}
           </span>
         </p>

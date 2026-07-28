@@ -24,7 +24,7 @@ export default async function CarriersPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Carriers</h1>
+          <h1 className="text-[15px]">Carriers</h1>
           <p className="text-sm text-muted-foreground">
             {carriers.length} carrier{carriers.length === 1 ? "" : "s"} on file
           </p>
@@ -34,25 +34,27 @@ export default async function CarriersPage() {
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
 
-      <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
-        <table className="w-full border-collapse text-[15px]">
+      {/* Bordered, not raised — the flat white page leaves the border as the
+          only boundary, and the spec puts a shadow nowhere but the nav. */}
+      <div className="overflow-x-auto rounded-lg border bg-card">
+        <table className="w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b bg-muted/50 text-left text-sm font-bold uppercase tracking-wide text-foreground">
-              <th className="px-4 py-3">Company</th>
-              <th className="px-4 py-3">MC# / DOT#</th>
-              <th className="px-4 py-3">Contact</th>
-              <th className="px-4 py-3">Equipment</th>
-              <th className="px-4 py-3">COI</th>
-              <th className="px-4 py-3">Flags</th>
+            <tr className="border-b text-left text-sm text-msg-header">
+              <th className="px-4 py-3 font-normal">Company</th>
+              <th className="px-4 py-3 font-normal">MC# / DOT#</th>
+              <th className="px-4 py-3 font-normal">Contact</th>
+              <th className="px-4 py-3 font-normal">Equipment</th>
+              <th className="px-4 py-3 font-normal">COI</th>
+              <th className="px-4 py-3 font-normal">Flags</th>
             </tr>
           </thead>
           <tbody>
             {carriers.map((carrier) => (
-              <tr key={carrier.id} className="border-b last:border-b-0 hover:bg-muted/40">
+              <tr key={carrier.id} className="border-b last:border-b-0 hover:bg-msg-hover">
                 <td className="px-4 py-3.5">
                   <Link
                     href={`/carriers/${carrier.id}`}
-                    className="font-semibold text-primary hover:underline"
+                    className="text-msg-link hover:underline"
                   >
                     {carrier.company_name}
                   </Link>
@@ -64,7 +66,8 @@ export default async function CarriersPage() {
                   <p>{carrier.contact_name || "—"}</p>
                   {carrier.phone && (
                     <p className="flex items-center gap-1.5 tabular-nums text-muted-foreground">
-                      <Phone className="size-3.5 shrink-0" aria-hidden="true" />
+                      {/* Spec's phone icon is ink, not gray. */}
+                      <Phone className="size-3.5 shrink-0 text-foreground" aria-hidden="true" />
                       {formatPhone(carrier.phone)}
                     </p>
                   )}

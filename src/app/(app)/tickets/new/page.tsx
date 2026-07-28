@@ -43,7 +43,7 @@ export default async function NewTicketPage({
 
   return (
     <div className="space-y-6">
-      <h1 className="mx-auto max-w-2xl text-2xl font-semibold">New ticket</h1>
+      <h1 className="mx-auto max-w-2xl text-[15px]">New ticket</h1>
       <TicketForm
         reps={reps}
         loads={loads}

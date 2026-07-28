@@ -108,7 +108,9 @@ export function VehicleThumb({
   return (
     <span
       className={cn(
-        "flex h-9 w-14 shrink-0 items-center justify-center rounded border bg-muted/60 p-1 text-slate-500 dark:text-slate-400",
+        // rounded-md, not bare `rounded` — the latter is Tailwind's fixed 4px
+        // and would not follow --radius, which the spec pins at 3px.
+        "flex h-9 w-14 shrink-0 items-center justify-center rounded-md border bg-muted/60 p-1 text-slate-500 dark:text-slate-400",
         className
       )}
     >

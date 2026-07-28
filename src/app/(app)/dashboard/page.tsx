@@ -44,14 +44,15 @@ const ACTIVE_STATUSES = [
   "in_transit",
 ];
 
-// Fixed color per vehicle-type entity (never by rank) — categorical slots
-// validated for light and dark with the palette checker.
+// Fixed color per vehicle-type entity (never by rank). The five slots are the
+// theme's chart tokens, which now carry msgplane's accent family, so the donut
+// tracks the palette instead of Tailwind's ramp.
 const VEHICLE_COLORS: Record<string, string> = {
-  sedan: "text-blue-600 dark:text-blue-500",
-  suv: "text-amber-600",
-  pickup: "text-emerald-600",
-  van: "text-violet-600 dark:text-violet-500",
-  motorcycle: "text-pink-600 dark:text-pink-500",
+  sedan: "text-chart-1",
+  suv: "text-chart-2",
+  pickup: "text-chart-3",
+  van: "text-chart-4",
+  motorcycle: "text-chart-5",
   other: "text-muted-foreground",
 };
 
@@ -212,7 +213,8 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Welcome back, {firstName}! 👋</h1>
+          {/* Weight 400: the spec reserves 700 for "Notes from Shipper". */}
+          <h1 className="text-[15px]">Welcome back, {firstName}! 👋</h1>
           <p className="text-sm text-muted-foreground">
             Here&apos;s what&apos;s happening with your loads today.
           </p>
@@ -230,20 +232,20 @@ export default async function DashboardPage() {
           title="New loads (7d)"
           value={String(newLast7)}
           icon={Package}
-          iconClass="bg-blue-600/10 text-blue-600 dark:text-blue-400"
+          iconClass="bg-chart-1/10 text-chart-1"
           delta={newLoadsDelta}
         />
         <StatCard
           title="Open quotes"
           value={String(openQuotes ?? 0)}
           icon={FileText}
-          iconClass="bg-violet-600/10 text-violet-600 dark:text-violet-400"
+          iconClass="bg-chart-4/10 text-chart-4"
         />
         <StatCard
           title="Revenue (30d)"
           value={formatCurrency(revLast30)}
           icon={CircleDollarSign}
-          iconClass="bg-emerald-600/10 text-emerald-700 dark:text-emerald-400"
+          iconClass="bg-chart-3/10 text-chart-3"
           delta={revDelta}
           deltaLabel="vs prior 30 days"
         />
@@ -251,7 +253,7 @@ export default async function DashboardPage() {
           title="Follow-ups due"
           value={String(followUps.length)}
           icon={CalendarClock}
-          iconClass="bg-amber-600/10 text-amber-700 dark:text-amber-400"
+          iconClass="bg-chart-2/10 text-chart-2"
         />
       </div>
 
@@ -298,7 +300,7 @@ export default async function DashboardPage() {
                 {recentLoads.map((l) => (
                   <TableRow key={l.id}>
                     <TableCell>
-                      <Link href={`/loads/${l.id}`} className="font-medium tabular-nums hover:underline">
+                      <Link href={`/loads/${l.id}`} className="tabular-nums text-msg-link hover:underline">
                         {l.load_number}
                       </Link>
                     </TableCell>
@@ -333,7 +335,8 @@ export default async function DashboardPage() {
         <div className="space-y-6">
           <Card>
             <CardHeader className="flex flex-row items-center gap-2">
-              <CalendarClock className="size-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+              {/* Card icons take the spec's row-icon family. */}
+              <CalendarClock className="size-4 text-chart-2" aria-hidden="true" />
               <CardTitle>Follow-ups due today</CardTitle>
             </CardHeader>
             <CardContent className="space-y-1.5">
@@ -341,10 +344,10 @@ export default async function DashboardPage() {
                 <Link
                   key={l.id}
                   href={`/loads/${l.id}`}
-                  className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60"
+                  className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-msg-hover"
                 >
                   <span className="min-w-0">
-                    <span className="font-medium tabular-nums">{l.load_number}</span>
+                    <span className="tabular-nums text-msg-link">{l.load_number}</span>
                     {l.follow_up_note && (
                       <span className="block truncate text-xs text-muted-foreground">
                         {l.follow_up_note}
@@ -370,7 +373,7 @@ export default async function DashboardPage() {
           {canSeeMargin && (
             <Card>
               <CardHeader className="flex flex-row items-center gap-2">
-                <Truck className="size-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                <Truck className="size-4 text-msg-shipper" aria-hidden="true" />
                 <CardTitle>Needs a carrier</CardTitle>
               </CardHeader>
               <CardContent className="space-y-1.5">
@@ -378,9 +381,9 @@ export default async function DashboardPage() {
                   <Link
                     key={l.id}
                     href={`/loads/${l.id}`}
-                    className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60"
+                    className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-msg-hover"
                   >
-                    <span className="font-medium tabular-nums">{l.load_number}</span>
+                    <span className="tabular-nums text-msg-link">{l.load_number}</span>
                     <StatusBadge status={l.status} />
                   </Link>
                 ))}
@@ -393,7 +396,7 @@ export default async function DashboardPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center gap-2">
-              <ShieldAlert className="size-4 text-red-600 dark:text-red-400" aria-hidden="true" />
+              <ShieldAlert className="size-4 text-destructive" aria-hidden="true" />
               <CardTitle>COI expiring soon</CardTitle>
             </CardHeader>
             <CardContent className="space-y-1.5">
@@ -401,9 +404,9 @@ export default async function DashboardPage() {
                 <Link
                   key={c.id}
                   href={`/carriers/${c.id}`}
-                  className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60"
+                  className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-msg-hover"
                 >
-                  <span className="truncate font-medium">{c.company_name}</span>
+                  <span className="truncate text-msg-link">{c.company_name}</span>
                   <CoiBadge expiryDate={c.coi_expiry_date} />
                 </Link>
               ))}
@@ -415,7 +418,7 @@ export default async function DashboardPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center gap-2">
-              <MessageSquare className="size-4 text-violet-600 dark:text-violet-400" aria-hidden="true" />
+              <MessageSquare className="size-4 text-chart-3" aria-hidden="true" />
               <CardTitle>Recent messages</CardTitle>
             </CardHeader>
             <CardContent className="space-y-1.5">
@@ -423,16 +426,16 @@ export default async function DashboardPage() {
                 <Link
                   key={m.id}
                   href={m.customer_id ? `/customers/${m.customer_id}` : "/messages"}
-                  className="flex items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60"
+                  className="flex items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-msg-hover"
                 >
                   {m.direction === "inbound" ? (
-                    <ArrowDownLeft className="mt-0.5 size-3.5 shrink-0 text-blue-600 dark:text-blue-400" aria-label="Inbound" />
+                    <ArrowDownLeft className="mt-0.5 size-3.5 shrink-0 text-msg-shipper" aria-label="Inbound" />
                   ) : (
                     <ArrowUpRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-label="Outbound" />
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">
-                      <span className="font-medium">
+                      <span className="text-msg-link">
                         {m.customer_id ? customerName.get(m.customer_id) ?? "Unknown" : "Unmatched"}
                       </span>{" "}
                       <span className="text-muted-foreground">{m.body}</span>

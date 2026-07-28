@@ -243,13 +243,13 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
       {/* Record header, laid out like the system this replaces: the ID/Status/
           Campaign/Loadboard facts on the left, the lifecycle actions as a row
           of buttons on the right. */}
-      <div className="rounded-lg border bg-card px-4 py-3 shadow-sm">
+      <div className="rounded-lg border bg-card px-4 py-3">
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
           <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
             <Field label="ID">
               <Link
                 href={backPath}
-                className="text-base font-bold tabular-nums text-primary hover:underline"
+                className="text-[15px] tabular-nums text-msg-link hover:underline"
               >
                 {load.load_number}
               </Link>
@@ -257,8 +257,10 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
             <Field label="Status">
               <span className="flex items-center gap-2">
                 <StatusBadge status={load.status} />
+                {/* Safety affordance — a solid destructive fill so it stays
+                    loud after the pills flattened to the 3px radius. */}
                 {customer?.blacklisted && (
-                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-800 ring-1 ring-inset ring-red-600/20 dark:bg-red-400/15 dark:text-red-300">
+                  <span className="rounded-md bg-destructive px-1.5 py-0.5 text-xs text-background">
                     Blacklisted
                   </span>
                 )}
@@ -267,7 +269,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
             <Field label="Campaign">{load.campaign || "—"}</Field>
             <Field label="Loadboard">{loadboard}</Field>
             <Field label="Tariff">
-              <span className="font-bold tabular-nums">{formatCurrency(load.customer_rate)}</span>
+              <span className="tabular-nums">{formatCurrency(load.customer_rate)}</span>
             </Field>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -276,10 +278,12 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               actions={actionsFor(load.status, profile.role)}
               loadboard={load.loadboard}
             />
-            {/* msgplane's one colored header button: green EDIT. */}
+            {/* msgplane's one colored header button: green EDIT. The green is
+                the spec's accent (--chart-5); it takes the dark accent ink
+                rather than white, which is only 3.2:1 on that fill. */}
             <Button
               size="sm"
-              className="h-8 bg-green-600 text-xs font-semibold uppercase tracking-wide text-white hover:bg-green-700"
+              className="h-8 bg-chart-5 text-xs uppercase text-msg-selected-foreground hover:bg-chart-5/85"
               render={<Link href={`/loads/${load.id}/edit`} />}
             >
               Edit
@@ -323,14 +327,14 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                     <div className="space-y-1">
                       <Link
                         href={`/customers/${customer.id}`}
-                        className="font-semibold text-primary hover:underline"
+                        className="text-msg-link hover:underline"
                       >
                         {customer.contact_name}
                       </Link>
                       {customer.phone && (
                         <p className="flex items-center gap-1.5 text-sm tabular-nums text-muted-foreground">
                           {formatPhone(customer.phone)}
-                          <span className="rounded bg-muted px-1 py-0.5 text-[10px] font-medium uppercase">
+                          <span className="rounded-md bg-muted px-1 py-0.5 text-xs uppercase">
                             sms
                           </span>
                         </p>
@@ -345,9 +349,8 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                 </Field>
               </div>
               <div className="space-y-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Vehicles
-                </p>
+                {/* Column-header brown, matching the list headers. */}
+                <p className="text-sm text-msg-header">Vehicles</p>
                 {vehicles.length === 0 && <p className="text-sm text-muted-foreground">No vehicles.</p>}
                 {vehicles.map((v) => (
                   <div key={v.id} className="flex items-start gap-3">
@@ -361,7 +364,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                       hasOverride={Boolean(v.photo_path)}
                     />
                     <div>
-                      <p className="text-[15px] font-medium">
+                      <p className="text-sm">
                         {[v.year, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}
                         <span className="ml-1 text-sm text-muted-foreground">({v.vehicle_type})</span>
                       </p>
@@ -401,7 +404,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
             </div>
             {(load.cd_external_id || load.sd_external_id) && (
               <p className="mt-4 border-t pt-3 text-sm">
-                <span className="font-semibold">Posted order ID: </span>
+                <span className="text-muted-foreground">Posted order ID: </span>
                 {load.cd_external_id && <span>CD {load.cd_external_id}</span>}
                 {load.cd_external_id && load.sd_external_id && " · "}
                 {load.sd_external_id && <span>SD {load.sd_external_id}</span>}
@@ -414,7 +417,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               <Field label="Information for shipper">
                 <span className="whitespace-pre-wrap">{load.shipper_info || "—"}</span>
               </Field>
-              <Field label="Notes from shipper">
+              <Field label="Notes from Shipper">
                 <span className="whitespace-pre-wrap">{load.notes || "—"}</span>
               </Field>
             </div>
@@ -434,13 +437,13 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                   <span className="flex items-center gap-3">
                     <Link
                       href={`/loads/${load.id}/dispatch/print`}
-                      className="text-xs font-semibold uppercase tracking-wide text-primary-foreground/90 hover:underline"
+                      className="text-xs uppercase text-primary-foreground hover:underline"
                     >
                       Print sheet
                     </Link>
                     <Link
                       href={`/loads/${load.id}/dispatch`}
-                      className="text-xs font-semibold uppercase tracking-wide text-primary-foreground/90 hover:underline"
+                      className="text-xs uppercase text-primary-foreground hover:underline"
                     >
                       Edit dispatch sheet
                     </Link>
@@ -455,7 +458,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                       <span>
                         <Link
                           href={`/carriers/${(carrierRow as { id: string }).id}`}
-                          className="font-semibold text-primary hover:underline"
+                          className="text-msg-link hover:underline"
                         >
                           {(carrierRow as { company_name: string }).company_name}
                         </Link>
@@ -514,7 +517,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-sm">
                 <thead>
-                  <tr className="border-b bg-muted/60 text-left text-muted-foreground [&>th]:px-4 [&>th]:py-2 [&>th]:font-normal">
+                  <tr className="border-b text-left text-msg-header [&>th]:px-4 [&>th]:py-2 [&>th]:font-normal">
                     <th className="w-14">Type</th>
                     <th className="w-48">From</th>
                     <th>Subject</th>
@@ -537,10 +540,12 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                       <tr key={m.id} className="border-b last:border-b-0 align-top">
                         <td className="px-4 py-2.5">
                           {m.channel === "email" ? (
-                            <Mail className="size-4 text-red-600 dark:text-red-400" aria-label="Email" />
+                            <Mail className="size-4 text-destructive" aria-label="Email" />
                           ) : (
+                            /* Spec's phone icon is ink; bg-foreground/text-background
+                               keeps that reading in both themes. */
                             <span
-                              className="inline-flex h-4 items-center rounded-sm bg-neutral-900 px-1.5 text-[11px] font-bold leading-none text-white dark:bg-neutral-200 dark:text-neutral-900"
+                              className="inline-flex h-4 items-center rounded-sm bg-foreground px-1.5 text-xs leading-none text-background"
                               aria-label="SMS"
                             >
                               •••
@@ -549,23 +554,23 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                         </td>
                         <td className="px-4 py-2.5 tabular-nums text-muted-foreground">{from}</td>
                         <td className="px-4 py-2.5">
-                          <span className="text-amber-800 dark:text-amber-200">
-                            {m.subject || m.body}
-                          </span>
+                          {/* Subjects are body ink in msgplane — the amber was
+                              never part of the palette. */}
+                          <span>{m.subject || m.body}</span>
                           {m.direction === "inbound" && !m.read_at && (
-                            <span className="ml-2 rounded bg-blue-100 px-1.5 text-xs font-medium text-blue-800 dark:bg-blue-950 dark:text-blue-200">
+                            <span className="ml-2 rounded-md bg-primary/10 px-1.5 text-xs text-primary">
                               unread
                             </span>
                           )}
                           {m.status === "failed" && (
-                            <span className="ml-2 rounded bg-red-100 px-1.5 text-xs font-medium text-red-800 dark:bg-red-950 dark:text-red-200">
+                            <span className="ml-2 rounded-md bg-destructive/10 px-1.5 text-xs text-destructive">
                               failed
                             </span>
                           )}
                         </td>
                         <td className="px-4 py-2.5">
                           {by ? (
-                            <span className="text-primary">{by}</span>
+                            <span>{by}</span>
                           ) : (
                             <span className="text-muted-foreground" />
                           )}
@@ -589,7 +594,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
             <div className="border-t px-5 py-3">
               <Link
                 href={`/messages/thread/${load.customer_id}`}
-                className="text-sm font-medium text-primary hover:underline"
+                className="text-sm text-msg-link hover:underline"
               >
                 Open conversation →
               </Link>
@@ -646,7 +651,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
         {nextRow?.id && (
           <Button
             size="sm"
-            className="bg-orange-500 font-bold uppercase tracking-wide text-white hover:bg-orange-600"
+            className="bg-chart-2 uppercase text-msg-selected-foreground hover:bg-chart-2/85"
             render={<Link href={`/loads/${nextRow.id}`} />}
           >
             Next

@@ -51,10 +51,13 @@ export function RowMessageButton({
         onClick={() => setOpen(true)}
         aria-label={`${channel === "email" ? "Email" : "Text"} ${customerName}`}
         title={`${channel === "email" ? "Email" : "Text"} ${customerName}`}
+        // The chip takes --foreground (msgplane's phone glyph is #000000) and
+        // the envelope --destructive, rather than Tailwind's own neutral/red,
+        // which carry no theme and land off the spec's palette.
         className={
           channel === "sms"
-            ? "inline-flex h-4 items-center rounded-sm bg-neutral-900 px-1.5 text-[11px] font-bold leading-none text-white transition-opacity hover:opacity-80 dark:bg-neutral-200 dark:text-neutral-900"
-            : "inline-flex items-center text-red-600 transition-opacity hover:opacity-70 dark:text-red-400"
+            ? "focus-ring inline-flex h-4 items-center rounded-sm bg-foreground px-1.5 text-xs leading-none text-background transition-opacity hover:opacity-80"
+            : "focus-ring inline-flex items-center text-destructive transition-opacity hover:opacity-70"
         }
       >
         {channel === "sms" ? "•••" : <Mail className="size-3.5" aria-hidden="true" />}

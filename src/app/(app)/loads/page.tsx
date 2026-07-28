@@ -112,7 +112,7 @@ export default async function LoadsPage({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Loads</h1>
+          <h1 className="text-[15px]">Loads</h1>
           <p className="text-sm text-muted-foreground">
             {loads.length} load{loads.length === 1 ? "" : "s"}
             {statusFilter ? ` · ${titleCase(statusFilter)}` : ""}
@@ -121,9 +121,10 @@ export default async function LoadsPage({
         <Button render={<Link href="/loads/new" />}>New load</Button>
       </div>
 
-      {/* msgplane-style section tabs: underline-active, per-status counts. */}
-      <div className="flex items-end justify-between gap-3 border-b">
-        <div className="-mb-px flex flex-wrap items-center gap-x-1">
+      {/* msgplane-style section tabs: boxed buttons with a coral selected
+          fill and per-status counts. The strip carries no rule of its own. */}
+      <div className="flex items-end justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1">
           <StatusTab href={tabHref(null)} label="All" count={totalCount} active={!statusFilter} />
           {LOAD_STATUSES.map((s) => (
             <StatusTab
@@ -182,7 +183,7 @@ export default async function LoadsPage({
             return (
               <TableRow key={load.id} className="align-top">
                 <TableCell>
-                  <Link href={`/loads/${load.id}`} className="font-medium text-blue-700 hover:underline dark:text-blue-400">
+                  <Link href={`/loads/${load.id}`} className="text-msg-link hover:underline">
                     {load.load_number}
                   </Link>
                 </TableCell>
@@ -192,7 +193,7 @@ export default async function LoadsPage({
                 </TableCell>
                 <TableCell>
                   <div className="text-sm leading-5">
-                    <p className="font-medium">{customer?.contact_name ?? "—"}</p>
+                    <p>{customer?.contact_name ?? "—"}</p>
                     {customer?.phone && <p className="text-muted-foreground">{customer.phone}</p>}
                     {customer?.email && (
                       <p className="max-w-44 truncate text-muted-foreground">{customer.email}</p>
@@ -211,7 +212,7 @@ export default async function LoadsPage({
                           {titleCase(v.vehicle_type)}
                           {v.condition === "non_running" ? " · Non-running" : ""}
                           {load.transport_type === "enclosed" ? (
-                            <span className="text-red-600"> · enclosed</span>
+                            <span className="text-destructive"> · enclosed</span>
                           ) : null}
                         </p>
                       </div>
@@ -221,11 +222,12 @@ export default async function LoadsPage({
                 <TableCell>
                   <div className="text-sm leading-5">
                     <p>
-                      <span className="mr-1 inline-block size-2 rounded-full border-2 border-blue-600" />
+                      {/* Route pins take the spec's row-icon hues. */}
+                      <span className="mr-1 inline-block size-2 rounded-full border-2 border-msg-shipper" />
                       {load.pickup_city || "—"} {load.pickup_state || ""} {load.pickup_zip || ""}
                     </p>
                     <p>
-                      <span className="mr-1 inline-block size-2 rounded-full bg-red-600" />
+                      <span className="mr-1 inline-block size-2 rounded-full bg-destructive" />
                       {load.delivery_city || "—"} {load.delivery_state || ""} {load.delivery_zip || ""}
                     </p>
                   </div>
@@ -282,17 +284,17 @@ function StatusTab({
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors",
+        "focus-ring flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-0.5 text-sm transition-colors",
         active
-          ? "border-blue-600 font-medium text-foreground dark:border-blue-500"
-          : "border-transparent text-muted-foreground hover:text-foreground"
+          ? "border-msg-selected bg-msg-selected text-msg-selected-foreground"
+          : "bg-card text-foreground hover:bg-msg-hover"
       )}
     >
       {label}
       <span
         className={cn(
-          "rounded-full px-1.5 py-0.5 text-[11px] font-medium leading-none tabular-nums",
-          active ? "bg-blue-600/10 text-blue-700 dark:text-blue-300" : "bg-muted text-muted-foreground"
+          "rounded-md px-1.5 py-0.5 text-xs leading-none tabular-nums",
+          active ? "bg-black/10 text-msg-selected-foreground" : "bg-muted text-muted-foreground"
         )}
       >
         {count}

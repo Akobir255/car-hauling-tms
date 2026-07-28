@@ -65,10 +65,11 @@ export function LoadRequestsBand({
       type="button"
       onClick={() => setSource(source === key ? null : key)}
       className={cn(
-        "h-8 rounded px-3 text-xs font-bold uppercase tracking-wide transition-colors",
+        "h-8 rounded-md px-3 text-xs uppercase transition-colors",
         source === key
-          ? "bg-primary-foreground text-primary shadow-inner"
-          : "bg-black/25 text-primary-foreground hover:bg-black/35"
+          ? "bg-primary-foreground text-primary"
+          // The spec's only overlay on the blue band is rgba(0,0,0,0.1).
+          : "bg-black/10 text-primary-foreground hover:bg-black/20"
       )}
     >
       {key}
@@ -77,8 +78,8 @@ export function LoadRequestsBand({
 
   return (
     <section className="space-y-0">
-      <h2 className="pb-1.5 text-[15px] font-bold tracking-tight">Load Requests</h2>
-      <div className="overflow-x-auto rounded-lg border shadow-sm">
+      <h2 className="pb-1.5 text-[15px]">Load Requests</h2>
+      <div className="overflow-x-auto rounded-lg border">
         <div className="min-w-[64rem]">
           {/* The blue band: add-form row + column labels */}
           <div className="bg-primary px-3 pb-2 pt-3 text-primary-foreground">
@@ -87,9 +88,11 @@ export function LoadRequestsBand({
                 name="price"
                 placeholder="PRICE"
                 inputMode="decimal"
-                className="h-8 bg-white text-sm text-foreground placeholder:font-semibold"
+                // bg-card, not bg-white: these fields sit on the blue band and
+                // must still be a legible surface in dark mode.
+                className="h-8 bg-card text-sm text-foreground"
               />
-              <span className="text-sm font-semibold tabular-nums">{today}</span>
+              <span className="text-sm tabular-nums">{today}</span>
               <div>
                 <CarrierPicker
                   value={carrierName}
@@ -113,24 +116,24 @@ export function LoadRequestsBand({
                 name="pickup_date"
                 type="date"
                 aria-label="Pickup date"
-                className="h-8 bg-white text-xs text-foreground"
+                className="h-8 bg-card text-xs text-foreground"
               />
               <Input
                 name="delivery_date"
                 type="date"
                 aria-label="Delivery date"
-                className="h-8 bg-white text-xs text-foreground"
+                className="h-8 bg-card text-xs text-foreground"
               />
               <Button
                 type="submit"
                 size="sm"
                 disabled={pending || !carrierName.trim()}
-                className="h-8 bg-black/25 text-xs font-bold uppercase tracking-wide text-primary-foreground shadow-none hover:bg-black/35"
+                className="h-8 bg-black/10 text-xs uppercase text-primary-foreground shadow-none hover:bg-black/20"
               >
                 {pending ? "…" : "Add"}
               </Button>
             </form>
-            <div className={cn(GRID, "mt-2 text-[13px] font-semibold")}>
+            <div className={cn(GRID, "mt-2 text-xs")}>
               <span>Price</span>
               <span>Requested</span>
               <span>Carrier</span>
@@ -175,14 +178,14 @@ function RequestRow({
 }) {
   return (
     <div className={cn(GRID, "px-3 py-2 text-sm")}>
-      <span className="font-semibold tabular-nums">
+      <span className="tabular-nums">
         {r.price != null ? formatCurrency(r.price) : "—"}
       </span>
       <span className="tabular-nums text-muted-foreground">{formatDate(r.requested_on)}</span>
-      <span className="truncate font-medium">
+      <span className="truncate">
         {r.carrier_name}
         {r.source && (
-          <span className="ml-1.5 rounded bg-muted px-1 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
+          <span className="ml-1.5 rounded-md bg-muted px-1 py-0.5 text-xs uppercase text-muted-foreground">
             {r.source}
           </span>
         )}
@@ -202,7 +205,7 @@ function RequestRow({
             type="button"
             size="sm"
             variant="secondary"
-            className="h-6 px-2 text-[10px] font-bold uppercase"
+            className="h-6 px-2 text-xs uppercase"
             disabled={busy}
             onClick={() => {
               if (!confirm(`Dispatch this order to ${r.carrier_name}?`)) return;

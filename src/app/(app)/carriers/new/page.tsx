@@ -7,7 +7,7 @@ export default async function NewCarrierPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Add carrier</h1>
+      <h1 className="text-[15px]">Add carrier</h1>
       <CarrierForm action={createCarrier} />
     </div>
   );

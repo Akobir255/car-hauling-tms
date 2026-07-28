@@ -98,7 +98,7 @@ export function DispatchSheetForm({
                     {i > 0 && " · "}
                     <button
                       type="button"
-                      className="text-primary hover:underline"
+                      className="text-msg-link hover:underline"
                       onClick={() => {
                         setCarrierName(r.carrier_name);
                         if (r.carrier_id) {
@@ -159,7 +159,7 @@ export function DispatchSheetForm({
 
       {/* Vehicles under dispatch — review only; edit them on the order form. */}
       <div className="border-t pt-4 text-sm">
-        <p className="font-semibold">Vehicles</p>
+        <p className="text-msg-header">Vehicles</p>
         {vehicles.map((v) => (
           <p key={v.id} className="mt-1 text-muted-foreground">
             {[v.year, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"} ({v.vehicle_type})
@@ -239,7 +239,7 @@ export function DispatchSheetForm({
             name="dispatch"
             value="1"
             disabled={pending || !picked}
-            className="bg-green-600 font-bold uppercase tracking-wide text-white hover:bg-green-700"
+            className="bg-chart-5 uppercase text-msg-selected-foreground hover:bg-chart-5/85"
           >
             Save and dispatch
           </Button>

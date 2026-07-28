@@ -43,7 +43,7 @@ export function SmsThread({
     <div className="space-y-3">
       <div
         ref={scrollRef}
-        className="max-h-96 space-y-2.5 overflow-y-auto rounded-lg border bg-muted/30 p-4"
+        className="max-h-96 space-y-2.5 overflow-y-auto rounded-lg border bg-muted p-4"
       >
         {messages.length === 0 && (
           <p className="py-6 text-center text-sm text-muted-foreground">
@@ -56,18 +56,20 @@ export function SmsThread({
             className={cn("flex", m.direction === "outbound" ? "justify-end" : "justify-start")}
           >
             <div
+              // 3px corners like everything else, and no shadow — the bubble
+              // reads by fill and side, not by roundness.
               className={cn(
-                "max-w-[75%] rounded-2xl px-3.5 py-2 text-sm shadow-sm",
+                "max-w-[75%] rounded-md px-3.5 py-2 text-sm",
                 m.direction === "outbound"
-                  ? "rounded-br-sm bg-blue-700 text-blue-50 dark:bg-blue-600"
-                  : "rounded-bl-sm border bg-card text-card-foreground"
+                  ? "bg-primary text-primary-foreground"
+                  : "border bg-card text-card-foreground"
               )}
             >
               <p className="whitespace-pre-wrap break-words">{m.body}</p>
               <p
                 className={cn(
-                  "mt-1 text-[11px] tabular-nums",
-                  m.direction === "outbound" ? "text-blue-200/90" : "text-muted-foreground"
+                  "mt-1 text-xs tabular-nums",
+                  m.direction === "outbound" ? "text-primary-foreground/90" : "text-muted-foreground"
                 )}
               >
                 {new Date(m.created_at).toLocaleString("en-US", {

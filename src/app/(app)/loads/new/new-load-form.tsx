@@ -48,8 +48,8 @@ function EndpointFields({
   const dateName = prefix === "pickup" ? "pickup_ready_date" : "delivery_eta";
   return (
     <fieldset className="min-w-0 space-y-3">
-      <legend className="flex items-center gap-1.5 pb-1 text-[13px] font-semibold text-foreground">
-        <MapPin className="size-4 text-primary" aria-hidden="true" />
+      <legend className="flex items-center gap-1.5 pb-1 text-xs text-msg-header">
+        <MapPin className="size-4 text-msg-shipper" aria-hidden="true" />
         {title}
       </legend>
       <div className="space-y-1.5">
@@ -344,9 +344,9 @@ export function NewLoadForm() {
 
           {/* Total − reservation is what the carrier is offered on the board. */}
           {carrierPay !== null && (
-            <div className="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border bg-muted/40 px-3 py-2 text-sm lg:col-span-4">
+            <div className="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border bg-muted px-3 py-2 text-sm lg:col-span-4">
               <span className="text-muted-foreground">Carrier pay</span>
-              <span className="font-semibold tabular-nums">${carrierPay.toLocaleString()}</span>
+              <span className="tabular-nums">${carrierPay.toLocaleString()}</span>
               <span className="text-muted-foreground">
                 — total ${Number(rate).toLocaleString()} − reservation $
                 {Number(reservation || 0).toLocaleString()}. This is the amount posted to CD/SD.
@@ -356,13 +356,13 @@ export function NewLoadForm() {
 
           {/* Suggested price — advisory only; the agent sets the real rate. */}
           {(suggestLoading || suggestion || suggestError) && (
-            <div className="col-span-2 rounded-md border border-dashed bg-muted/40 px-3 py-2 text-sm lg:col-span-4">
+            <div className="col-span-2 rounded-md border border-dashed bg-muted px-3 py-2 text-sm lg:col-span-4">
               {suggestLoading && <span className="text-muted-foreground">Estimating this lane…</span>}
               {!suggestLoading && suggestion && (
                 <div className="flex flex-wrap items-center gap-2">
                   <span>
                     Suggested{" "}
-                    <span className="font-semibold tabular-nums">${suggestion.price.toLocaleString()}</span>{" "}
+                    <span className="tabular-nums">${suggestion.price.toLocaleString()}</span>{" "}
                     <span className="text-muted-foreground">
                       · ~{suggestion.miles.toLocaleString()} mi · {transport}
                     </span>
@@ -400,7 +400,9 @@ export function NewLoadForm() {
         <VehiclesFieldArray onFirstVehicleChange={handleFirstVehicle} />
       </FormSection>
 
-      <div className="sticky bottom-0 z-10 -mx-6 border-t bg-background/95 px-6 py-3 backdrop-blur">
+      {/* bg-card: --background and --card are both white now, and in dark mode
+          this bar belongs to the card surface, not the page. */}
+      <div className="sticky bottom-0 z-10 -mx-6 border-t bg-card/95 px-6 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-end gap-3">
           {state.error && <p className="mr-auto text-sm text-destructive">{state.error}</p>}
           {dirty && !pending && !state.error && (

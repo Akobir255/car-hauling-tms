@@ -2,17 +2,23 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/* `.dark *` alone skips the element the class is ON, and next-themes puts it on
+   <html> — so anything styled on <html> itself would miss the variant. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  /* Point at the Geist variable the layout actually sets, with a real
-     sans fallback chain — self-referencing var(--font-sans) left the app
-     rendering in Times. */
-  --font-sans: var(--font-geist-sans), "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --font-heading: var(--font-geist-sans), "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* msgplane's family — it serves Lato as "LatoWeb". Point at the variable the
+     layout actually sets, with a real fallback chain: self-referencing
+     var(--font-sans) left the app rendering in Times. */
+  --font-sans: var(--font-lato), "Lato", -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Nothing renders font-mono today, and no monospace face is loaded — the
+     token exists so utilities resolve rather than dangle. */
+  --font-mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, monospace;
+  /* msgplane has one family; headings differ by size, not typeface. The token
+     stays because CardTitle and DialogTitle both apply font-heading. */
+  --font-heading: var(--font-lato), "Lato", -apple-system, "Segoe UI", Roboto, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -42,104 +48,221 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  /* Materialize themed none of these — they were per-element inline styles in
+     msgplane's markup. Named here so components reach for a token instead of
+     re-typing the hex. */
+  --color-msg-link: var(--msg-link);
+  --color-msg-header: var(--msg-header);
+  --color-msg-selected: var(--msg-selected);
+  --color-msg-selected-foreground: var(--msg-selected-foreground);
+  --color-msg-shipper: var(--msg-shipper);
+  --color-msg-rail: var(--msg-rail);
+  --color-msg-rule: var(--msg-rule);
+  /* Interaction fill. --muted is msgplane's raised surface (#fafafa), which is
+     1.04:1 on the white page — fine as a surface, invisible as a hover. Row
+     hover on a 100-row list is how a rep keeps their place, so state gets its
+     own step. */
+  --color-msg-hover: var(--msg-hover);
+  /* Ink for text sitting ON a --destructive tint. --destructive itself is only
+     4.3:1 once composited over its own /10 fill. */
+  --color-destructive-ink: var(--destructive-ink);
+  /* msgplane's whole type scale is three sizes. Pinning them in px keeps
+     text-xs/text-sm/text-base on 12/14/15 no matter what the root is, so the
+     measured values survive the 15px root below. */
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 15px;
+  /* msgplane has exactly one radius. The old scale multiplied the base, which
+     at 3px would have spread rounded-sm through rounded-4xl across 1.8–7.8px;
+     every step resolves flat so a Badge and a Card agree on their corners. */
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: var(--radius);
+  --radius-2xl: var(--radius);
+  --radius-3xl: var(--radius);
+  --radius-4xl: var(--radius);
 }
 
 :root {
-  /* Light gray page so the white cards read as distinct boxes, not one
-     white sheet. Cards stay pure white below for the contrast. */
-  --background: oklch(0.955 0.004 247.86);
-  /* Dark slate, not near-black — high readability without the harsh edge. */
-  --foreground: oklch(0.278 0.021 261.32);
-  /* Cards sit a touch brighter than the page, so they lift gently. */
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.278 0.021 261.32);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.278 0.021 261.32);
-  /* Calm, professional blue — the one real accent. */
-  --primary: oklch(0.546 0.176 258.4);
-  --primary-foreground: oklch(0.985 0.004 247.86);
-  --secondary: oklch(0.961 0.007 247.86);
-  --secondary-foreground: oklch(0.32 0.02 261);
-  --muted: oklch(0.966 0.005 247.86);
-  /* Same as foreground: all text is equally dark and bold, like the dates. */
-  --muted-foreground: oklch(0.278 0.021 261.32);
-  --accent: oklch(0.953 0.014 255);
-  --accent-foreground: oklch(0.32 0.02 261);
-  --destructive: oklch(0.585 0.212 27.3);
-  /* Crisp enough that every card and field reads as a defined box. */
-  --border: oklch(0.9 0.006 247.86);
-  --input: oklch(0.9 0.006 247.86);
-  --ring: oklch(0.546 0.176 258.4);
-  /* A real categorical set so charts/badges aren't five shades of gray. */
-  --chart-1: oklch(0.55 0.18 258);
-  --chart-2: oklch(0.60 0.13 195);
-  --chart-3: oklch(0.70 0.15 85);
-  --chart-4: oklch(0.55 0.20 300);
-  --chart-5: oklch(0.58 0.20 15);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.968 0.004 247.86);
-  --sidebar-foreground: oklch(0.278 0.021 261.32);
-  --sidebar-primary: oklch(0.546 0.176 258.4);
-  --sidebar-primary-foreground: oklch(0.985 0.004 247.86);
-  --sidebar-accent: oklch(0.953 0.014 255);
-  --sidebar-accent-foreground: oklch(0.32 0.02 261);
-  --sidebar-border: oklch(0.923 0.006 247.86);
-  --sidebar-ring: oklch(0.546 0.176 258.4);
+  /* Flat white page. msgplane puts no gray behind its cards — surfaces are
+     separated by the #e0e0e0 border below, never by a background step. */
+  --background: #ffffff;
+  /* Material's ink. rgba(0,0,0,0.87) composited on the white page is exactly
+     this; opaque, so the /35 and /45 opacity modifiers components apply to
+     this token don't compound against an already-translucent base. */
+  --foreground: #212121;
+  /* Same white as the page — a card is a bordered region here, not a raised
+     one, so --border is what has to make it read as a box. */
+  --card: #ffffff;
+  --card-foreground: #212121;
+  --popover: #ffffff;
+  --popover-foreground: #212121;
+  /* Material blue darken-3 — msgplane's nav band and its only structural blue.
+     Links are a different blue; see --msg-link. */
+  --primary: #1565c0;
+  --primary-foreground: #ffffff;
+  /* msgplane's page search-bar fill, reused as the neutral secondary surface. */
+  --secondary: #f1f3f4;
+  --secondary-foreground: #212121;
+  /* msgplane's raised surface. Surfaces only — hover/selected/zebra go to
+     --msg-hover, which actually steps off the white page. */
+  --muted: #fafafa;
+  /* msgplane's own muted is #9e9e9e, which is 2.7:1 on white. This token
+     carries real body copy — emails, phones, routes, timestamps, and every
+     in-progress status word. Grey 600 was tuned against pure white and only
+     had 0.11 of headroom there; grey 700 clears 4.5:1 on the surfaces this
+     text actually lands on too (5.9:1 on #fafafa, 5.6:1 on the #f1f3f4 rail). */
+  --muted-foreground: #616161;
+  /* shadcn's interaction token — what the menus, selects and comboboxes
+     highlight with. Same step as --msg-hover for the same reason: at #fafafa
+     the highlighted option was indistinguishable from the popover. */
+  --accent: #eeeeee;
+  --accent-foreground: #212121;
+  /* Material grey 200 — the step Material itself uses for a hover on white. */
+  --msg-hover: #eeeeee;
+  /* The spec's red is the #f44336 email icon, fine at 3.7:1 for an icon but
+     short for the text and button roles this token also serves. Red 700 holds
+     the hue at 5.0:1. */
+  --destructive: #d32f2f;
+  /* Red 900. On the /10 and /20 tints the badge and button variants paint,
+     --destructive itself lands at 4.3:1 and 3.7:1; this holds the same family
+     at 5.7:1 / 4.8:1. */
+  --destructive-ink: #b71c1c;
+  --border: #e0e0e0;
+  /* --border draws decorative rules and may be faint; --input draws the only
+     boundary a bg-transparent field has, which WCAG 1.4.11 puts at 3:1. The
+     measured #e0e0e0 is 1.2:1 on the filter bar's own #f1f3f4 rail. */
+  --input: #949494;
+  --ring: #1565c0;
+  /* msgplane's accent family, ordered so the first two hues stay far apart. */
+  --chart-1: #1565c0;
+  --chart-2: #ff9800;
+  --chart-3: #26a69a;
+  --chart-4: #795548;
+  --chart-5: #4caf50;
+  /* msgplane rounds nothing further than this. */
+  --radius: 3px;
+  --sidebar: #fafafa;
+  --sidebar-foreground: #212121;
+  --sidebar-primary: #1565c0;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f1f3f4;
+  --sidebar-accent-foreground: #212121;
+  --sidebar-border: #e0e0e0;
+  --sidebar-ring: #1565c0;
+  /* Order-ID link. The measured #039be5 is 3.1:1 on white; light-blue 800 is
+     the same hue at 4.8:1. */
+  --msg-link: #0277bd;
+  /* Column headers — Material brown 500, 6.6:1 as measured. */
+  --msg-header: #795548;
+  /* Selected tab. The coral is kept exactly, because it is the recognisable
+     tell; the label goes to ink instead of the measured white, which turns a
+     3.0:1 pairing into 7.1:1 without touching the color you actually see. */
+  --msg-selected: #ee6e73;
+  --msg-selected-foreground: #212121;
+  /* Shipper icon (account_circle). An icon, so the 3:1 non-text floor applies
+     and #2196f3 clears it; darkening it far enough for body text would collide
+     with --primary and erase a distinction msgplane makes. */
+  --msg-shipper: #2196f3;
+  /* Page search bar fill. */
+  --msg-rail: #f1f3f4;
+  /* Row separator — a hair lighter than --border, which msgplane keeps for
+     boxes. */
+  --msg-rule: #e5e5e5;
 }
 
 .dark {
-  /* Darker than the cards so boxes separate clearly on dark too. */
-  --background: oklch(0.185 0.017 261);
-  --foreground: oklch(0.965 0.004 247.86);
-  --card: oklch(0.245 0.018 261);
-  --card-foreground: oklch(0.965 0.004 247.86);
-  --popover: oklch(0.245 0.018 261);
-  --popover-foreground: oklch(0.965 0.004 247.86);
-  /* Brighter blue so the accent still reads on a dark surface. */
-  --primary: oklch(0.64 0.16 258);
-  --primary-foreground: oklch(0.205 0.017 261);
-  --secondary: oklch(0.30 0.02 261);
-  --secondary-foreground: oklch(0.965 0.004 247.86);
-  --muted: oklch(0.30 0.02 261);
-  /* Same as foreground: all text equally bright and bold on dark. */
-  --muted-foreground: oklch(0.965 0.004 247.86);
-  --accent: oklch(0.33 0.025 261);
-  --accent-foreground: oklch(0.965 0.004 247.86);
-  --destructive: oklch(0.70 0.185 22.2);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.64 0.16 258);
-  --chart-1: oklch(0.64 0.16 258);
-  --chart-2: oklch(0.70 0.12 195);
-  --chart-3: oklch(0.77 0.15 85);
-  --chart-4: oklch(0.65 0.19 300);
-  --chart-5: oklch(0.68 0.19 15);
-  --sidebar: oklch(0.235 0.018 261);
-  --sidebar-foreground: oklch(0.965 0.004 247.86);
-  --sidebar-primary: oklch(0.64 0.16 258);
-  --sidebar-primary-foreground: oklch(0.205 0.017 261);
-  --sidebar-accent: oklch(0.33 0.025 261);
-  --sidebar-accent-foreground: oklch(0.965 0.004 247.86);
-  --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.64 0.16 258);
+  /* Derived, not sampled: msgplane's dark palette was never toggled. Same
+     Material hues, lifted to the light tones Material prescribes for dark
+     surfaces, over its #121212 base. */
+  --background: #121212;
+  /* rgba(255,255,255,0.87) composited on #121212 — the mirror of the light
+     theme's 87% ink, at 14:1. */
+  --foreground: #e0e0e0;
+  /* Dark inverts how surfaces separate: the page is flat and cards lift by
+     tint, because a border this subtle would not read on near-black. */
+  --card: #1e1e1e;
+  --card-foreground: #e0e0e0;
+  --popover: #242424;
+  --popover-foreground: #e0e0e0;
+  /* Blue 300 — Material's dark-theme tone for a blue 800 primary. It carries
+     ink rather than white, since a fill this light cannot hold white text. */
+  --primary: #64b5f6;
+  --primary-foreground: #121212;
+  --secondary: #2c2c2c;
+  --secondary-foreground: #e0e0e0;
+  --muted: #242424;
+  /* msgplane's literal #9e9e9e, which only failed against white — on #121212
+     it is 7:1, and 5.2:1 on the lightest surface it lands on (#2c2c2c). */
+  --muted-foreground: #9e9e9e;
+  --accent: #2f2f2f;
+  --accent-foreground: #e0e0e0;
+  /* The dark counterpart of grey 200 on white: one perceptible step up from
+     --card, not the 1.07:1 --muted gives. */
+  --msg-hover: #2f2f2f;
+  --destructive: #ef5350;
+  /* Red 200 — the lift of the light theme's red 900, 5.7:1 on the /20 tint. */
+  --destructive-ink: #ff8a80;
+  /* Grey 800, the dark counterpart of the light theme's grey 300 border. */
+  --border: #424242;
+  /* Lifted off --border for the same 3:1 boundary reason as light. */
+  --input: #6b6b6b;
+  --ring: #64b5f6;
+  --chart-1: #64b5f6;
+  --chart-2: #ffb74d;
+  --chart-3: #4db6ac;
+  --chart-4: #bcaaa4;
+  --chart-5: #81c784;
+  --sidebar: #1e1e1e;
+  --sidebar-foreground: #e0e0e0;
+  --sidebar-primary: #64b5f6;
+  --sidebar-primary-foreground: #121212;
+  --sidebar-accent: #2c2c2c;
+  --sidebar-accent-foreground: #e0e0e0;
+  --sidebar-border: #424242;
+  --sidebar-ring: #64b5f6;
+  --msg-link: #4fc3f7;
+  --msg-header: #bcaaa4;
+  /* Red 300 — the same coral, desaturated just enough not to glare against
+     near-black. Still takes ink, not white. */
+  --msg-selected: #e57373;
+  --msg-selected-foreground: #121212;
+  /* Blue 200, held a step above --primary so shipper and nav stay distinct
+     the way they are in light mode. */
+  --msg-shipper: #90caf9;
+  --msg-rail: #2c2c2c;
+  --msg-rule: #3a3a3a;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    /* Full opacity, not /50: this outline overrides the browser's own two-tone
+       focus ring, and at half strength it landed at 2.2:1 — under the 3:1
+       WCAG 2.4.11 asks of a focus indicator. */
+    @apply border-border outline-ring;
   }
   body {
-    /* Semibold platform-wide so every label reads as bold as the dates. */
-    @apply bg-background text-foreground font-semibold;
+    /* Weight 400 is msgplane's baseline — 700 appears on one label, "Notes
+       from Shipper", and nowhere else. The old semibold default is why several
+       components still carry font-normal purely to undo it. */
+    @apply bg-background text-foreground;
   }
   html {
+    /* The measured root. Every rem-based utility keys off it, which is why the
+       three type sizes are pinned in px in @theme above — they are measured
+       values, not multiples of the root. */
+    font-size: 15px;
     @apply font-sans;
+  }
+}
+
+/* The focus indicator for hand-rolled links and buttons that carry no variant
+   of their own. Spec departure #3 keeps focus rings; the global outline-color
+   above only tints whatever ring the UA decides to draw. */
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 }

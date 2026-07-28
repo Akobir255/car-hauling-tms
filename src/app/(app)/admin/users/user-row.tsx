@@ -14,7 +14,7 @@ export function UserRow({ profile, isSelf }: { profile: Profile; isSelf: boolean
 
   return (
     <TableRow>
-      <TableCell className="font-medium">
+      <TableCell>
         {profile.full_name || "—"}
         {isSelf && <span className="ml-2 text-xs text-muted-foreground">(you)</span>}
       </TableCell>

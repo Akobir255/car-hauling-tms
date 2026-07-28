@@ -45,17 +45,17 @@ export default async function TicketDetailPage({
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
-      <div className="rounded-lg border bg-card p-5 shadow-sm">
+      <div className="rounded-lg border bg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="text-2xl font-bold tabular-nums text-primary">
+              <span className="text-[15px] tabular-nums text-msg-link">
                 #{ticket.ticket_number}
               </span>
               <TicketStatusBadge status={ticket.status} />
               <TicketPriorityBadge priority={ticket.priority} />
             </div>
-            <h1 className="text-xl font-semibold">{ticket.subject}</h1>
+            <h1 className="text-[15px]">{ticket.subject}</h1>
             <p className="text-sm text-muted-foreground">
               Opened {formatDateTime(ticket.created_at)} by {who(ticket.created_by)}
               {ticket.resolved_at ? ` · resolved ${formatDateTime(ticket.resolved_at)}` : ""}
@@ -86,7 +86,7 @@ export default async function TicketDetailPage({
         <div className="space-y-5 lg:col-span-2">
           {ticket.body && (
             <SectionBand title="Details">
-              <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{ticket.body}</p>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed">{ticket.body}</p>
             </SectionBand>
           )}
 
@@ -95,10 +95,10 @@ export default async function TicketDetailPage({
               {comments.map((c) => (
                 <div key={c.id} className="space-y-1 px-5 py-3">
                   <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="font-semibold text-foreground">{who(c.author_id)}</span>
+                    <span className="text-foreground">{who(c.author_id)}</span>
                     {formatDateTime(c.created_at)}
                   </p>
-                  <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{c.body}</p>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed">{c.body}</p>
                 </div>
               ))}
               {comments.length === 0 && (

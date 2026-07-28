@@ -14,10 +14,12 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
-      <span className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+      {/* --msg-hover, not --muted: the plate has no border, so a 1.04:1 fill
+          would leave the icon floating on plain white. */}
+      <span className="flex size-12 items-center justify-center rounded-md bg-msg-hover text-muted-foreground">
         <Icon className="size-6" aria-hidden="true" />
       </span>
-      <p className="text-base font-semibold">{title}</p>
+      <p className="text-[15px]">{title}</p>
       {hint && <p className="max-w-sm text-sm text-muted-foreground">{hint}</p>}
       {action && <div className="mt-2">{action}</div>}
     </div>

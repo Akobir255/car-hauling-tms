@@ -97,8 +97,8 @@ export function NotesQuickButton({
         title={`Notes on ${loadNumber}`}
         aria-label={`Notes on ${loadNumber}`}
         className={cn(
-          "inline-flex min-w-6 items-center justify-center gap-1 rounded border px-1.5 py-0.5 text-[13px] tabular-nums transition-colors hover:bg-muted",
-          count > 0 ? "font-semibold text-foreground" : "text-muted-foreground"
+          "focus-ring inline-flex min-w-6 items-center justify-center gap-1 rounded-md border px-1.5 py-0.5 text-xs tabular-nums transition-colors hover:bg-msg-hover",
+          count > 0 ? "text-foreground" : "text-muted-foreground"
         )}
       >
         <StickyNote className="size-3" aria-hidden="true" />
@@ -110,7 +110,9 @@ export function NotesQuickButton({
           {/* click-away backdrop */}
           <div className="fixed inset-0 z-40" onClick={() => setAnchor(null)} />
           <div
-            className="fixed z-50 rounded-md border-2 border-neutral-800 bg-card p-2 shadow-2xl dark:border-neutral-300"
+            // Border gray and no shadow: the nav bar is the only raised
+            // surface, and the popup separates the way every other one does.
+            className="fixed z-50 rounded-md border border-border bg-card p-2"
             style={{ top: anchor.top, left: anchor.left, width: PANEL_WIDTH }}
           >
             <Textarea
@@ -119,7 +121,7 @@ export function NotesQuickButton({
               value={body}
               onChange={(e) => setBody(e.target.value)}
               aria-label={`New note on ${loadNumber}`}
-              className="resize-y border-neutral-400"
+              className="resize-y"
             />
             <div className="mt-2 flex items-center gap-1.5">
               <Button
@@ -127,19 +129,18 @@ export function NotesQuickButton({
                 size="sm"
                 disabled={busy || (!body.trim() && fileNames.length === 0)}
                 onClick={save}
-                className="h-7 rounded-sm bg-neutral-700 px-3 text-xs font-bold uppercase text-white hover:bg-neutral-800"
               >
                 {busy ? "Saving…" : "Save"}
               </Button>
               <Button
                 type="button"
                 size="sm"
+                variant="secondary"
                 onClick={() => setAnchor(null)}
-                className="h-7 rounded-sm bg-neutral-500 px-3 text-xs font-bold uppercase text-white hover:bg-neutral-600"
               >
                 Cancel
               </Button>
-              <label className="ml-auto inline-flex cursor-pointer items-center gap-1 rounded border px-1.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted">
+              <label className="ml-auto inline-flex cursor-pointer items-center gap-1 rounded-md border px-1.5 py-1 text-xs text-muted-foreground hover:bg-msg-hover">
                 <Paperclip className="size-3" aria-hidden="true" />
                 {fileNames.length > 0 ? fileNames.length : "Attach"}
                 <input
@@ -158,7 +159,7 @@ export function NotesQuickButton({
                 <button
                   key={quick}
                   type="button"
-                  className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
+                  className="focus-ring rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-msg-hover"
                   onClick={() => setBody(quick)}
                 >
                   {quick}
@@ -173,8 +174,8 @@ export function NotesQuickButton({
               )}
               {notes?.map((n) => (
                 <div key={n.id} className="space-y-0.5 py-2">
-                  <p className="text-[11px] text-muted-foreground">
-                    <span className="font-semibold text-foreground">{n.authorName}</span>{" "}
+                  <p className="text-xs text-muted-foreground">
+                    <span className="text-foreground">{n.authorName}</span>{" "}
                     <span className="tabular-nums">{stamp(n.created_at)}</span>
                     {n.attachments > 0 && (
                       <span className="ml-1.5 inline-flex items-center gap-0.5">
@@ -183,7 +184,7 @@ export function NotesQuickButton({
                       </span>
                     )}
                   </p>
-                  {n.body && <p className="whitespace-pre-wrap text-[13px]">{n.body}</p>}
+                  {n.body && <p className="whitespace-pre-wrap text-xs">{n.body}</p>}
                 </div>
               ))}
             </div>

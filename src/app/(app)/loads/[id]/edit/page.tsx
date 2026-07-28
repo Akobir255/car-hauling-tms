@@ -63,9 +63,7 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
   return (
     <div className="mx-auto max-w-5xl space-y-4">
       <div className="flex flex-wrap items-center gap-3 rounded-md border bg-card px-4 py-3">
-        <span className="font-semibold tabular-nums text-blue-700 dark:text-blue-400">
-          {load.load_number}
-        </span>
+        <span className="tabular-nums text-msg-link">{load.load_number}</span>
         <StatusBadge status={load.status} />
         {customer && (
           <span className="text-sm text-muted-foreground">{customer.contact_name}</span>
@@ -80,19 +78,21 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
       {customer && (
         <SectionBand title="Shipper Information">
           <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
+            {/* Label/value tiering by color, the way msgplane does it —
+                weight stays at 400. */}
             <span>
-              <span className="font-semibold">Name:</span> {customer.contact_name}
+              <span className="text-muted-foreground">Name:</span> {customer.contact_name}
             </span>
             <span>
-              <span className="font-semibold">Phone:</span>{" "}
+              <span className="text-muted-foreground">Phone:</span>{" "}
               <span className="tabular-nums">{customer.phone || "—"}</span>
             </span>
             <span>
-              <span className="font-semibold">Email:</span> {customer.email || "—"}
+              <span className="text-muted-foreground">Email:</span> {customer.email || "—"}
             </span>
             <Link
               href={`/customers/${customer.id}`}
-              className="ml-auto text-blue-700 hover:underline dark:text-blue-400"
+              className="ml-auto text-msg-link hover:underline"
             >
               Edit shipper details →
             </Link>

@@ -8,7 +8,7 @@ export default async function NewTemplatePage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">New template</h1>
+      <h1 className="text-[15px]">New template</h1>
       <TemplateForm action={boundSave} />
     </div>
   );

@@ -17,9 +17,11 @@ export default async function NewBlastPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">New blast</h1>
+        <h1 className="text-[15px]">New blast</h1>
+        {/* Warning orange from the spec, carried as a tint behind body ink —
+            #ff9800 itself is 2:1 as text. */}
         {!isSmsConfigured() && (
-          <p className="mt-1 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          <p className="mt-1 rounded-md border border-chart-2 bg-chart-2/15 px-3 py-2 text-sm text-foreground">
             RingCentral isn&apos;t connected yet — sends will be logged as{" "}
             <strong>Queued</strong> (nothing actually goes out) until the credentials are added.
             Safe to test with real recipients.

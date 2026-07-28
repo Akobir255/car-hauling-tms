@@ -52,7 +52,7 @@ export function VehiclePhotoEditor({
         hasOverride={hasOverride}
         className="h-20 w-32 rounded-md"
       />
-      <form ref={formRef} action={formAction} className="flex items-center gap-2 text-[11px]">
+      <form ref={formRef} action={formAction} className="flex items-center gap-2 text-xs">
         <label className="inline-flex cursor-pointer items-center gap-1 text-muted-foreground hover:text-foreground hover:underline">
           <Camera className="size-3" aria-hidden="true" />
           {pending ? "uploading…" : hasOverride ? "replace photo" : "use real photo"}

@@ -24,7 +24,7 @@ export default async function EditTemplatePage({
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{template.name}</h1>
+        <h1 className="text-[15px]">{template.name}</h1>
         {(profile.role === "admin" || profile.role === "dispatcher") && (
           <DeleteButton
             onDelete={boundDelete}

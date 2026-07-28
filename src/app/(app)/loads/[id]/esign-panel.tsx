@@ -76,40 +76,43 @@ export function EsignPanel({
 
   const signHref = token ? `/sign/${token}` : null;
   const boxBtn =
-    "h-8 rounded border bg-card px-3 text-[13px] font-medium lowercase text-foreground shadow-sm transition-colors hover:bg-muted disabled:opacity-40";
+    "h-8 rounded-md border bg-card px-3 text-sm lowercase text-foreground transition-colors hover:bg-msg-hover disabled:opacity-40";
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="flex items-center gap-1.5 text-[17px] font-medium text-muted-foreground">
+        <span className="flex items-center gap-1.5 text-[15px] text-foreground">
           <SquarePlus className="size-4" aria-hidden="true" />
           Customer Contract
         </span>
+        {/* The accents are the spec's own (chart-5 green, chart-2 orange,
+            msg-shipper blue) but carried as a tint behind body ink — those
+            hues are icon-grade, well under 4.5:1 as text on white. */}
         {signedAt ? (
           <span
-            className="rounded-full bg-green-600/10 px-2.5 py-0.5 text-xs font-semibold text-green-700 dark:text-green-400"
+            className="rounded-md bg-chart-5/20 px-2.5 py-0.5 text-xs text-foreground"
             title={signedIp ? `Signed from IP ${signedIp}` : undefined}
           >
             Signed {formatDate(signedAt)}
             {signedName ? ` — ${signedName}` : ""}
           </span>
         ) : sentAt ? (
-          <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+          <span className="rounded-md bg-chart-2/20 px-2.5 py-0.5 text-xs text-foreground">
             Sent {formatDate(sentAt)} · awaiting signature
           </span>
         ) : (
-          <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+          <span className="rounded-md bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
             Not sent
           </span>
         )}
         {requiresCard && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-blue-600/10 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
+          <span className="inline-flex items-center gap-1 rounded-md bg-msg-shipper/20 px-2.5 py-0.5 text-xs text-foreground">
             <CreditCard className="size-3" aria-hidden="true" />
             card info required
           </span>
         )}
         {card && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold tabular-nums text-foreground">
+          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2.5 py-0.5 text-xs tabular-nums text-foreground">
             <CreditCard className="size-3" aria-hidden="true" />
             {(card.brand || "CARD").toUpperCase()} •••• {card.last4}
             {card.exp_month && card.exp_year
@@ -159,7 +162,7 @@ export function EsignPanel({
           <button
             type="button"
             onClick={() => setPanel(panel === "terms" ? "none" : "terms")}
-            className={cn(boxBtn, "border-red-300 text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40")}
+            className={cn(boxBtn, "border-destructive/40 text-destructive hover:bg-destructive/10")}
           >
             change terms &amp; send
           </button>
@@ -269,7 +272,7 @@ function ChangeTermsPanel({
   }, [state, onDone]);
 
   return (
-    <form action={formAction} className="flex flex-wrap items-end gap-3 rounded-md border bg-muted/40 p-3">
+    <form action={formAction} className="flex flex-wrap items-end gap-3 rounded-md border bg-muted p-3">
       <div className="space-y-1">
         <FieldLabel>New tariff ($)</FieldLabel>
         <Input name="tariff" inputMode="decimal" placeholder="keep current" className="h-8 w-28" />
@@ -320,7 +323,7 @@ function ViewAllPanel({
 }) {
   const [pending, start] = useTransition();
   return (
-    <div className="space-y-3 rounded-md border bg-muted/40 p-3 text-sm">
+    <div className="space-y-3 rounded-md border bg-muted p-3 text-sm">
       <div className="space-y-1.5">
         {versions.length === 0 && (
           <p className="text-muted-foreground">No contract versions yet — versions appear when a contract is sent.</p>
@@ -328,26 +331,28 @@ function ViewAllPanel({
         {versions.map((v) => {
           const isCurrent = v.token === currentToken;
           return (
-            <div key={v.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border bg-card px-3 py-2">
-              <span className={cn("font-semibold", v.signed_at ? "text-green-700 dark:text-green-400" : isCurrent ? "text-primary" : "text-muted-foreground")}>
+            <div key={v.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-card px-3 py-2">
+              <span className={cn(v.signed_at || isCurrent ? "text-foreground" : "text-muted-foreground")}>
                 Contract{v.signed_at ? " — signed" : ""}
               </span>
               <span className="tabular-nums text-muted-foreground">{formatDateTime(v.sent_at ?? v.created_at)}</span>
               {v.tariff != null && <span className="tabular-nums">{formatCurrency(v.tariff)}</span>}
               {v.deposit != null && <span className="tabular-nums text-muted-foreground">dep {formatCurrency(v.deposit)}</span>}
               {v.requires_card && (
-                <span className="rounded bg-blue-600/10 px-1.5 py-0.5 text-[11px] font-semibold text-blue-700 dark:text-blue-300">card</span>
+                <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-xs text-primary">card</span>
               )}
               {v.sent_via && <span className="text-xs uppercase text-muted-foreground">{v.sent_via}</span>}
               {v.note && <span className="italic text-muted-foreground">“{v.note}”</span>}
               {v.signed_at && v.signed_name && <span className="text-muted-foreground">by {v.signed_name}</span>}
               <span className="ml-auto">
                 {isCurrent ? (
-                  <span className="text-xs font-bold uppercase text-green-700 dark:text-green-400">current</span>
+                  // Solid accent chip: the green reads at a glance and the
+                  // dark accent ink clears contrast on it in both themes.
+                  <span className="rounded-md bg-chart-5 px-1.5 py-0.5 text-xs uppercase text-msg-selected-foreground">current</span>
                 ) : canManage && !signed ? (
                   <button
                     type="button"
-                    className="text-xs font-medium text-primary hover:underline disabled:opacity-50"
+                    className="text-xs text-msg-link hover:underline disabled:opacity-50"
                     disabled={pending}
                     onClick={() =>
                       start(async () => {
@@ -372,7 +377,7 @@ function ViewAllPanel({
         <ul className="space-y-0.5 border-t pt-2">
           {events.map((e, i) => (
             <li key={i} className="flex flex-wrap items-center gap-2 tabular-nums text-xs text-muted-foreground">
-              <span className={e.event === "signed" ? "font-bold text-green-700 dark:text-green-400" : undefined}>
+              <span className={e.event === "signed" ? "text-foreground" : undefined}>
                 {e.event === "signed" ? "contract SIGNED" : "contract opened"}
               </span>
               <span>— {e.ip ?? "unknown IP"}</span>
@@ -381,7 +386,7 @@ function ViewAllPanel({
                   href={`https://ipinfo.io/${encodeURIComponent(e.ip)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline"
+                  className="text-msg-link hover:underline"
                 >
                   check location
                 </a>

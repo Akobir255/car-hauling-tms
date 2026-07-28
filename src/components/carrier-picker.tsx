@@ -115,13 +115,13 @@ export function CarrierPicker({
         }}
         placeholder={placeholder}
         autoComplete="off"
-        className="h-8 bg-white text-sm text-foreground"
+        className="h-8 bg-card text-sm text-foreground"
       />
       {showList && (
         <ul
           id={listId}
           role="listbox"
-          className="absolute z-30 mt-1 max-h-56 w-full min-w-64 overflow-auto rounded-md border bg-popover p-1 text-sm text-popover-foreground shadow-md"
+          className="absolute z-30 mt-1 max-h-56 w-full min-w-64 overflow-auto rounded-md border bg-popover p-1 text-sm text-popover-foreground"
         >
           {options.map((c, i) => (
             <li key={c.id} id={`${listId}-${i}`} role="option" aria-selected={i === active}>
@@ -129,13 +129,13 @@ export function CarrierPicker({
                 type="button"
                 tabIndex={-1}
                 className={cn(
-                  "block w-full rounded px-2 py-1 text-left hover:bg-accent hover:text-accent-foreground",
+                  "block w-full rounded-md px-2 py-1 text-left hover:bg-accent hover:text-accent-foreground",
                   i === active && "bg-accent text-accent-foreground"
                 )}
                 onMouseEnter={() => setActive(i)}
                 onClick={() => pick(c)}
               >
-                <span className="block truncate font-medium">{c.name}</span>
+                <span className="block truncate">{c.name}</span>
                 <span className="block truncate text-xs text-muted-foreground">
                   {[c.phone, [c.city, c.state].filter(Boolean).join(", "), c.source?.toUpperCase()]
                     .filter(Boolean)

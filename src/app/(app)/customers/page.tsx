@@ -22,7 +22,7 @@ export default async function CustomersPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Customers</h1>
+          <h1 className="text-[15px]">Customers</h1>
           <p className="text-sm text-muted-foreground">
             {customers.length} customer{customers.length === 1 ? "" : "s"}
           </p>
@@ -32,24 +32,26 @@ export default async function CustomersPage() {
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
 
-      <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
-        <table className="w-full border-collapse text-[15px]">
+      {/* The page is flat white now, so the border is the only thing making
+          this read as a box — no shadow, per the spec. */}
+      <div className="overflow-x-auto rounded-lg border bg-card">
+        <table className="w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b bg-muted/50 text-left text-sm font-bold uppercase tracking-wide text-foreground">
-              <th className="px-4 py-3">Contact</th>
-              <th className="px-4 py-3">Phone / Email</th>
-              <th className="px-4 py-3">Source</th>
-              <th className="px-4 py-3">Added</th>
-              <th className="px-4 py-3">Flags</th>
+            <tr className="border-b text-left text-sm text-msg-header">
+              <th className="px-4 py-3 font-normal">Contact</th>
+              <th className="px-4 py-3 font-normal">Phone / Email</th>
+              <th className="px-4 py-3 font-normal">Source</th>
+              <th className="px-4 py-3 font-normal">Added</th>
+              <th className="px-4 py-3 font-normal">Flags</th>
             </tr>
           </thead>
           <tbody>
             {customers.map((customer) => (
-              <tr key={customer.id} className="border-b last:border-b-0 hover:bg-muted/40">
+              <tr key={customer.id} className="border-b last:border-b-0 hover:bg-msg-hover">
                 <td className="px-4 py-3.5">
                   <Link
                     href={`/customers/${customer.id}`}
-                    className="font-semibold text-primary hover:underline"
+                    className="text-msg-link hover:underline"
                   >
                     {customer.contact_name}
                   </Link>
@@ -60,13 +62,14 @@ export default async function CustomersPage() {
                 <td className="px-4 py-3.5">
                   {customer.phone && (
                     <p className="flex items-center gap-1.5 tabular-nums">
-                      <Phone className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      {/* Row-icon palette from the spec: phone ink, email red. */}
+                      <Phone className="size-3.5 shrink-0 text-foreground" aria-hidden="true" />
                       {formatPhone(customer.phone)}
                     </p>
                   )}
                   {customer.email && (
                     <p className="flex items-center gap-1.5 text-muted-foreground">
-                      <Mail className="size-3.5 shrink-0" aria-hidden="true" />
+                      <Mail className="size-3.5 shrink-0 text-destructive" aria-hidden="true" />
                       <span className="max-w-56 truncate">{customer.email}</span>
                     </p>
                   )}

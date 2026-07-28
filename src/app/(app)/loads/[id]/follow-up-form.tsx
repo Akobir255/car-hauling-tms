@@ -40,10 +40,10 @@ export function FollowUpForm({
   return (
     <div className="space-y-3">
       {current && (
-        <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-sm">
+        <div className="flex items-center justify-between rounded-md bg-muted px-3 py-2 text-sm">
           <p>
             Next follow-up:{" "}
-            <span className="font-medium">
+            <span className="tabular-nums">
               {current.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
             </span>
             {load.follow_up_note ? (

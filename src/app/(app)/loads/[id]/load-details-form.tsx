@@ -40,8 +40,8 @@ function EndpointFields({
   const v = (field: string) => (load as unknown as Record<string, string | null>)[field] ?? "";
   return (
     <fieldset className="min-w-0 space-y-3">
-      <legend className="flex items-center gap-1.5 pb-1 text-xs font-semibold text-muted-foreground">
-        <MapPin className="size-3.5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+      <legend className="flex items-center gap-1.5 pb-1 text-xs text-msg-header">
+        <MapPin className="size-3.5 text-msg-shipper" aria-hidden="true" />
         {title}
       </legend>
       <div className="space-y-1.5">
@@ -159,7 +159,7 @@ export function LoadDetailsForm({
     >
       {/* The old system's header strip: Loadboard + Campaign sit above the
           record, deciding where it posts and which campaign it belongs to. */}
-      <div className="flex flex-wrap items-end gap-4 rounded-lg border bg-muted/40 px-4 py-3">
+      <div className="flex flex-wrap items-end gap-4 rounded-lg border bg-muted px-4 py-3">
         <div className="space-y-1.5">
           <FieldLabel htmlFor="loadboard">Loadboard</FieldLabel>
           <NativeSelect id="loadboard" name="loadboard" defaultValue={load.loadboard ?? "all"} className="w-40">
@@ -243,10 +243,13 @@ export function LoadDetailsForm({
               </div>
             </div>
             <div className="space-y-1.5">
-              <FieldLabel htmlFor="notes">
+              {/* The one 700-weight string in the spec. msgplane also paints it
+                  #2196f3, but that is 3.1:1 as text — the emphasis comes from
+                  weight and the icon keeps the hue. */}
+              <FieldLabel htmlFor="notes" className="text-sm font-bold text-foreground">
                 <span className="inline-flex items-center gap-1">
-                  <StickyNote className="size-3" aria-hidden="true" />
-                  Notes from shipper
+                  <StickyNote className="size-3 text-msg-shipper" aria-hidden="true" />
+                  Notes from Shipper
                 </span>
               </FieldLabel>
               <Textarea
@@ -275,7 +278,7 @@ export function LoadDetailsForm({
                 contract's signing page asks the customer for card details.
                 The marker input keeps partial forms from resetting the flag. */}
             <input type="hidden" name="require_card_present" value="1" />
-            <label className="flex items-center gap-2 text-sm font-medium">
+            <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 name="contract_requires_card"
@@ -392,7 +395,9 @@ export function LoadDetailsForm({
       )}
 
       {/* Sticky action bar: the one place Save lives, always in reach. */}
-      <div className="sticky bottom-0 z-10 -mx-6 border-t bg-background/95 px-6 py-3 backdrop-blur">
+      {/* bg-card, not bg-background: the two were different colors only while
+          the page was gray, and this bar sits inside a card. */}
+      <div className="sticky bottom-0 z-10 -mx-6 border-t bg-card/95 px-6 py-3 backdrop-blur">
         <div className="flex items-center justify-end gap-3">
           {state.error && <p className="mr-auto text-sm text-destructive">{state.error}</p>}
           {dirty && !pending && !state.error && (

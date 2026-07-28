@@ -46,7 +46,7 @@ export default async function EditCustomerPage({
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{customer.contact_name}</h1>
+        <h1 className="text-[15px]">{customer.contact_name}</h1>
         {profile.role === "admin" && (
           <DeleteButton
             onDelete={boundDelete}

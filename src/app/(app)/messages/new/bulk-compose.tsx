@@ -242,7 +242,7 @@ export function BulkCompose({
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">
+          <h2 className="text-sm text-msg-header">
             Recipients — {effectiveSelected.length} selected
           </h2>
           <Button type="button" variant="outline" size="sm" onClick={toggleAllVisible}>
@@ -265,14 +265,14 @@ export function BulkCompose({
           {visible.map((c) => (
             <label
               key={c.id}
-              className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
+              className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-msg-hover"
             >
               <input
                 type="checkbox"
                 checked={selected.has(c.id)}
                 onChange={() => toggle(c.id)}
               />
-              <span className="font-medium">{c.contact_name}</span>
+              <span>{c.contact_name}</span>
               <span className="truncate text-muted-foreground">
                 {c.company_name ? `${c.company_name} · ` : ""}
                 {isEmail ? c.email : c.phone}
@@ -286,7 +286,7 @@ export function BulkCompose({
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold">Message</h2>
+        <h2 className="text-sm text-msg-header">Message</h2>
 
         {/* Channel switch — drives eligibility, the editor, and validation. */}
         <input type="hidden" name="channel" value={channel} />
@@ -298,9 +298,10 @@ export function BulkCompose({
               disabled={smsSending}
               onClick={() => setChannel(c)}
               className={
+                // Selected segment takes the coral, same as the list tabs.
                 channel === c
-                  ? "rounded px-3 py-1 text-sm font-semibold bg-primary text-primary-foreground"
-                  : "rounded px-3 py-1 text-sm text-muted-foreground hover:text-foreground"
+                  ? "rounded-md bg-msg-selected px-3 py-1 text-sm text-msg-selected-foreground"
+                  : "rounded-md px-3 py-1 text-sm text-muted-foreground hover:text-foreground"
               }
             >
               {c === "sms" ? "SMS" : "Email"}
@@ -396,9 +397,9 @@ export function BulkCompose({
 
         {!isEmail && smsProgress && (
           <div className="space-y-1.5 rounded-md border px-3 py-2">
-            <div className="h-2 w-full overflow-hidden rounded bg-muted">
+            <div className="h-2 w-full overflow-hidden rounded-md bg-muted">
               <div
-                className="h-full rounded bg-primary transition-all"
+                className="h-full rounded-md bg-primary transition-all"
                 style={{
                   width: `${smsProgress.total ? Math.round((smsProgress.done / smsProgress.total) * 100) : 0}%`,
                 }}

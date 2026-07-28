@@ -12,7 +12,10 @@ export function CoiBadge({ expiryDate }: { expiryDate: string | null }) {
   }
   if (days <= 30) {
     return (
-      <Badge className="border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+      // --chart-2 is msgplane's warning orange (#ff9800, lifted to #ffb74d in
+      // dark). It carries the border and the tint only — the text stays on
+      // --foreground, since neither orange clears 4.5:1 as body copy.
+      <Badge className="border-chart-2 bg-chart-2/15 text-foreground">
         Expires {formatDate(expiryDate)} ({days}d)
       </Badge>
     );

@@ -22,7 +22,7 @@ export default async function TemplatesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Message templates</h1>
+        <h1 className="text-[15px]">Message templates</h1>
         <Button render={<Link href="/messages/templates/new" />}>New template</Button>
       </div>
 
@@ -37,8 +37,8 @@ export default async function TemplatesPage() {
         <TableBody>
           {templates.map((t) => (
             <TableRow key={t.id}>
-              <TableCell className="font-medium">
-                <Link href={`/messages/templates/${t.id}`} className="hover:underline">
+              <TableCell>
+                <Link href={`/messages/templates/${t.id}`} className="text-msg-link hover:underline">
                   {t.name}
                 </Link>
               </TableCell>

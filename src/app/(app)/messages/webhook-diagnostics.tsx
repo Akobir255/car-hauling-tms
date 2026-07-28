@@ -87,11 +87,11 @@ export async function WebhookDiagnostics() {
         )}
 
         <div>
-          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <p className="mb-2 text-xs text-msg-header">
             Last {events.length} webhook receipt{events.length === 1 ? "" : "s"}
           </p>
           {events.length === 0 ? (
-            <p className="rounded-md bg-muted/50 px-3 py-2 text-muted-foreground">
+            <p className="rounded-md bg-muted px-3 py-2 text-muted-foreground">
               No receipts logged yet. If you&apos;ve texted the number and nothing shows here,
               RingCentral isn&apos;t reaching the webhook — the subscription is likely inactive or the
               number isn&apos;t provisioned for inbound SMS.
@@ -100,12 +100,12 @@ export async function WebhookDiagnostics() {
             <div className="overflow-x-auto rounded-md border">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left text-xs text-muted-foreground">
-                    <th className="px-3 py-2 font-medium">When</th>
-                    <th className="px-3 py-2 font-medium">From</th>
-                    <th className="px-3 py-2 font-medium">Type/Dir</th>
-                    <th className="px-3 py-2 font-medium">Outcome</th>
-                    <th className="px-3 py-2 font-medium">Detail</th>
+                  <tr className="border-b text-left text-xs text-msg-header">
+                    <th className="px-3 py-2 font-normal">When</th>
+                    <th className="px-3 py-2 font-normal">From</th>
+                    <th className="px-3 py-2 font-normal">Type/Dir</th>
+                    <th className="px-3 py-2 font-normal">Outcome</th>
+                    <th className="px-3 py-2 font-normal">Detail</th>
                   </tr>
                 </thead>
                 <tbody>

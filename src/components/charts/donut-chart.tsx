@@ -78,8 +78,10 @@ export function DonutChart({
           })}
         </svg>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <p className="text-xl font-semibold tabular-nums">{total}</p>
-          <p className="text-[11px] text-muted-foreground">{totalLabel}</p>
+          {/* Weight 400 at the one display size the spec allows itself — see
+              departure #4; the ring around it is already the emphasis. */}
+          <p className="text-xl tabular-nums">{total}</p>
+          <p className="text-xs text-muted-foreground">{totalLabel}</p>
         </div>
       </div>
 
@@ -88,8 +90,8 @@ export function DonutChart({
           <li
             key={seg.label}
             className={cn(
-              "flex items-center gap-2 rounded px-1.5 py-0.5 text-sm transition-colors",
-              hover === i && "bg-muted/60"
+              "flex items-center gap-2 rounded-md px-1.5 py-0.5 text-sm transition-colors",
+              hover === i && "bg-msg-hover"
             )}
             onMouseEnter={() => setHover(i)}
             onMouseLeave={() => setHover(null)}

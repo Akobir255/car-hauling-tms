@@ -129,7 +129,9 @@ export function BulkActionBar({ reps, canReassign }: { reps: Rep[]; canReassign:
       )}
 
       <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
-        <div className="w-full max-w-3xl rounded-xl border bg-card shadow-lg">
+        {/* Shadows belong to the nav bar alone, so the bar lifts off the page
+            by taking msgplane's raised fill plus the border gray. */}
+        <div className="w-full max-w-3xl rounded-md border bg-msg-rail">
           {panel === "reassign" && (
             <div className="flex flex-wrap items-end gap-2 border-b p-3">
               <NativeSelect
@@ -182,7 +184,7 @@ export function BulkActionBar({ reps, canReassign }: { reps: Rep[]; canReassign:
           )}
 
           <div className="flex flex-wrap items-center gap-2 p-2 pl-4">
-            <span className="text-sm font-semibold">
+            <span className="text-sm">
               {ids.length} record{ids.length === 1 ? "" : "s"} selected
             </span>
             <div className="ml-auto flex flex-wrap items-center gap-2">

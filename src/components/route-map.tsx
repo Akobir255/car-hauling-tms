@@ -135,9 +135,9 @@ export function RouteMap({
           {busy ? "Calculating..." : "Calculate route"}
         </Button>
         {result && (
-          <span className="font-medium tabular-nums">
+          <span className="tabular-nums">
             {result.miles.toLocaleString()} mi
-            <span className="ml-2 font-normal text-muted-foreground">
+            <span className="ml-2 text-muted-foreground">
               ~{formatDrive(result.hours)} drive
             </span>
           </span>

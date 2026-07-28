@@ -80,9 +80,11 @@ export function FilterBar({ values, matched }: { values: FilterValues; matched: 
     router.push(next.toString() ? `?${next.toString()}` : "?");
   };
 
+  // msgplane's page search bar is a flat #f1f3f4 fill with no edge — the
+  // borderless tint is what marks this row as chrome rather than content.
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
-      <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md bg-msg-rail px-3 py-2 text-sm">
+      <span className="flex items-center gap-1.5 text-muted-foreground">
         <Filter className="size-3.5" aria-hidden="true" />
         Filter
       </span>
@@ -94,7 +96,7 @@ export function FilterBar({ values, matched }: { values: FilterValues; matched: 
             aria-label={f.label}
             value={values[f.key] ?? ""}
             onChange={(e) => setParam(f.key, e.target.value)}
-            className="h-8 w-auto min-w-32 text-sm"
+            className="h-[30px] w-auto min-w-32 text-sm"
           >
             {f.options.map((o) => (
               <option key={o.value} value={o.value}>
@@ -111,7 +113,7 @@ export function FilterBar({ values, matched }: { values: FilterValues; matched: 
           <button
             type="button"
             onClick={clearAll}
-            className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline"
+            className="focus-ring inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
           >
             <X className="size-3.5" aria-hidden="true" />
             clear

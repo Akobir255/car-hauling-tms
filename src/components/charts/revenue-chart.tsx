@@ -51,7 +51,9 @@ export function RevenueChart({ points }: { points: RevenuePoint[] }) {
   }
 
   return (
-    <div className="relative text-blue-600 dark:text-blue-500">
+    // --chart-1 is msgplane's structural blue (#1565c0 / #64b5f6 dark); every
+    // other tile on this dashboard drives its color from the chart-* tokens.
+    <div className="relative text-chart-1">
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
@@ -82,7 +84,7 @@ export function RevenueChart({ points }: { points: RevenuePoint[] }) {
               x={PAD.left - 8}
               y={y(v) + 3}
               textAnchor="end"
-              className="fill-muted-foreground text-[10px] tabular-nums"
+              className="fill-muted-foreground text-xs tabular-nums"
             >
               {money(v)}
             </text>
@@ -104,7 +106,7 @@ export function RevenueChart({ points }: { points: RevenuePoint[] }) {
               x={x(i)}
               y={H - 6}
               textAnchor="middle"
-              className="fill-muted-foreground text-[10px]"
+              className="fill-muted-foreground text-xs"
             >
               {dateLabel(p.date)}
             </text>
@@ -149,14 +151,14 @@ export function RevenueChart({ points }: { points: RevenuePoint[] }) {
 
       {hovered && hover != null && (
         <div
-          className="pointer-events-none absolute -top-1 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md"
+          className="pointer-events-none absolute -top-1 rounded-md border bg-popover px-2.5 py-1.5 text-xs"
           style={{
             left: `${(x(hover) / W) * 100}%`,
             transform: `translateX(${hover > points.length / 2 ? "-105%" : "5%"})`,
           }}
         >
           <p className="text-muted-foreground">{dateLabel(hovered.date)}</p>
-          <p className="font-semibold tabular-nums text-foreground">
+          <p className="tabular-nums text-foreground">
             ${hovered.value.toLocaleString("en-US")}
           </p>
         </div>

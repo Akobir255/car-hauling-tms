@@ -58,7 +58,7 @@ export default async function TicketsPage({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Tickets</h1>
+          <h1 className="text-[15px]">Tickets</h1>
           <p className="text-sm text-muted-foreground">
             Internal issues — carrier problems, damage claims, billing disputes.
           </p>
@@ -66,7 +66,10 @@ export default async function TicketsPage({
         <Button render={<Link href="/tickets/new" />}>New ticket</Button>
       </div>
 
-      <div className="overflow-x-auto border-b pb-1">
+      {/* msgplane's tab strip: a row of plain boxed buttons with no rule
+          under it. Selected is the coral fill; the label takes ink rather
+          than the measured white, which fails contrast on that coral. */}
+      <div className="overflow-x-auto">
         <div className="flex items-center gap-1">
           {TABS.map((t) => {
             const isActive = active.key === t.key;
@@ -76,17 +79,17 @@ export default async function TicketsPage({
                 href={t.key === TABS[0].key ? "/tickets" : `/tickets?tab=${t.key}`}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm transition-colors",
+                  "focus-ring flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-0.5 text-sm transition-colors",
                   isActive
-                    ? "bg-primary font-medium text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "border-msg-selected bg-msg-selected text-msg-selected-foreground"
+                    : "bg-card text-foreground hover:bg-msg-hover"
                 )}
               >
                 {t.label}
                 <span
                   className={cn(
-                    "rounded-full px-1.5 py-0.5 text-[11px] font-medium leading-none tabular-nums",
-                    isActive ? "bg-white/25 text-white" : "bg-muted text-muted-foreground"
+                    "rounded-md px-1.5 py-0.5 text-xs leading-none tabular-nums",
+                    isActive ? "bg-black/10 text-msg-selected-foreground" : "bg-muted text-muted-foreground"
                   )}
                 >
                   {counts(t)}
@@ -99,21 +102,21 @@ export default async function TicketsPage({
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
 
-      <div className="divide-y rounded-lg border bg-card shadow-sm">
+      <div className="divide-y rounded-lg border bg-card">
         {tickets.map((t) => {
           const owner = t.assigned_to ? byId.get(t.assigned_to) : null;
           return (
             <Link
               key={t.id}
               href={`/tickets/${t.id}`}
-              className="flex items-start gap-4 px-4 py-3 hover:bg-muted/40"
+              className="flex items-start gap-4 px-4 py-3 hover:bg-msg-hover"
             >
-              <span className="w-16 shrink-0 pt-0.5 text-sm font-semibold tabular-nums text-primary">
+              <span className="w-16 shrink-0 pt-0.5 text-sm tabular-nums text-msg-link">
                 #{t.ticket_number}
               </span>
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold">{t.subject}</span>
+                  <span className="text-sm">{t.subject}</span>
                   <TicketStatusBadge status={t.status} />
                   <TicketPriorityBadge priority={t.priority} />
                 </div>

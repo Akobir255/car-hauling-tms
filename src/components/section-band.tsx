@@ -19,11 +19,12 @@ export function SectionBand({
   id?: string;
 }) {
   return (
-    <section id={id} className={cn("overflow-hidden rounded-lg border bg-card shadow-sm", className)}>
+    <section id={id} className={cn("overflow-hidden rounded-md border border-border bg-card", className)}>
       {/* Solid title bar — each section announces itself, msgplane-style, so
           long forms never read as one undivided sheet. */}
       <div className="flex items-center justify-between gap-3 bg-primary px-5 py-3 text-primary-foreground">
-        <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
+        {/* 15px is the root size, and msgplane letter-spaces nothing. */}
+        <h2 className="text-[15px]">{title}</h2>
         {action}
       </div>
       <div className={cn("p-6", bodyClassName)}>{children}</div>
@@ -31,8 +32,9 @@ export function SectionBand({
   );
 }
 
-// A labeled value: a small muted uppercase label above a readable value. The
-// value is the loud element, the label the quiet one.
+// A labeled value: a small brown label above a readable value. The value is the
+// loud element, the label the quiet one. The label is a column header wearing a
+// different layout, so it takes the same brown the table headers do.
 export function Field({
   label,
   children,
@@ -44,14 +46,15 @@ export function Field({
 }) {
   return (
     <div className={cn("space-y-1", className)}>
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <div className="text-[15px] leading-snug text-foreground">{children}</div>
+      {/* msgplane has no uppercase, letter-spaced micro-labels anywhere. */}
+      <p className="text-xs text-msg-header">{label}</p>
+      <div className="text-sm leading-snug text-foreground">{children}</div>
     </div>
   );
 }
 
 // One "label … value" line for the money/dates grids. Divider + roomy padding
-// so a long column stays scannable; the value is bold and dark, the label muted.
+// so a long column stays scannable.
 export function BandRow({
   label,
   value,
@@ -62,15 +65,17 @@ export function BandRow({
   valueClassName?: string;
 }) {
   // Empty fields ("—") shouldn't carry the same weight as real data — dim the
-  // whole row so filled dates/amounts are what the eye lands on.
+  // whole row so filled dates/amounts are what the eye lands on. The dimmed
+  // tier is --muted-foreground, not an opacity step: the old /35 and /45 put
+  // real body text at roughly 3:1, under the 4.5:1 floor.
   const empty = value === "—" || value === "" || value == null;
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-border/60 py-2 last:border-0">
-      <span className={cn("text-sm", empty ? "text-foreground/45" : "text-foreground")}>{label}</span>
+    <div className="flex items-baseline justify-between gap-4 border-b border-msg-rule py-2 last:border-0">
+      <span className={cn("text-sm", empty ? "text-muted-foreground" : "text-foreground")}>{label}</span>
       <span
         className={cn(
           "text-sm tabular-nums",
-          empty ? "font-normal text-foreground/35" : "font-semibold text-foreground",
+          empty ? "text-muted-foreground" : "text-foreground",
           valueClassName
         )}
       >

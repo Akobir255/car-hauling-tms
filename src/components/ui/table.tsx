@@ -44,7 +44,7 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
     <tfoot
       data-slot="table-footer"
       className={cn(
-        "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
+        "border-t bg-muted [&>tr]:last:border-b-0",
         className
       )}
       {...props}
@@ -57,7 +57,9 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
+        // --msg-rule is a hair lighter than --border; msgplane keeps the heavier
+        // gray for boxes and this softer one for row separators.
+        "border-b border-msg-rule transition-colors hover:bg-msg-hover has-aria-expanded:bg-msg-hover data-[state=selected]:bg-msg-hover",
         className
       )}
       {...props}
@@ -70,7 +72,12 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+        // Brown headers are msgplane's most recognisable tell: they sit a full
+        // hue away from the data under them, where a gray would just read as
+        // faded ink. font-normal is not redundant: preflight has no th reset,
+        // so without it the UA sheet's bold stands and the spec's flat 400
+        // breaks on every shared table.
+        "h-10 px-2 text-left align-middle font-normal whitespace-nowrap text-msg-header [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}

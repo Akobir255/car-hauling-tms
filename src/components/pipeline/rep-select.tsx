@@ -28,7 +28,7 @@ export function RepSelect({
         else next.delete("rep");
         router.push(`?${next.toString()}`);
       }}
-      className="h-8 w-auto min-w-20 text-sm"
+      className="h-[30px] w-auto min-w-20 text-sm"
     >
       <option value="">All</option>
       <option value={profileId}>My</option>

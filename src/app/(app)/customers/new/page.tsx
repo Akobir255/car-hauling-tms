@@ -17,7 +17,7 @@ export default async function NewCustomerPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Add customer</h1>
+      <h1 className="text-[15px]">Add customer</h1>
       <CustomerForm action={createCustomer} salesReps={salesReps} canAssignOwner={canAssignOwner} />
     </div>
   );
