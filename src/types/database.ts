@@ -23,7 +23,18 @@ export type LoadStatus =
   | "cancelled";
 
 export type TransportType = "open" | "enclosed" | "driveaway";
-export type VehicleType = "sedan" | "suv" | "pickup" | "van" | "motorcycle" | "other";
+export type VehicleType =
+  | "sedan"
+  | "suv"
+  | "pickup"
+  | "van"
+  | "motorcycle"
+  | "boat"
+  | "rv"
+  | "atv"
+  | "trailer"
+  | "heavy_equipment"
+  | "other";
 export type VehicleCondition = "running" | "non_running";
 
 export interface Profile {
@@ -328,6 +339,11 @@ export const VEHICLE_TYPES: VehicleType[] = [
   "pickup",
   "van",
   "motorcycle",
+  "boat",
+  "rv",
+  "atv",
+  "trailer",
+  "heavy_equipment",
   "other",
 ];
 
@@ -339,5 +355,10 @@ export const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
   pickup: "Pickup Truck",
   van: "Van",
   motorcycle: "Motorcycle",
+  boat: "Boat",
+  rv: "RV / Motorhome",
+  atv: "ATV / UTV",
+  trailer: "Trailer",
+  heavy_equipment: "Heavy Equipment",
   other: "Other",
 };
