@@ -74,16 +74,21 @@ export function FilterBar({ values, matched }: { values: FilterValues; matched: 
   // display:contents at md.
   const [open, setOpen] = useState(false);
 
+  // Narrowing 400 records to 12 while sitting on page 3 asks for rows 300-399
+  // of a 12-row result and renders an empty table. Any filter change goes back
+  // to page one.
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(params.toString());
     if (value) next.set(key, value);
     else next.delete(key);
+    next.delete("page");
     router.push(`?${next.toString()}`);
   };
 
   const clearAll = () => {
     const next = new URLSearchParams(params.toString());
     FILTERS.forEach((f) => next.delete(f.key));
+    next.delete("page");
     router.push(next.toString() ? `?${next.toString()}` : "?");
   };
 
