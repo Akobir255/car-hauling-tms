@@ -90,7 +90,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
       .limit(30),
     supabase
       .from("load_notes")
-      .select("id, body, author_id, created_at, updated_at")
+      .select("id, body, author_id, imported_author, created_at, updated_at")
       .eq("load_id", id)
       .order("created_at", { ascending: false })
       .limit(50),
@@ -133,6 +133,8 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
     id: string;
     body: string;
     author_id: string | null;
+    /** Set only on rows imported from msgplane, where author_id is null. */
+    imported_author: string | null;
     created_at: string;
     updated_at: string;
   };
@@ -213,7 +215,11 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
       body: n.body,
       created_at: n.created_at,
       updated_at: n.updated_at,
-      authorName: author?.full_name || author?.email || "Unknown",
+      // Notes carried over from msgplane have no local author — the person who
+      // wrote them has no account here. Their name rides along on the row, so
+      // an imported note reads as theirs rather than as "Unknown".
+      authorName:
+        author?.full_name || author?.email || n.imported_author || "Unknown",
       canEdit: canManageCarrier || n.author_id === profile.id,
       attachments: attachmentsByNote.get(n.id) ?? [],
     };
