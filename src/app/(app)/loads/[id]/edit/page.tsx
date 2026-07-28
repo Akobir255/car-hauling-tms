@@ -114,6 +114,15 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
           carriers={(carriers ?? []) as Carrier[]}
           canManageCarrier={canManageCarrier}
           campaigns={campaigns}
+          shipper={
+            customer
+              ? {
+                  name: customer.contact_name,
+                  company: customer.company_name ?? "",
+                  phone: customer.phone ?? "",
+                }
+              : null
+          }
         />
       </SectionBand>
 

@@ -34,18 +34,26 @@ const EMPTY_ENDPOINT: EndpointState = {
   date: "",
 };
 
+type CopyOption = { label: string; checked: boolean; onToggle: (checked: boolean) => void };
+
 function EndpointFields({
   prefix,
   title,
   values,
   onField,
+  locked,
+  copyOptions,
 }: {
   prefix: "pickup" | "delivery";
   title: string;
   values: EndpointState;
   onField: (field: keyof EndpointState, value: string) => void;
+  /** A "copy … info" box is ticked: the contact pair tracks its source. */
+  locked: boolean;
+  copyOptions: CopyOption[];
 }) {
   const dateName = prefix === "pickup" ? "pickup_ready_date" : "delivery_eta";
+  const lockedClass = locked ? "bg-muted text-muted-foreground" : undefined;
   return (
     <fieldset className="min-w-0 space-y-3">
       <legend className="flex items-center gap-1.5 pb-1 text-xs text-msg-header">
@@ -95,6 +103,26 @@ function EndpointFields({
           />
         </div>
       </div>
+      {/* msgplane's copy boxes sit directly above the contact block, and the
+          order matters: shipper first, then pickup on the destination side. */}
+      {copyOptions.length > 0 && (
+        <div className="flex flex-wrap gap-x-6 gap-y-1">
+          {copyOptions.map((o) => (
+            <label
+              key={o.label}
+              className="flex cursor-pointer items-center gap-2 text-sm max-md:min-h-12"
+            >
+              <input
+                type="checkbox"
+                checked={o.checked}
+                onChange={(e) => o.onToggle(e.target.checked)}
+                className="size-4 cursor-pointer accent-primary"
+              />
+              {o.label}
+            </label>
+          ))}
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
         <div className="space-y-1.5">
           <FieldLabel htmlFor={`${prefix}_contact_name`}>Contact</FieldLabel>
@@ -103,6 +131,8 @@ function EndpointFields({
             name={`${prefix}_contact_name`}
             value={values.contact_name}
             onChange={(e) => onField("contact_name", e.target.value)}
+            readOnly={locked}
+            className={lockedClass}
           />
         </div>
         <div className="space-y-1.5">
@@ -113,6 +143,8 @@ function EndpointFields({
             type="tel"
             value={values.contact_phone}
             onChange={(e) => onField("contact_phone", e.target.value)}
+            readOnly={locked}
+            className={lockedClass}
           />
         </div>
       </div>
@@ -137,6 +169,12 @@ export function NewLoadForm() {
 
   const [pickup, setPickup] = useState<EndpointState>({ ...EMPTY_ENDPOINT });
   const [delivery, setDelivery] = useState<EndpointState>({ ...EMPTY_ENDPOINT });
+  // Controlled only so the "copy shipper info" boxes have a live source: on a
+  // new order the shipper is being typed in the same breath as the pickup.
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [pickupCopy, setPickupCopy] = useState(false);
+  const [deliveryCopy, setDeliveryCopy] = useState<"shipper" | "pickup" | null>(null);
   const [transport, setTransport] = useState("open");
   const [rate, setRate] = useState("");
   const [reservation, setReservation] = useState("");
@@ -252,6 +290,35 @@ export function NewLoadForm() {
   const deliveryField = (field: keyof EndpointState, value: string) =>
     setDelivery((prev) => ({ ...prev, [field]: value }));
 
+  // A ticked box MIRRORS its source rather than pasting once, so the contact
+  // keeps up while the shipper's name is still being typed. Only the contact
+  // pair is copied — addresses and dates are never the same on both ends.
+  const pickupEffective: EndpointState = pickupCopy
+    ? { ...pickup, contact_name: customerName, contact_phone: customerPhone }
+    : pickup;
+  const deliveryEffective: EndpointState =
+    deliveryCopy === "shipper"
+      ? { ...delivery, contact_name: customerName, contact_phone: customerPhone }
+      : deliveryCopy === "pickup"
+        ? {
+            ...delivery,
+            contact_name: pickupEffective.contact_name,
+            contact_phone: pickupEffective.contact_phone,
+          }
+        : delivery;
+
+  // Unticking KEEPS what was copied — those values belong to the order now.
+  const togglePickupCopy = (on: boolean) => {
+    if (!on) setPickup(pickupEffective);
+    setPickupCopy(on);
+    setDirty(true);
+  };
+  const toggleDeliveryCopy = (source: "shipper" | "pickup", on: boolean) => {
+    if (!on) setDelivery(deliveryEffective);
+    setDeliveryCopy(on ? source : null);
+    setDirty(true);
+  };
+
   return (
     <form
       action={formAction}
@@ -268,11 +335,23 @@ export function NewLoadForm() {
             <FieldLabel htmlFor="customer_name" required>
               Customer name
             </FieldLabel>
-            <Input id="customer_name" name="customer_name" required />
+            <Input
+              id="customer_name"
+              name="customer_name"
+              required
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <FieldLabel htmlFor="customer_phone">Phone</FieldLabel>
-            <Input id="customer_phone" name="customer_phone" type="tel" />
+            <Input
+              id="customer_phone"
+              name="customer_phone"
+              type="tel"
+              value={customerPhone}
+              onChange={(e) => setCustomerPhone(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <FieldLabel htmlFor="customer_email">Email</FieldLabel>
@@ -287,8 +366,35 @@ export function NewLoadForm() {
 
       <FormSection icon={MapPin} title="Origin & Destination">
         <div className="grid gap-x-8 gap-y-6 lg:grid-cols-2">
-          <EndpointFields prefix="pickup" title="Origin" values={pickup} onField={pickupField} />
-          <EndpointFields prefix="delivery" title="Destination" values={delivery} onField={deliveryField} />
+          <EndpointFields
+            prefix="pickup"
+            title="Origin"
+            values={pickupEffective}
+            onField={pickupField}
+            locked={pickupCopy}
+            copyOptions={[
+              { label: "copy shipper info", checked: pickupCopy, onToggle: togglePickupCopy },
+            ]}
+          />
+          <EndpointFields
+            prefix="delivery"
+            title="Destination"
+            values={deliveryEffective}
+            onField={deliveryField}
+            locked={deliveryCopy !== null}
+            copyOptions={[
+              {
+                label: "copy shipper info",
+                checked: deliveryCopy === "shipper",
+                onToggle: (on: boolean) => toggleDeliveryCopy("shipper", on),
+              },
+              {
+                label: "copy pickup info",
+                checked: deliveryCopy === "pickup",
+                onToggle: (on: boolean) => toggleDeliveryCopy("pickup", on),
+              },
+            ]}
+          />
         </div>
       </FormSection>
 

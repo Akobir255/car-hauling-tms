@@ -23,21 +23,80 @@ import type { LoadFormState } from "../actions";
 
 const initialState: LoadFormState = { error: null };
 
+// The four fields a "copy … info" checkbox writes.
+type ContactState = {
+  contact_name: string;
+  company: string;
+  contact_cell: string;
+  contact_phone: string;
+};
+
+/** The shipper as the customer record files them — the copy source. */
+export type ShipperContact = { name: string; company: string; phone: string };
+
+const EMPTY_CONTACT: ContactState = {
+  contact_name: "",
+  company: "",
+  contact_cell: "",
+  contact_phone: "",
+};
+
+function contactOf(load: Load, prefix: "pickup" | "delivery"): ContactState {
+  const v = (field: string) => (load as unknown as Record<string, string | null>)[field] ?? "";
+  return {
+    contact_name: v(`${prefix}_contact_name`),
+    company: v(`${prefix}_company`),
+    contact_cell: v(`${prefix}_contact_cell`),
+    contact_phone: v(`${prefix}_contact_phone`),
+  };
+}
+
+// The shipper has ONE phone on the customer record and msgplane files it as
+// the cell, which is what it almost always is — a mobile the rep already
+// texts. The landline stays empty rather than guessing.
+function contactOfShipper(shipper: ShipperContact): ContactState {
+  return {
+    contact_name: shipper.name,
+    company: shipper.company,
+    contact_cell: shipper.phone,
+    contact_phone: "",
+  };
+}
+
+type CopyOption = { label: string; checked: boolean; onToggle: (checked: boolean) => void };
+
 // One endpoint column of the msgplane-style Origin & Destination pair.
+//
+// The four contact fields are controlled, unlike the address fields above
+// them, because of the "copy … info" checkboxes: while one is ticked the
+// column MIRRORS its source, so correcting the shipper's name corrects it
+// everywhere it was copied to. Unticking keeps the copied values.
 function EndpointFields({
   prefix,
   title,
   load,
   dateField,
   dateLabel,
+  contact,
+  onContact,
+  locked,
+  copyOptions,
 }: {
   prefix: "pickup" | "delivery";
   title: string;
   load: Load;
   dateField: "pickup_ready_date" | "delivery_eta";
   dateLabel: string;
+  contact: ContactState;
+  onContact: (field: keyof ContactState, value: string) => void;
+  /** A copy is active: these fields track their source instead of the rep. */
+  locked: boolean;
+  copyOptions: CopyOption[];
 }) {
   const v = (field: string) => (load as unknown as Record<string, string | null>)[field] ?? "";
+  // Mirrored fields read as filled-in rather than editable, which is the whole
+  // signal that unticking the box is what hands them back.
+  const lockedClass = locked ? "bg-muted text-muted-foreground" : undefined;
   return (
     <fieldset className="min-w-0 space-y-3">
       <legend className="flex items-center gap-1.5 pb-1 text-xs text-msg-header">
@@ -65,14 +124,48 @@ function EndpointFields({
           <Input id={`${prefix}_zip`} name={`${prefix}_zip`} defaultValue={v(`${prefix}_zip`)} />
         </div>
       </div>
+      {/* msgplane's copy boxes sit directly above the contact block, and the
+          order matters: shipper first, then pickup on the destination side. */}
+      {copyOptions.length > 0 && (
+        <div className="flex flex-wrap gap-x-6 gap-y-1">
+          {copyOptions.map((o) => (
+            <label
+              key={o.label}
+              className="flex cursor-pointer items-center gap-2 text-sm max-md:min-h-12"
+            >
+              <input
+                type="checkbox"
+                checked={o.checked}
+                onChange={(e) => o.onToggle(e.target.checked)}
+                className="size-4 cursor-pointer accent-primary"
+              />
+              {o.label}
+            </label>
+          ))}
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
         <div className="space-y-1.5">
           <FieldLabel htmlFor={`${prefix}_contact_name`}>Contact</FieldLabel>
-          <Input id={`${prefix}_contact_name`} name={`${prefix}_contact_name`} defaultValue={v(`${prefix}_contact_name`)} />
+          <Input
+            id={`${prefix}_contact_name`}
+            name={`${prefix}_contact_name`}
+            value={contact.contact_name}
+            onChange={(e) => onContact("contact_name", e.target.value)}
+            readOnly={locked}
+            className={lockedClass}
+          />
         </div>
         <div className="space-y-1.5">
           <FieldLabel htmlFor={`${prefix}_company`}>Company</FieldLabel>
-          <Input id={`${prefix}_company`} name={`${prefix}_company`} defaultValue={v(`${prefix}_company`)} />
+          <Input
+            id={`${prefix}_company`}
+            name={`${prefix}_company`}
+            value={contact.company}
+            onChange={(e) => onContact("company", e.target.value)}
+            readOnly={locked}
+            className={lockedClass}
+          />
         </div>
         <div className="space-y-1.5">
           <FieldLabel htmlFor={`${prefix}_contact_cell`}>Phone cell</FieldLabel>
@@ -80,7 +173,10 @@ function EndpointFields({
             id={`${prefix}_contact_cell`}
             name={`${prefix}_contact_cell`}
             type="tel"
-            defaultValue={v(`${prefix}_contact_cell`)}
+            value={contact.contact_cell}
+            onChange={(e) => onContact("contact_cell", e.target.value)}
+            readOnly={locked}
+            className={lockedClass}
           />
         </div>
         <div className="space-y-1.5">
@@ -89,7 +185,10 @@ function EndpointFields({
             id={`${prefix}_contact_phone`}
             name={`${prefix}_contact_phone`}
             type="tel"
-            defaultValue={v(`${prefix}_contact_phone`)}
+            value={contact.contact_phone}
+            onChange={(e) => onContact("contact_phone", e.target.value)}
+            readOnly={locked}
+            className={lockedClass}
           />
         </div>
       </div>
@@ -126,17 +225,52 @@ export function LoadDetailsForm({
   carriers,
   canManageCarrier,
   campaigns = [],
+  shipper = null,
 }: {
   action: (state: LoadFormState, formData: FormData) => Promise<LoadFormState>;
   load: Load;
   carriers: Carrier[];
   canManageCarrier: boolean;
   campaigns?: string[];
+  /** Omitted when the customer record couldn't be read — no copy box then. */
+  shipper?: ShipperContact | null;
 }) {
   const [state, formAction, pending] = useActionState(action, initialState);
   const formRef = useRef<HTMLFormElement>(null);
   const [distance, setDistance] = useState(load.distance_miles?.toString() ?? "");
   const [dirty, setDirty] = useState(false);
+
+  // What the rep typed, kept separately from what a ticked box is mirroring,
+  // so unticking can hand the typed values back instead of the copy.
+  const [pickupTyped, setPickupTyped] = useState<ContactState>(() => contactOf(load, "pickup"));
+  const [deliveryTyped, setDeliveryTyped] = useState<ContactState>(() => contactOf(load, "delivery"));
+  const [pickupCopy, setPickupCopy] = useState(false);
+  const [deliveryCopy, setDeliveryCopy] = useState<"shipper" | "pickup" | null>(null);
+
+  const shipperContact = shipper ? contactOfShipper(shipper) : EMPTY_CONTACT;
+  const pickupContact = pickupCopy && shipper ? shipperContact : pickupTyped;
+  // Destination copying pickup while pickup copies the shipper resolves to the
+  // shipper, which is exactly what msgplane shows for a self-delivery.
+  const deliveryContact =
+    deliveryCopy === "shipper" && shipper
+      ? shipperContact
+      : deliveryCopy === "pickup"
+        ? pickupContact
+        : deliveryTyped;
+
+  // Unticking KEEPS what was copied. Those values are this order's own now,
+  // exactly as if the rep had typed them, and wiping four fields because
+  // somebody unticked a box is not a thing an order form should do.
+  const togglePickupCopy = (on: boolean) => {
+    if (!on) setPickupTyped(pickupContact);
+    setPickupCopy(on);
+    setDirty(true);
+  };
+  const toggleDeliveryCopy = (source: "shipper" | "pickup", on: boolean) => {
+    if (!on) setDeliveryTyped(deliveryContact);
+    setDeliveryCopy(on ? source : null);
+    setDirty(true);
+  };
 
   // The map reads the LIVE field values, so a rep can retype cities and hit
   // Calculate before ever saving.
@@ -205,6 +339,20 @@ export function LoadDetailsForm({
             load={load}
             dateField="pickup_ready_date"
             dateLabel="Ready date"
+            contact={pickupContact}
+            onContact={(field, value) => setPickupTyped((prev) => ({ ...prev, [field]: value }))}
+            locked={pickupCopy && Boolean(shipper)}
+            copyOptions={
+              shipper
+                ? [
+                    {
+                      label: "copy shipper info",
+                      checked: pickupCopy,
+                      onToggle: togglePickupCopy,
+                    },
+                  ]
+                : []
+            }
           />
           <EndpointFields
             prefix="delivery"
@@ -212,6 +360,25 @@ export function LoadDetailsForm({
             load={load}
             dateField="delivery_eta"
             dateLabel="ETA"
+            contact={deliveryContact}
+            onContact={(field, value) => setDeliveryTyped((prev) => ({ ...prev, [field]: value }))}
+            locked={deliveryCopy !== null}
+            copyOptions={[
+              ...(shipper
+                ? [
+                    {
+                      label: "copy shipper info",
+                      checked: deliveryCopy === "shipper",
+                      onToggle: (on: boolean) => toggleDeliveryCopy("shipper", on),
+                    },
+                  ]
+                : []),
+              {
+                label: "copy pickup info",
+                checked: deliveryCopy === "pickup",
+                onToggle: (on: boolean) => toggleDeliveryCopy("pickup", on),
+              },
+            ]}
           />
         </div>
       </FormSection>
