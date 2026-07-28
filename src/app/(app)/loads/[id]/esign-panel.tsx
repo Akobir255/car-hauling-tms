@@ -39,6 +39,7 @@ export function EsignPanel({
   token,
   signedAt,
   sentAt,
+  sentUndated = false,
   canManage,
   signedName,
   signedIp,
@@ -52,6 +53,8 @@ export function EsignPanel({
   token: string | null;
   signedAt: string | null;
   sentAt: string | null;
+  /** Imported order: a contract went out, send date unrecorded. */
+  sentUndated?: boolean;
   canManage: boolean;
   signedName?: string | null;
   signedIp?: string | null;
@@ -101,6 +104,16 @@ export function EsignPanel({
         ) : sentAt ? (
           <span className="rounded-md bg-chart-2/20 px-2.5 py-0.5 text-xs text-foreground">
             Sent {formatDate(sentAt)} · awaiting signature
+          </span>
+        ) : sentUndated ? (
+          // Imported from the old system, which recorded that a contract went
+          // out but never when. Saying "Not sent" here would be wrong; naming a
+          // date would be invented.
+          <span
+            className="rounded-md bg-chart-2/20 px-2.5 py-0.5 text-xs text-foreground"
+            title="Imported: the old system did not record a send date."
+          >
+            Sent · awaiting signature
           </span>
         ) : (
           <span className="rounded-md bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">

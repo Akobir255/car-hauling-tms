@@ -319,6 +319,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               token={load.contract_token}
               signedAt={load.date_signed}
               sentAt={load.contract_sent_at}
+              sentUndated={load.contract_sent}
               canManage={canManageCarrier}
               signedName={load.contract_signed_name}
               signedIp={load.contract_signed_ip}

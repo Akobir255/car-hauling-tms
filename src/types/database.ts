@@ -121,6 +121,8 @@ export interface Load {
   contract_signed_name: string | null;
   contract_signed_email: string | null;
   contract_requires_card: boolean;
+  /** Imported order: a contract went out, but the old system never recorded when. */
+  contract_sent: boolean;
   // The old system's verbatim status word on imported records (null for
   // anything created here) — shown in lists so they read identically.
   msgplane_status: string | null;

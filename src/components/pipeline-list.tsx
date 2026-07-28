@@ -170,10 +170,16 @@ export async function PipelineList({
             : out
           : out.in("customer_id", optOutCustomerIds.length ? optOutCustomerIds : NONE);
     }
+    // "Sent" is two facts stored two ways: contract_sent_at is stamped by sends
+    // this system performed, contract_sent is the flag carried by imported
+    // orders whose contract went out on a date the old system never recorded.
+    // Either one counts, or 141 orders with a contract out sit in "Never sent".
     if (filters.signed === "yes") out = out.not("date_signed", "is", null);
     else if (filters.signed === "sent") {
-      out = out.not("contract_sent_at", "is", null).is("date_signed", null);
-    } else if (filters.signed === "no") out = out.is("contract_sent_at", null);
+      out = out.or("contract_sent_at.not.is.null,contract_sent.is.true").is("date_signed", null);
+    } else if (filters.signed === "no") {
+      out = out.is("contract_sent_at", null).eq("contract_sent", false);
+    }
 
     if (docLoadIds) {
       out =
