@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { normalizeVehicleImageParams, standInForType, wikiTitleCandidates } from "@/lib/vehicles/image";
+import {
+  normalizeVehicleImageParams,
+  standInForType,
+  wikiTitleCandidates,
+  type VehicleImageParams,
+} from "@/lib/vehicles/image";
 
 // Vehicle photo proxy — resolves make/model to a Wikipedia page image and
 // streams the bytes back from OUR origin (same pattern as msgplane's
@@ -52,20 +57,26 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // The record's own make/model first; failing that, a representative model
-  // for the body type. The old system never shows a drawing in this column, so
-  // neither do we — see standInForType for what that trade costs.
-  const params =
+  // Two attempts, in order: the record's own make/model, then a representative
+  // model for the body type.
+  //
+  // The second is not just for blank fields. Only 39 of 26,000 vehicles have no
+  // make/model at all — what actually happens is that the value is there and
+  // unresolvable ("2 2 2", "toy", "Trailer 16ft"). Falling back only on a blank
+  // field left every one of those on a drawing, which is the whole complaint.
+  const attempts = [
     normalizeVehicleImageParams(
       req.nextUrl.searchParams.get("make"),
       req.nextUrl.searchParams.get("model")
-    ) ?? standInForType(req.nextUrl.searchParams.get("type"));
-  if (!params) {
+    ),
+    standInForType(req.nextUrl.searchParams.get("type")),
+  ].filter((p): p is NonNullable<typeof p> => p !== null);
+
+  if (attempts.length === 0) {
     return NextResponse.json({ error: "make and model, or a known type, are required" }, { status: 400 });
   }
 
-  try {
-    const candidates = wikiTitleCandidates(params);
+  async function resolveThumb(params: VehicleImageParams): Promise<string | null> {
     const query = new URLSearchParams({
       action: "query",
       format: "json",
@@ -74,22 +85,30 @@ export async function GET(req: NextRequest) {
       prop: "pageimages",
       piprop: "thumbnail",
       pithumbsize: "480",
-      titles: candidates.join("|"),
+      titles: wikiTitleCandidates(params).join("|"),
     });
     const lookup = await fetch(`${WIKI_API}?${query}`, {
       headers: { "User-Agent": USER_AGENT },
       signal: AbortSignal.timeout(6_000),
     });
-    if (!lookup.ok) {
-      return new NextResponse(null, { status: 404, headers: { "Cache-Control": MISS_CACHE } });
-    }
+    if (!lookup.ok) return null;
     const data = await lookup.json();
     const pages: WikiPage[] = data?.query?.pages ?? [];
     const thumb = pages.find((p) => p.thumbnail?.source)?.thumbnail?.source;
-
     // Only ever fetch from Wikimedia's image host — the URL came from an
     // external API response, so pin the host rather than trusting it.
-    if (!thumb || new URL(thumb).hostname !== "upload.wikimedia.org") {
+    if (!thumb || new URL(thumb).hostname !== "upload.wikimedia.org") return null;
+    return thumb;
+  }
+
+  try {
+    let thumb: string | null = null;
+    let usedStandIn = false;
+    for (let i = 0; i < attempts.length && !thumb; i++) {
+      thumb = await resolveThumb(attempts[i]);
+      usedStandIn = Boolean(thumb) && i > 0;
+    }
+    if (!thumb) {
       return new NextResponse(null, { status: 404, headers: { "Cache-Control": MISS_CACHE } });
     }
 
@@ -106,7 +125,8 @@ export async function GET(req: NextRequest) {
       headers: {
         "Content-Type": image.headers.get("content-type") ?? "image/jpeg",
         "Cache-Control": HIT_CACHE,
-        "X-Image-Source": "wikipedia",
+        // Lets the caller tell a real model shot from a body-type stand-in.
+        "X-Image-Source": usedStandIn ? "wikipedia-standin" : "wikipedia",
       },
     });
   } catch (err) {
