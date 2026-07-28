@@ -112,12 +112,15 @@
   /* msgplane's raised surface. Surfaces only — hover/selected/zebra go to
      --msg-hover, which actually steps off the white page. */
   --muted: #fafafa;
-  /* msgplane's own muted is #9e9e9e, which is 2.7:1 on white. This token
-     carries real body copy — emails, phones, routes, timestamps, and every
-     in-progress status word. Grey 600 was tuned against pure white and only
-     had 0.11 of headroom there; grey 700 clears 4.5:1 on the surfaces this
-     text actually lands on too (5.9:1 on #fafafa, 5.6:1 on the #f1f3f4 rail). */
-  --muted-foreground: #616161;
+  /* NOT a grey. 262 places use this token, and in a list they are the actual
+     content — the shipper's name, the phone, the route, the vehicle, the
+     dates. Every grey I tried here (#9e9e9e, then #757575, then #616161) made
+     the app read as washed out beside the old system, which paints its body
+     copy at rgba(0,0,0,0.87) and reserves grey for chrome.
+     So this sits one step off the foreground: enough to separate a label from
+     a value, nowhere near enough to look faded. If something genuinely needs
+     to recede, give it its own colour rather than lightening this. */
+  --muted-foreground: #2e2e2e;
   /* shadcn's interaction token — what the menus, selects and comboboxes
      highlight with. Same step as --msg-hover for the same reason: at #fafafa
      the highlighted option was indistinguishable from the popover. */
@@ -197,9 +200,9 @@
   --secondary: #2c2c2c;
   --secondary-foreground: #e0e0e0;
   --muted: #242424;
-  /* msgplane's literal #9e9e9e, which only failed against white — on #121212
-     it is 7:1, and 5.2:1 on the lightest surface it lands on (#2c2c2c). */
-  --muted-foreground: #9e9e9e;
+  /* Same reasoning as light mode: this token carries content, not chrome, so
+     it stays close to the foreground rather than receding into the surface. */
+  --muted-foreground: #d0d0d0;
   --accent: #2f2f2f;
   --accent-foreground: #e0e0e0;
   /* The dark counterpart of grey 200 on white: one perceptible step up from

@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { phoneDigits, suppressedAmong } from "@/lib/messaging/suppression";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatPhone } from "@/lib/format";
+import { formatPhone } from "@/lib/format";
 import { endOfBusinessDay } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { SelectionProvider } from "@/components/pipeline/selection-context";
@@ -679,21 +679,11 @@ export async function PipelineList({
                             : " (email)"}
                       </p>
                     )}
-                    {load.follow_up_at && (
-                      <span
-                        title={load.follow_up_note ?? undefined}
-                        className={cn(
-                          "mt-1.5 inline-block rounded-md px-2 py-0.5 text-[12px] ring-1 ring-inset",
-                          new Date(load.follow_up_at) < new Date()
-                            ? "bg-destructive/10 text-destructive-ink ring-destructive/25"
-                            // The spec's warning orange is 2.1:1 as text, so
-                            // the hue moves to the fill and the label takes ink.
-                            : "bg-chart-2/15 text-foreground ring-chart-2/40"
-                        )}
-                      >
-                        FU {formatDate(load.follow_up_at)}
-                      </span>
-                    )}
+                    {/* No follow-up badge here. The old system does not carry
+                        one, and after the import nearly every quote has a date
+                        years in the past — a column of red "overdue" chips a
+                        rep can neither act on nor clear. The Follow-up Today
+                        tab is where that queue is worked. */}
                   </td>
                   <td className="whitespace-nowrap px-3 py-4">
                     {colDate ? (
@@ -969,19 +959,6 @@ export async function PipelineList({
                           ? " (sms)"
                           : " (email)"}
                     </p>
-                  )}
-                  {load.follow_up_at && (
-                    <span
-                      title={load.follow_up_note ?? undefined}
-                      className={cn(
-                        "inline-block rounded-md px-2 py-0.5 text-xs ring-1 ring-inset",
-                        new Date(load.follow_up_at) < new Date()
-                          ? "bg-destructive/10 text-destructive-ink ring-destructive/25"
-                          : "bg-chart-2/15 text-foreground ring-chart-2/40"
-                      )}
-                    >
-                      FU {formatDate(load.follow_up_at)}
-                    </span>
                   )}
                 </div>
                 {/* The label, not the 15px box, is what gets tapped — and it
