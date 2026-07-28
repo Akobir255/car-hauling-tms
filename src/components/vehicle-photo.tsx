@@ -8,11 +8,14 @@ import { VEHICLE_TYPE_LABELS, type VehicleType } from "@/types/database";
 
 // Real photo of the vehicle model, via /api/vehicles/image.
 //
-// Every row gets a photograph, the way the system this replaces does it. When
-// the record carries no make/model the API serves a representative model for
-// the body type instead — dimmed and desaturated here, with a tooltip saying
-// so, because it is a photo of that KIND of vehicle and not this one. The
-// drawn silhouette is now only for a genuine lookup failure.
+// Two modes, matching how the system this replaces behaves:
+//   LIST   — the body type's stock photo. Every Car row carries the same
+//            silver sedan, every Pickup the same truck. A rep scanning a
+//            hundred rows is reading the shape, not the model, and this
+//            collapses a hundred lookups into one cached image per type.
+//   DETAIL — the actual model, resolved from make/model, falling back to the
+//            body type and finally to a drawing if even that misses.
+//
 // unoptimized: the API route already serves resized, CDN-cached images —
 // piping them through /_next/image again would just double-proxy.
 export function VehiclePhoto({
@@ -23,6 +26,7 @@ export function VehiclePhoto({
   className,
   vehicleId,
   hasOverride = false,
+  generic = false,
 }: {
   year?: number | null;
   make?: string | null;
@@ -32,6 +36,8 @@ export function VehiclePhoto({
   /** When this vehicle carries an uploaded photo, it wins over the lookup. */
   vehicleId?: string;
   hasOverride?: boolean;
+  /** Show the body type's stock photo instead of resolving this model. */
+  generic?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
 
@@ -43,18 +49,24 @@ export function VehiclePhoto({
     return <VehicleThumb type={type} className={className} />;
   }
 
+  // An uploaded photo is of THIS vehicle, so it wins even in a list — that is
+  // a real picture of the car, not a stand-in for its shape.
+  const useModel = !generic || (hasOverride && Boolean(vehicleId));
+
   const query = new URLSearchParams();
   if (hasOverride && vehicleId) query.set("vehicleId", vehicleId);
-  if (make?.trim()) query.set("make", make);
-  if (model?.trim()) query.set("model", model);
+  if (useModel && make?.trim()) query.set("make", make);
+  if (useModel && model?.trim()) query.set("model", model);
   if (type) query.set("type", String(type));
   const src = `/api/vehicles/image?${query}`;
-  // A stand-in is a photo of that KIND of vehicle, not this one. Saying so in
-  // the alt text and the tooltip is what keeps a dispatcher from describing a
-  // car nobody has seen.
-  const isStandIn = !hasOverride && (!make?.trim() || !model?.trim());
+  // A stand-in is a photo of that KIND of vehicle, not this one — true on
+  // every list row by design, and on a detail page only when the model could
+  // not be resolved. The alt text says so either way, so a screen reader is
+  // never told the customer's car is something nobody has seen.
+  const isStandIn = !hasOverride && (generic || !make?.trim() || !model?.trim());
   const described = [year, make, model].filter(Boolean).join(" ");
-  const alt = isStandIn ? `${VEHICLE_TYPE_LABELS[type as VehicleType] ?? "Vehicle"} (representative photo)` : described;
+  const typeLabel = VEHICLE_TYPE_LABELS[type as VehicleType] ?? "Vehicle";
+  const alt = isStandIn ? `${typeLabel} (representative photo)` : described;
   return (
     <span
       className={cn(
@@ -71,8 +83,18 @@ export function VehiclePhoto({
         height={72}
         unoptimized
         loading="lazy"
-        className={cn("size-full object-cover", isStandIn && "opacity-70 saturate-50")}
-        title={isStandIn ? "Representative photo — this order does not record the make/model." : undefined}
+        // In a list the stock photo IS the intended look, so it renders at
+        // full strength. Dimming is reserved for a DETAIL page falling back,
+        // where it signals that the model could not be resolved.
+        className={cn(
+          "size-full object-cover",
+          isStandIn && !generic && "opacity-70 saturate-50"
+        )}
+        title={
+          isStandIn && !generic
+            ? "Representative photo — this order does not record the make/model."
+            : undefined
+        }
         onError={() => setFailed(true)}
       />
     </span>

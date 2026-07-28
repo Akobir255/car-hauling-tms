@@ -835,11 +835,15 @@ export async function PipelineList({
                       {loadVehicles.length === 0 && <span className="text-muted-foreground">—</span>}
                       {loadVehicles.map((v) => (
                         <div key={v.id} className="flex items-center gap-2.5">
+                          {/* generic: the list shows the body type's stock
+                              photo, the way the old system does. The actual
+                              model is on the order page. */}
                           <VehiclePhoto
                             year={v.year}
                             make={v.make}
                             model={v.model}
                             type={v.vehicle_type}
+                            generic
                           />
                           <div className="leading-tight">
                             {/* msgplane: gray vehicle title, type under, red
@@ -1126,6 +1130,7 @@ export async function PipelineList({
                           make={v.make}
                           model={v.model}
                           type={v.vehicle_type}
+                          generic
                           className="h-8 w-12"
                         />
                         <div className="min-w-0 leading-tight">
