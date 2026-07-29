@@ -15,7 +15,12 @@ export async function GET(
   const [{ data: notes }, { data: docs }] = await Promise.all([
     supabase
       .from("load_notes")
-      .select("id, body, author_id, created_at, updated_at")
+      // imported_author matters as much as author_id here: 2,954 of the 2,955
+      // notes carried over from the old system have no author_id, because the
+      // people who wrote them have no account here. Selecting only author_id
+      // made every one of them read "Unknown" in this popup while the order
+      // page, which does select it, named them correctly.
+      .select("id, body, author_id, imported_author, created_at, updated_at")
       .eq("load_id", loadId)
       .order("created_at", { ascending: false })
       .limit(30),
@@ -39,14 +44,19 @@ export async function GET(
 
   return NextResponse.json({
     me: profile.id,
-    notes: (notes ?? []).map((n) => ({
-      id: n.id,
-      body: n.body,
-      created_at: n.created_at,
-      authorName: n.author_id
-        ? (byId.get(n.author_id)?.full_name || byId.get(n.author_id)?.email || "Unknown")
-        : "Unknown",
-      attachments: attachCount.get(n.id) ?? 0,
-    })),
+    notes: (notes ?? []).map((n) => {
+      const author = n.author_id ? byId.get(n.author_id) : null;
+      return {
+        id: n.id,
+        body: n.body,
+        created_at: n.created_at,
+        // Same order the order page uses: a local account wins, then the name
+        // the note arrived with. "Unknown" is the last resort and stays honest
+        // — it means nobody recorded who wrote this, which is true for the 783
+        // imported notes that reached us without an author.
+        authorName: author?.full_name || author?.email || n.imported_author || "Unknown",
+        attachments: attachCount.get(n.id) ?? 0,
+      };
+    }),
   });
 }
