@@ -86,6 +86,22 @@ export default async function SearchPage({
   const loads = (loadsData ?? []) as Load[];
   const customerById = new Map(customers.map((c) => [c.id, c]));
 
+  // Searching by ORDER NUMBER matches no shipper, so the map above is empty
+  // and every result row printed "—" in the Shipper column — on exactly the
+  // search a rep does most. The shipper of a matched order has to be fetched
+  // whether or not their name matched the term. Kept out of the Shippers
+  // section's own count, which still means "shippers matching what you typed".
+  const unfetched = [
+    ...new Set(loads.map((l) => l.customer_id).filter((id) => id && !customerById.has(id))),
+  ];
+  if (unfetched.length > 0) {
+    const { data: loadCustomers } = await supabase
+      .from("customers")
+      .select("id, contact_name, company_name, phone, email")
+      .in("id", unfetched);
+    for (const c of loadCustomers ?? []) customerById.set(c.id, c);
+  }
+
   return (
     <div className="space-y-5">
       <div>
