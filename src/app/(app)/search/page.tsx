@@ -72,11 +72,16 @@ export default async function SearchPage({
   const customers = customersData ?? [];
   const customerIds = customers.map((c) => c.id);
 
-  // Every order that belongs to a matched shipper, plus direct order-number
-  // hits. Role view keeps margin columns away from sales.
+  // Every order that belongs to a matched shipper OR a matched CARRIER, plus
+  // direct order-number hits. The carrier arm is what makes "Garden State
+  // Haulers LLC" answer the question a dispatcher is actually asking — which
+  // of our loads did we give them — instead of just confirming the company
+  // exists in the directory. Role view keeps margin columns away from sales.
   const table = profile.role === "sales" ? "loads_sales_safe" : MANAGER_LOADS_TABLE;
+  const carrierIds = (carriers ?? []).map((c) => c.id);
   const loadFilters = [`load_number.ilike.${pat}`];
   if (customerIds.length > 0) loadFilters.push(`customer_id.in.(${customerIds.join(",")})`);
+  if (carrierIds.length > 0) loadFilters.push(`carrier_id.in.(${carrierIds.join(",")})`);
   const { data: loadsData } = await supabase
     .from(table)
     .select("*")
@@ -102,6 +107,20 @@ export default async function SearchPage({
     for (const c of loadCustomers ?? []) customerById.set(c.id, c);
   }
 
+  // Same for the hauler on each result: a search for a shipper or an order
+  // number should still say who is carrying it.
+  const carrierById = new Map((carriers ?? []).map((c) => [c.id, c]));
+  const unfetchedCarriers = [
+    ...new Set(loads.map((l) => l.carrier_id).filter((id) => id && !carrierById.has(id))),
+  ] as string[];
+  if (unfetchedCarriers.length > 0) {
+    const { data: loadCarriers } = await supabase
+      .from("carriers")
+      .select("id, company_name, contact_name, phone, city, state, source")
+      .in("id", unfetchedCarriers);
+    for (const c of loadCarriers ?? []) carrierById.set(c.id, c);
+  }
+
   return (
     <div className="space-y-5">
       <div>
@@ -125,6 +144,7 @@ export default async function SearchPage({
                   <th className="px-4 py-2.5">Status</th>
                   <th className="px-4 py-2.5">Shipper</th>
                   <th className="px-4 py-2.5">Orig/Dest</th>
+                  <th className="px-4 py-2.5">Carrier</th>
                   <th className="px-4 py-2.5">Tariff</th>
                   <th className="px-4 py-2.5">Created</th>
                 </tr>
@@ -132,6 +152,7 @@ export default async function SearchPage({
               <tbody>
                 {loads.map((l, i) => {
                   const c = customerById.get(l.customer_id);
+                  const hauler = l.carrier_id ? carrierById.get(l.carrier_id) : null;
                   return (
                     <tr
                       key={l.id}
@@ -158,6 +179,28 @@ export default async function SearchPage({
                       <td className="px-4 py-3 text-muted-foreground">
                         {[l.pickup_city, l.pickup_state].filter(Boolean).join(", ") || "—"}{" "}
                         → {[l.delivery_city, l.delivery_state].filter(Boolean).join(", ") || "—"}
+                      </td>
+                      {/* The old system puts the hauler's name and phone right
+                          in the row — the dispatcher chasing a truck should not
+                          have to open the order to get the number. */}
+                      <td className="px-4 py-3">
+                        {hauler ? (
+                          <>
+                            <Link
+                              href={`/carriers/${hauler.id}`}
+                              className="text-msg-link hover:underline"
+                            >
+                              {hauler.company_name}
+                            </Link>
+                            {hauler.phone && (
+                              <div className="tabular-nums text-muted-foreground">
+                                {formatPhone(hauler.phone)}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 tabular-nums">{formatCurrency(l.customer_rate)}</td>
                       <td className="px-4 py-3 tabular-nums text-muted-foreground">
