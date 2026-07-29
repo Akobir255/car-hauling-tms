@@ -1,12 +1,5 @@
-import {
-  CircleDollarSign,
-  Fuel,
-  House,
-  Receipt,
-  Route,
-  ShieldCheck,
-  Truck,
-} from "lucide-react";
+import { CircleDollarSign, Fuel, House, Receipt, Route, ShieldCheck } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -55,9 +48,7 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
   if (isContractLinkExpired(load.contract_sent_at, load.date_signed)) {
     return (
       <div className="mx-auto max-w-lg space-y-6 px-4 py-16 text-center">
-        <span className="mx-auto flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-          <Truck className="size-6" aria-hidden="true" />
-        </span>
+        <BrandMark className="mx-auto size-14" />
         <div className="space-y-2">
           <h1 className="text-2xl font-bold tracking-tight">This signing link has expired</h1>
           <p className="text-muted-foreground">
@@ -147,10 +138,8 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
       {/* The invoice sheet. */}
       <div className="mx-auto mt-8 max-w-3xl bg-white px-8 py-10 text-neutral-900 shadow-lg sm:px-12 dark:bg-neutral-950 dark:text-neutral-100">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Truck className="size-5" aria-hidden="true" />
-            </span>
+          <div className="flex items-center gap-3">
+            <BrandMark className="size-11 shrink-0" />
             <div>
               <p className="text-base font-semibold leading-tight">{COMPANY.name}</p>
               <p className="text-xs tabular-nums text-muted-foreground">
@@ -429,10 +418,8 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
             <span className="font-medium text-foreground">{vehicleName}</span>
             {destination ? ` to ${destination}` : ""} with care.
           </p>
-          <div className="mt-5 inline-flex items-center gap-2.5">
-            <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Truck className="size-5" aria-hidden="true" />
-            </span>
+          <div className="mt-5 inline-flex items-center gap-3">
+            <BrandMark className="size-12 shrink-0" />
             <span className="text-left">
               <span className="block font-semibold leading-tight">{COMPANY.name}</span>
               <a
