@@ -110,6 +110,16 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
     </div>
   );
 
+  // The headline names the thing being moved and where it is going, because
+  // that — not the word "invoice" — is what tells somebody the document in
+  // front of them is theirs.
+  const firstVehicle = vehicles[0];
+  const vehicleName =
+    [firstVehicle?.year, firstVehicle?.make, firstVehicle?.model].filter(Boolean).join(" ") ||
+    "your vehicle";
+  const destination = [load.delivery_city, load.delivery_state].filter(Boolean).join(", ");
+  const origin = [load.pickup_city, load.pickup_state].filter(Boolean).join(", ");
+
   return (
     <div className="min-h-screen bg-neutral-200 pb-16 dark:bg-neutral-900">
       {/* msgplane's sticky "Please review and sign / GET STARTED" bar. */}
@@ -128,27 +138,82 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
       {/* The invoice sheet. */}
       <div className="mx-auto mt-8 max-w-3xl bg-white px-8 py-10 text-neutral-900 shadow-lg sm:px-12 dark:bg-neutral-950 dark:text-neutral-100">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">{COMPANY.name}</h1>
-            <p className="mt-2 text-sm text-muted-foreground">{COMPANY.website}</p>
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <Truck className="size-5" aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-base font-semibold leading-tight">{COMPANY.name}</p>
+              <p className="text-xs tabular-nums text-muted-foreground">
+                Licensed transport broker · M.C. #{COMPANY.mcNumber}
+              </p>
+            </div>
           </div>
           <div className="text-right text-sm leading-relaxed">
-            <p className="text-xl font-semibold">Order Invoice</p>
-            <p>Order Number - {load.load_number}</p>
-            <p>Date Order Place - {formatDate(load.created_at)}</p>
-            <p>M.C.# {COMPANY.mcNumber}</p>
+            <p className="font-semibold">Transport Agreement</p>
+            <p className="tabular-nums text-muted-foreground">{load.load_number}</p>
+            <p className="tabular-nums text-muted-foreground">{formatDate(load.created_at)}</p>
           </div>
         </div>
 
-        <div className="mt-6 border-t pt-4 text-sm leading-relaxed">
-          <p>
-            <span className="font-bold">Hello {firstName},</span>
-          </p>
-          <p>
-            Here is your Shipping Order Form. Please review and sign. If you have any questions,
-            don&apos;t hesitate to call or email us using the contact information below.
-          </p>
+        {/* Lead with what is being moved and what it costs. "Order Invoice"
+            described the document; this describes the customer's shipment. */}
+        <div className="mt-7">
+          <p className="text-sm text-muted-foreground">Hello {firstName},</p>
+          <h1 className="mt-1.5 text-pretty text-2xl font-bold leading-snug tracking-tight sm:text-3xl">
+            Ship your {vehicleName}
+            {destination ? ` to ${destination}` : ""}
+            {total != null ? ` for ${formatCurrency(total)}` : ""}
+          </h1>
+          {(origin || destination) && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              {origin || "—"} to {destination || "—"} · {load.transport_type} carrier · collected
+              from {formatDate(load.pickup_ready_date)}
+            </p>
+          )}
         </div>
+
+        {/* The money, before the paperwork. Three numbers, said once. */}
+        <div className="mt-6 rounded-lg border bg-muted/40 px-5 py-5">
+          <p className="text-4xl font-bold tabular-nums tracking-tight">{formatCurrency(total)}</p>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Total for the move, as agreed with your agent.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-x-10 gap-y-3 border-t pt-4">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Reservation, on signing
+              </p>
+              <p className="text-lg font-semibold tabular-nums">{formatCurrency(reservation)}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                To the carrier on delivery
+              </p>
+              <p className="text-lg font-semibold tabular-nums">
+                {codToCarrier != null ? formatCurrency(codToCarrier) : "—"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* What happens next, taken from clause 9 of the agreement below rather
+            than invented — the contract already promises this sequence. */}
+        <ol className="mt-5 grid gap-px overflow-hidden rounded-lg border bg-border text-sm sm:grid-cols-3">
+          {[
+            ["You sign", "We start finding a carrier for your vehicle."],
+            ["We assign a carrier", "We call or email you to confirm the schedule."],
+            ["You get the driver", "Their contact details are emailed to you."],
+          ].map(([step, detail], i) => (
+            <li key={step} className="bg-card px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Step {i + 1}
+              </p>
+              <p className="mt-0.5 font-medium">{step}</p>
+              <p className="mt-0.5 text-muted-foreground">{detail}</p>
+            </li>
+          ))}
+        </ol>
 
         <div className="mt-6 grid gap-6 border-t pt-4 sm:grid-cols-2">
           <div className="space-y-1 text-center text-sm">
@@ -234,32 +299,18 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
           </tbody>
         </table>
 
-        <div className="grid grid-cols-2 border-b">
-          <div className="px-4 py-4">
-            <p className="text-center font-bold">Info for Shipper</p>
-            {load.shipper_info && (
-              <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
-                {load.shipper_info}
-              </p>
-            )}
+        {/* The totals panel that used to sit here is gone: the same three
+            numbers are stated at the top of the page now, and a contract that
+            prints its price twice invites the reader to check whether the two
+            agree. */}
+        {load.shipper_info && (
+          <div className="border-b px-4 py-4">
+            <p className="font-bold">Info for Shipper</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+              {load.shipper_info}
+            </p>
           </div>
-          <div className="divide-y bg-neutral-100 text-sm dark:bg-neutral-900">
-            <div className="flex items-center justify-between px-4 py-3">
-              <span className="font-semibold">Total:</span>
-              <span className="tabular-nums">{formatCurrency(total)}</span>
-            </div>
-            <div className="flex items-center justify-between px-4 py-3">
-              <span className="font-semibold">Reservation:</span>
-              <span className="tabular-nums">{formatCurrency(reservation)}</span>
-            </div>
-            <div className="flex items-center justify-between px-4 py-3">
-              <span className="font-semibold">COD to Carrier:</span>
-              <span className="tabular-nums">
-                {codToCarrier != null ? formatCurrency(codToCarrier) : "—"}
-              </span>
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* The agreement itself — prints in full. */}
         <div className="mt-10 space-y-5 text-sm leading-relaxed">
