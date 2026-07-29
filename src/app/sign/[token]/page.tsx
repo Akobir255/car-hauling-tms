@@ -1,9 +1,22 @@
-import { Truck } from "lucide-react";
+import {
+  CircleDollarSign,
+  Fuel,
+  House,
+  Receipt,
+  Route,
+  ShieldCheck,
+  Truck,
+} from "lucide-react";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { COMPANY, TERMS_SECTIONS, isContractLinkExpired } from "@/lib/esign-terms";
+import {
+  COMPANY,
+  CONTRACT_LINK_EXPIRY_DAYS,
+  TERMS_SECTIONS,
+  isContractLinkExpired,
+} from "@/lib/esign-terms";
 import { VehiclePhoto } from "@/components/vehicle-photo";
 import type { Load, LoadVehicle } from "@/types/database";
 import { SignatureForm } from "./sign-button";
@@ -75,14 +88,9 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
   const allRun = vehicles.length > 0 && vehicles.every((v) => v.condition !== "non_running");
   const signable = Boolean(load.contract_sent_at || load.date_signed);
 
-  const infoLine = (label: string, value: React.ReactNode) => (
-    <p className="text-sm leading-relaxed">
-      <span className="font-semibold">{label}: </span>
-      {value || "—"}
-    </p>
-  );
-
-  const partyBlock = (
+  // An address a person reads, not a form they fill in. The old block printed
+  // "State/Zip: TX/77642" — correct, and nothing anybody says out loud.
+  const addressCard = (
     title: string,
     contact: string | null,
     company: string | null,
@@ -92,22 +100,23 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
     state: string | null,
     zip: string | null
   ) => (
-    <div className="space-y-2">
-      <h3 className="text-center text-base font-bold">{title}</h3>
-      <div className="grid grid-cols-2 gap-x-4">
-        <div>
-          {infoLine("Name", contact)}
-          {infoLine("Company", company)}
-          {infoLine("Phone", phone)}
-        </div>
-        <div>
-          {infoLine("Address", address)}
-          {infoLine("City", city)}
-          {infoLine("State/Zip", [state, zip].filter(Boolean).join("/"))}
-          {infoLine("Country", "United States")}
-        </div>
-      </div>
+    <div className="rounded-lg border p-4">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</p>
+      <p className="mt-2 font-semibold">{contact || "—"}</p>
+      {company && <p className="text-sm text-muted-foreground">{company}</p>}
+      {address && <p className="mt-1 text-sm">{address}</p>}
+      <p className="text-sm">{[city, [state, zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")}</p>
+      {phone && <p className="mt-2 text-sm tabular-nums text-muted-foreground">{phone}</p>}
     </div>
+  );
+
+  const summaryRow = (label: string, value: React.ReactNode) => (
+    <tr className="border-b last:border-b-0">
+      <th scope="row" className="w-2/5 px-4 py-3 text-left font-medium text-muted-foreground">
+        {label}
+      </th>
+      <td className="px-4 py-3">{value || "—"}</td>
+    </tr>
   );
 
   // The headline names the thing being moved and where it is going, because
@@ -215,26 +224,68 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
           ))}
         </ol>
 
-        <div className="mt-6 grid gap-6 border-t pt-4 sm:grid-cols-2">
-          <div className="space-y-1 text-center text-sm">
-            <h3 className="text-base font-bold">Shipper Information</h3>
-            <p>{customer?.contact_name || "—"}</p>
-            {phoneDigits && <p className="tabular-nums">{phoneDigits}</p>}
-            {customer?.email && <p>{customer.email}</p>}
-          </div>
-          <div className="space-y-1 text-center text-sm">
-            <h3 className="text-base font-bold">Shipping Information</h3>
-            <p>1st Avail. Pickup Date: {formatDate(load.pickup_ready_date)}</p>
-            <p>Estimated Load Date: {formatDate(load.pickup_ready_date)}</p>
-            <p>Estimated Delivery Date: {formatDate(load.delivery_eta)}</p>
-            <p className="capitalize">Ship Via: {load.transport_type}</p>
-            <p>Vehicle(s) Run: {vehicles.length === 0 ? "—" : allRun ? "Yes" : "No"}</p>
-          </div>
+        {/* Your Transport Summary — one table, the way the competitor's quote
+            does it, instead of two centred lists the reader has to reconcile. */}
+        <h2 className="mt-9 text-center text-lg font-bold tracking-tight">
+          Your Transport Summary
+        </h2>
+        <div className="mt-3 overflow-hidden rounded-lg border">
+          <table className="w-full border-collapse text-sm">
+            <tbody>
+              {summaryRow(
+                "Vehicle(s)",
+                vehicles.length === 0
+                  ? "—"
+                  : vehicles
+                      .map((v) => [v.year, v.make, v.model].filter(Boolean).join(" "))
+                      .filter(Boolean)
+                      .join(", ")
+              )}
+              {summaryRow("Condition (vehicles run)", vehicles.length === 0 ? "—" : allRun ? "Yes" : "No")}
+              {summaryRow("Origin", origin || "—")}
+              {summaryRow("Destination", destination || "—")}
+              {summaryRow("First pickup date", formatDate(load.pickup_ready_date))}
+              {summaryRow("Estimated delivery", formatDate(load.delivery_eta))}
+              {summaryRow("Transport type", <span className="capitalize">{load.transport_type} carrier</span>)}
+              {summaryRow(
+                "Total, inclusive of taxes",
+                <span className="font-semibold tabular-nums">{formatCurrency(total)}</span>
+              )}
+            </tbody>
+          </table>
         </div>
 
-        <div className="mt-6 grid gap-8 border-t pt-4 sm:grid-cols-2">
-          {partyBlock(
-            "Origin",
+        {/* Included — the competitor's strongest section: it answers "what am I
+            actually paying for" at the moment the reader is deciding. */}
+        <div className="mt-6 overflow-hidden rounded-lg bg-neutral-900 px-6 py-6 text-white dark:bg-neutral-800">
+          <p className="text-center text-sm font-semibold uppercase tracking-widest text-neutral-300">
+            Included in your price
+          </p>
+          <ul className="mt-5 grid grid-cols-2 gap-5 sm:grid-cols-3">
+            {[
+              [Receipt, "Taxes"],
+              [Route, "Tolls"],
+              [Fuel, "Fuel"],
+              [House, "Door to door"],
+              [ShieldCheck, "Carrier insurance"],
+              [CircleDollarSign, "No hidden fees"],
+            ].map(([Icon, label]) => {
+              const I = Icon as typeof Receipt;
+              return (
+                <li key={label as string} className="flex flex-col items-center gap-2 text-center">
+                  <span className="flex size-11 items-center justify-center rounded-lg bg-red-600">
+                    <I className="size-5" aria-hidden="true" />
+                  </span>
+                  <span className="text-xs font-medium leading-tight">{label as string}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          {addressCard(
+            "Collection",
             load.pickup_contact_name || customer?.contact_name || null,
             load.pickup_company,
             load.pickup_contact_phone || phoneDigits,
@@ -243,8 +294,8 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
             load.pickup_state,
             load.pickup_zip
           )}
-          {partyBlock(
-            "Destination",
+          {addressCard(
+            "Delivery",
             load.delivery_contact_name || customer?.contact_name || null,
             load.delivery_company,
             load.delivery_contact_phone || phoneDigits,
@@ -256,12 +307,18 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
         </div>
 
         {/* Vehicle table, black header like the original. */}
-        <table className="mt-8 w-full border-collapse text-sm">
+        <table className="mt-6 w-full border-collapse overflow-hidden rounded-lg text-sm ring-1 ring-border">
           <thead>
-            <tr className="bg-neutral-900 text-left text-white dark:bg-neutral-100 dark:text-neutral-900">
-              <th className="px-4 py-2.5 font-bold">Year Make Model</th>
-              <th className="px-4 py-2.5 font-bold">Type</th>
-              <th className="px-4 py-2.5 text-right font-bold">Tariff</th>
+            <tr className="bg-muted/60 text-left">
+              <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Vehicle
+              </th>
+              <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Type
+              </th>
+              <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Tariff
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -312,17 +369,28 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
           </div>
         )}
 
-        {/* The agreement itself — prints in full. */}
-        <div className="mt-10 space-y-5 text-sm leading-relaxed">
+        {/* The agreement itself — prints in full. Given a hanging indent and
+            room to breathe: it is the part with legal weight, and a wall of
+            unbroken clauses is what makes people sign without reading. */}
+        <div className="mt-10 space-y-7">
           {TERMS_SECTIONS.map((section) => (
-            <section key={section.heading} className="space-y-3">
-              <h2 className="text-base font-bold">{section.heading}</h2>
-              {section.intro && <p className="italic">{section.intro}</p>}
-              {section.clauses.map((c) => (
-                <p key={c.label} className={c.important ? "font-semibold" : undefined}>
-                  <span className="font-bold">{c.label} -</span> {c.body}
-                </p>
-              ))}
+            <section key={section.heading}>
+              <h2 className="border-b pb-2 text-base font-bold tracking-tight">{section.heading}</h2>
+              {section.intro && (
+                <p className="mt-3 text-sm font-medium italic text-muted-foreground">{section.intro}</p>
+              )}
+              <dl className="mt-3 space-y-2.5 text-sm leading-relaxed">
+                {section.clauses.map((c) => (
+                  <div key={c.label} className="flex gap-3">
+                    <dt className="w-5 shrink-0 font-bold tabular-nums text-muted-foreground">
+                      {c.label}
+                    </dt>
+                    <dd className={c.important ? "font-semibold" : "text-muted-foreground"}>
+                      {c.body}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
             </section>
           ))}
         </div>
@@ -350,6 +418,45 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
               {load.contract_signed_name ? ` by ${load.contract_signed_name}` : ""}
             </p>
           )}
+        </div>
+
+        {/* The close. A licensed broker's numbers are the most reassuring thing
+            on this page, so they get a footer of their own rather than a line
+            in the letterhead. */}
+        <div className="mt-12 border-t pt-8 text-center">
+          <p className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground">
+            Thank you for choosing {COMPANY.name}. We look forward to moving your{" "}
+            <span className="font-medium text-foreground">{vehicleName}</span>
+            {destination ? ` to ${destination}` : ""} with care.
+          </p>
+          <div className="mt-5 inline-flex items-center gap-2.5">
+            <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <Truck className="size-5" aria-hidden="true" />
+            </span>
+            <span className="text-left">
+              <span className="block font-semibold leading-tight">{COMPANY.name}</span>
+              <a
+                href={COMPANY.website}
+                className="text-sm text-muted-foreground underline underline-offset-2"
+              >
+                {COMPANY.website.replace(/^https?:\/\//, "")}
+              </a>
+            </span>
+          </div>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1 font-medium tabular-nums">
+              <ShieldCheck className="size-3.5" aria-hidden="true" />
+              FMCSA licensed
+            </span>
+            <span className="rounded-md bg-muted px-2.5 py-1 font-medium tabular-nums">
+              M.C. #{COMPANY.mcNumber}
+            </span>
+            <span className="rounded-md bg-muted px-2.5 py-1 font-medium">$75,000 surety bond</span>
+          </div>
+          <p className="mt-5 text-xs text-muted-foreground">
+            Verify our authority at fmcsa.dot.gov · Signing links expire{" "}
+            {CONTRACT_LINK_EXPIRY_DAYS} days after they are sent.
+          </p>
         </div>
       </div>
     </div>
