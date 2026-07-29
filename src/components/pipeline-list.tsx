@@ -396,6 +396,13 @@ export async function PipelineList({
     const params = new URLSearchParams();
     if (tabKey !== defaultTab.key) params.set("tab", tabKey);
     if (rep) params.set("rep", rep);
+    // Carry the filters. This built the URL from scratch, and it is what the
+    // tab strip AND both pager arrows link to — so narrowing a list and then
+    // turning the page silently handed back the unfiltered one. Every filter
+    // on the bar looked broken the moment you moved off page one.
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) params.set(key, value);
+    }
     if (toPage > 0) params.set("page", String(toPage));
     const qs = params.toString();
     return qs ? `${basePath}?${qs}` : basePath;

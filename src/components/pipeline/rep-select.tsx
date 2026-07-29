@@ -26,6 +26,10 @@ export function RepSelect({
         const v = e.target.value;
         if (v) next.set("rep", v);
         else next.delete("rep");
+        // Back to page one, same as FilterBar. Switching to a rep with fewer
+        // records while sitting on page 3 asks for rows 300-399 of a shorter
+        // result and renders an empty table.
+        next.delete("page");
         router.push(`?${next.toString()}`);
       }}
       // No text-sm: the base class is text-[16px] md:text-sm, and passing
