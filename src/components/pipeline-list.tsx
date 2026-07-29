@@ -278,8 +278,12 @@ export async function PipelineList({
     from + PAGE_SIZE - 1
   );
   query = activeTab.followUpDue
-    ? // Oldest follow-up first — that's the order reps work the queue in.
-      query.order("follow_up_at", { ascending: true })
+    ? // Most recent follow-up first, like every other list on the site. This
+      // read oldest-first on the theory that a queue is worked from the most
+      // overdue end; in practice it made the Follow-up tab the one list that
+      // ran backwards relative to the rest, and buried today's follow-ups
+      // behind everything ever missed.
+      query.order("follow_up_at", { ascending: false })
     : query.order("created_at", { ascending: false });
 
   // Exact per-tab counts. head:true fetches no rows, so this stays correct

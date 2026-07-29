@@ -103,7 +103,9 @@ export default async function DashboardPage() {
     .not("follow_up_at", "is", null)
     .lte("follow_up_at", endOfToday.toISOString())
     .in("status", ACTIVE_STATUSES)
-    .order("follow_up_at", { ascending: true })
+    // Same direction as the Follow-up tab this card links to. When the two
+    // disagreed, the six shown here were the six the list put LAST.
+    .order("follow_up_at", { ascending: false })
     .limit(6);
   if (isSales) {
     loads60Query = loads60Query.eq("sales_owner_id", profile.id);
