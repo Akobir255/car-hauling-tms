@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { startPendingLogin } from "@/lib/pending-login";
 
 export type LoginState = { error: string | null };
 
@@ -14,12 +14,13 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
     return { error: "Email and password are required." };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  // A correct password does NOT sign anyone in. It starts a challenge and
+  // nothing else — no session, no access token, nothing that authorises a
+  // request against the database. The session is minted on /verify, after the
+  // emailed code checks out.
+  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "";
+  const error = await startPendingLogin(email, password, safeNext);
+  if (error) return { error };
 
-  if (error) {
-    return { error: "Invalid email or password." };
-  }
-
-  redirect(next && next.startsWith("/") ? next : "/dashboard");
+  redirect("/verify");
 }

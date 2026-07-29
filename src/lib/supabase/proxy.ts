@@ -6,7 +6,10 @@ import { buildCsp } from "@/lib/security-headers";
 // an SMS/email link. It authenticates by the unguessable token, not a session.
 // The vehicle-image proxy is public with it: the contract shows the car's
 // photo, and the route only serves cached Wikipedia page images by make/model.
-const PUBLIC_PATHS = ["/login", "/set-password", "/sign", "/api/vehicles/image"];
+// /verify is reached with a correct password but NO session — the session is
+// only minted once the emailed code is accepted — so it has to be public to
+// the middleware. Its own httpOnly cookie is what authorises it.
+const PUBLIC_PATHS = ["/login", "/verify", "/set-password", "/sign", "/api/vehicles/image"];
 
 // Telephony endpoints authenticate themselves (carrier signature / shared
 // token) and must never be redirected to /login — a carrier that follows a
