@@ -15,9 +15,10 @@ export default async function QuotesPage({
     docs?: string;
     vehicles?: string;
     age?: string;
+    sms?: string;
   }>;
 }) {
-  const { tab, rep, page, optout, signed, docs, vehicles, age } = await searchParams;
+  const { tab, rep, page, optout, signed, docs, vehicles, age, sms } = await searchParams;
   return (
     <PipelineList
       page={page}
@@ -26,7 +27,7 @@ export default async function QuotesPage({
       description="Priced — edit, or convert to an order to book it."
       tab={tab}
       rep={rep}
-      filters={{ optout, signed, docs, vehicles, age }}
+      filters={{ optout, signed, docs, vehicles, age, sms }}
     />
   );
 }

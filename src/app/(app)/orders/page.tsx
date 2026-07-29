@@ -15,9 +15,10 @@ export default async function OrdersPage({
     docs?: string;
     vehicles?: string;
     age?: string;
+    sms?: string;
   }>;
 }) {
-  const { tab, rep, page, optout, signed, docs, vehicles, age } = await searchParams;
+  const { tab, rep, page, optout, signed, docs, vehicles, age, sms } = await searchParams;
   return (
     <PipelineList
       page={page}
@@ -26,7 +27,7 @@ export default async function OrdersPage({
       description="Converted orders — post to a board, dispatch, and track."
       tab={tab}
       rep={rep}
-      filters={{ optout, signed, docs, vehicles, age }}
+      filters={{ optout, signed, docs, vehicles, age, sms }}
     />
   );
 }

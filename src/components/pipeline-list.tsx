@@ -1,4 +1,4 @@
-import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
+import { MANAGER_LOADS_CONTACT_TABLE, SALES_LOADS_CONTACT_TABLE } from "@/lib/loads-table";
 import Link from "next/link";
 import { CalendarCheck2, Inbox, MapPin, Phone, Plus, User } from "lucide-react";
 import { VehiclePhoto } from "@/components/vehicle-photo";
@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { phoneDigits, suppressedAmong } from "@/lib/messaging/suppression";
 import { Button } from "@/components/ui/button";
-import { formatPhone } from "@/lib/format";
+import { formatDateTime, formatPhone, formatRelativeTime } from "@/lib/format";
 import { daysAgoIso, endOfBusinessDay } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { SelectionProvider } from "@/components/pipeline/selection-context";
@@ -33,6 +33,13 @@ import {
 } from "@/lib/order-status";
 import { VEHICLE_TYPE_LABELS } from "@/types/database";
 import type { Load, LoadStatus, LoadVehicle, Profile } from "@/types/database";
+
+// A load as the _contact views return it: the row, plus when this shipper was
+// last reached. Not on `loads` itself — it belongs to the customer (0039).
+type PipelineLoad = Load & {
+  customer_last_sms_at: string | null;
+  customer_last_email_at: string | null;
+};
 
 // msgplane money style: "Tariff:$500" — whole dollars, no separators.
 const money0 = (v: number | null | undefined) => (v == null ? "—" : `$${Math.round(v)}`);
@@ -89,7 +96,9 @@ export async function PipelineList({
   const canSeeMargin = profile.role === "admin" || profile.role === "dispatcher";
   // Both are views: base-table select("*") would hit the revoked margin
   // columns; loads_full carries them for managers, the safe view hides them.
-  const table = canSeeMargin ? MANAGER_LOADS_TABLE : "loads_sales_safe";
+  // The _contact pair: the same two views with the shipper's last-texted stamp
+  // joined on (0039), so recency is a column here instead of an id list.
+  const table = canSeeMargin ? MANAGER_LOADS_CONTACT_TABLE : SALES_LOADS_CONTACT_TABLE;
 
   const stageStatuses: LoadStatus[] =
     stage === "lead" ? LEAD_STATUSES : stage === "quote" ? QUOTE_STATUSES : ORDER_STATUSES;
@@ -112,6 +121,9 @@ export async function PipelineList({
   // during render.
   const ageDays = Number(filters.age);
   const ageCutoffIso = Number.isFinite(ageDays) && ageDays > 0 ? daysAgoIso(ageDays) : null;
+
+  const smsDays = Number(filters.sms);
+  const smsCutoffIso = Number.isFinite(smsDays) && smsDays > 0 ? daysAgoIso(smsDays) : null;
 
   // Which orders have carrier offers logged — feeds msgplane's Requests tab
   // (filter, count badge, and the circled per-row offer count). Only the
@@ -206,6 +218,16 @@ export async function PipelineList({
     }
 
     if (ageCutoffIso) out = out.lte("created_at", ageCutoffIso);
+
+    // A shipper never texted counts as "not texted in 7 days" — they are the
+    // most eligible of all, and leaving them out would hide the whole untouched
+    // half of the book behind a filter whose name says they belong in it.
+    if (filters.sms === "never") out = out.is("customer_last_sms_at", null);
+    else if (smsCutoffIso) {
+      out = out.or(
+        `customer_last_sms_at.is.null,customer_last_sms_at.lte.${smsCutoffIso}`
+      );
+    }
     return out;
   };
 
@@ -267,7 +289,7 @@ export async function PipelineList({
   );
 
   const [{ data, error }, ...countResults] = await Promise.all([query, ...countPromises]);
-  const loads = (data ?? []) as Load[];
+  const loads = (data ?? []) as PipelineLoad[];
   const countByTab = new Map(
     tabs.map((t, i) => [t.key, (countResults[i] as { count: number | null }).count ?? 0])
   );
@@ -802,6 +824,22 @@ export async function PipelineList({
                                 customerName={customer.contact_name}
                               />
                             )}
+                            {/* When this shipper was last texted — the thing a
+                                rep working a 30k follow-up list needs before
+                                they send, not after. "never" is not an em dash:
+                                it is the most useful state on the row. */}
+                            <span
+                              className="text-muted-foreground"
+                              title={
+                                load.customer_last_sms_at
+                                  ? `Last SMS ${formatDateTime(load.customer_last_sms_at)}`
+                                  : "Never texted"
+                              }
+                            >
+                              {load.customer_last_sms_at
+                                ? formatRelativeTime(load.customer_last_sms_at)
+                                : "never"}
+                            </span>
                           </p>
                         )}
                         {customer.email && (

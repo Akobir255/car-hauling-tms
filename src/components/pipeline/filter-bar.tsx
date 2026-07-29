@@ -16,6 +16,7 @@ export type FilterValues = {
   docs?: string;
   vehicles?: string;
   age?: string;
+  sms?: string;
 };
 
 const FILTERS: {
@@ -61,6 +62,22 @@ const FILTERS: {
       { value: "", label: "Any" },
       { value: "enclosed", label: "Enclosed only" },
       { value: "nonrunning", label: "Non-running" },
+    ],
+  },
+  // The one that stops a shipper being texted twice in a week. Age answers
+  // "how old is this record"; a 2022 quote can still have been SMS'd
+  // yesterday, and at ~1,000 sends a day that is the difference that matters.
+  // "Never" and the day windows both include shippers never texted at all.
+  {
+    key: "sms",
+    label: "Last SMS",
+    options: [
+      { value: "", label: "Any" },
+      { value: "never", label: "Never texted" },
+      { value: "3", label: "Not in 3 days" },
+      { value: "7", label: "Not in 7 days" },
+      { value: "15", label: "Not in 15 days" },
+      { value: "30", label: "Not in 30 days" },
     ],
   },
   // Finds the graveyard: quotes old enough that whoever the shipper went with
