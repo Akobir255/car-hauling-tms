@@ -52,20 +52,24 @@ export default async function LoadsPage({
   // query has to say rather than something the row policy says for it.
   if (profile.role === "sales") query = query.eq("sales_owner_id", profile.id);
 
-  // Per-status counts for the section tabs (one lightweight column, scoped the
-  // same way so the numbers match the visible list).
-  let countQuery = supabase.from(table).select("status");
-  if (canSeeMargin && repParam) countQuery = countQuery.eq("sales_owner_id", repParam);
-  if (profile.role === "sales") countQuery = countQuery.eq("sales_owner_id", profile.id);
-
-  const [{ data, error }, { data: countRows }] = await Promise.all([query, countQuery]);
+  // Per-status counts for the section tabs. These were tallied in JS from a
+  // .select("status") of the whole table — which PostgREST caps at 1,000 rows,
+  // so against 25,867 loads the "All" tab read exactly 1000 every time and each
+  // status showed whatever happened to fall in that arbitrary page. Counting in
+  // Postgres (migration 0041) returns one row and is not capped. The function
+  // pins a sales caller to their own rows itself, so p_rep is manager-only.
+  const [{ data, error }, { data: countData }] = await Promise.all([
+    query,
+    supabase.rpc("loads_status_counts", {
+      p_rep: canSeeMargin && repParam ? repParam : null,
+    }),
+  ]);
   const loads = (data ?? []) as Load[];
 
-  const statusCounts = new Map<string, number>();
-  for (const row of (countRows ?? []) as { status: LoadStatus }[]) {
-    statusCounts.set(row.status, (statusCounts.get(row.status) ?? 0) + 1);
-  }
-  const totalCount = (countRows ?? []).length;
+  const statusCounts = new Map<string, number>(
+    Object.entries((countData ?? {}) as Record<string, number>).map(([s, n]) => [s, Number(n)])
+  );
+  const totalCount = [...statusCounts.values()].reduce((a, b) => a + b, 0);
 
   const loadIds = loads.map((l) => l.id);
   const customerIds = [...new Set(loads.map((l) => l.customer_id).filter(Boolean))];

@@ -11,17 +11,38 @@ import type { Customer } from "@/types/database";
 
 export const metadata: Metadata = { title: "Customers" };
 
-export default async function CustomersPage() {
+const PAGE_SIZE = 100;
+
+export default async function CustomersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const profile = await requireProfile();
   const supabase = await createClient();
-  let query = supabase.from("customers").select("*").order("created_at", { ascending: false });
+  const page = Math.max(0, Number.parseInt((await searchParams).page ?? "0", 10) || 0);
+
+  // Paged, and the total comes from the database. This asked for the whole
+  // table and printed customers.length as the count — PostgREST caps a response
+  // at 1,000 rows, so with 25,117 shippers the page showed the first 1,000 and
+  // told you that was all of them, with no way to reach the other 24,117.
+  let query = supabase
+    .from("customers")
+    .select("*", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
   // A rep's customer list stays their book of business. Everyone else's is
   // reachable — by name, phone or email from the search bar — but it does not
   // belong in this list. (Before 0037 the row policy did this silently.)
   if (profile.role === "sales") query = query.eq("sales_owner_id", profile.id);
-  const { data, error } = await query;
+  const { data, error, count } = await query;
 
   const customers = (data ?? []) as Customer[];
+  const total = count ?? 0;
+  const lastPage = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1);
+  const from = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const to = Math.min(page * PAGE_SIZE + customers.length, total);
+  const pageHref = (p: number) => (p > 0 ? `/customers?page=${p}` : "/customers");
 
   return (
     <div className="space-y-4">
@@ -29,7 +50,13 @@ export default async function CustomersPage() {
         <div>
           <h1 className="text-[15px]">Customers</h1>
           <p className="text-sm text-muted-foreground">
-            {customers.length} customer{customers.length === 1 ? "" : "s"}
+            {total.toLocaleString()} customer{total === 1 ? "" : "s"}
+            {total > PAGE_SIZE && (
+              <span>
+                {" "}
+                · showing {from.toLocaleString()}–{to.toLocaleString()}
+              </span>
+            )}
           </p>
         </div>
         <Button className="max-md:min-h-12" render={<Link href="/customers/new" />}>
@@ -120,6 +147,34 @@ export default async function CustomersPage() {
           </tbody>
         </table>
       </div>
+
+      {lastPage > 0 && (
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">
+            Page {page + 1} of {(lastPage + 1).toLocaleString()}
+          </span>
+          <span className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="max-md:min-h-12"
+              disabled={page === 0}
+              render={page === 0 ? <span /> : <Link href={pageHref(page - 1)} />}
+            >
+              Previous
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="max-md:min-h-12"
+              disabled={page >= lastPage}
+              render={page >= lastPage ? <span /> : <Link href={pageHref(page + 1)} />}
+            >
+              Next
+            </Button>
+          </span>
+        </div>
+      )}
     </div>
   );
 }

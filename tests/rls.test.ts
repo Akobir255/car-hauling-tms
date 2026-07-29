@@ -233,6 +233,103 @@ d("RLS + column grants (migration 0013)", () => {
     }
   });
 
+  // Migration 0041. These aggregates replaced JS reductions over a .select()
+  // that PostgREST silently truncated at 1,000 rows, so the whole point is that
+  // the number is the TRUE number — which means the test has to compare against
+  // an independently computed control, not merely assert "not null".
+  describe("dashboard_stats / loads_status_counts (0041)", () => {
+    // Page past the 1,000-row cap with the service role to get the truth.
+    async function control(): Promise<{ rev30: number; statuses: Record<string, number> }> {
+      const rows: { status: string; customer_rate: number | null; created_at: string }[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await admin
+          .from("loads")
+          .select("status, customer_rate, created_at")
+          .order("id")
+          .range(from, from + 999);
+        if (error) throw error;
+        if (!data?.length) break;
+        rows.push(...(data as typeof rows));
+        if (data.length < 1000) break;
+      }
+      const now = Date.now();
+      const rev30 = rows
+        .filter(
+          (l) =>
+            l.status !== "cancelled" &&
+            new Date(l.created_at).getTime() >= now - 30 * 86_400_000 &&
+            new Date(l.created_at).getTime() <= now
+        )
+        .reduce((s, l) => s + Number(l.customer_rate ?? 0), 0);
+      const statuses: Record<string, number> = {};
+      for (const l of rows) statuses[l.status] = (statuses[l.status] ?? 0) + 1;
+      return { rev30, statuses };
+    }
+
+    it("returns a manager the true totals, not a 1000-row slice", async () => {
+      const truth = await control();
+      // Briefly a manager, so the role gate inside the definer function opens.
+      await admin.from("profiles").update({ role: "dispatcher" }).eq("id", userId);
+      try {
+        const { data, error } = await sales.rpc("dashboard_stats", {
+          p_follow_up_cutoff: new Date(Date.now() + 86_400_000).toISOString(),
+        });
+        expect(error).toBeNull();
+        expect(data).not.toBeNull();
+        // Within a cent: numeric sums come back as strings through PostgREST.
+        expect(Math.abs(Number(data.rev_last_30) - truth.rev30)).toBeLessThan(0.01);
+        // The defect this replaced: a truncated slice could not exceed 1000 rows,
+        // and the true window is far larger than that.
+        const total = Object.values(truth.statuses).reduce((a, b) => a + b, 0);
+        expect(total).toBeGreaterThan(1000);
+
+        const counts = await sales.rpc("loads_status_counts", { p_rep: null });
+        expect(counts.error).toBeNull();
+        for (const [status, n] of Object.entries(truth.statuses)) {
+          expect(Number(counts.data[status] ?? 0), `status ${status}`).toBe(n);
+        }
+      } finally {
+        await admin.from("profiles").update({ role: "sales" }).eq("id", userId);
+      }
+    });
+
+    it("pins a sales caller to their own rows whatever they pass", async () => {
+      const { data, error } = await sales.rpc("dashboard_stats", {
+        p_follow_up_cutoff: new Date().toISOString(),
+      });
+      expect(error).toBeNull();
+      // The throwaway user owns nothing, so every figure must be zero even
+      // though 0037 lets them READ every load in the system.
+      expect(Number(data.rev_last_30)).toBe(0);
+      expect(Number(data.new_last_7)).toBe(0);
+      expect(Number(data.follow_ups_due)).toBe(0);
+
+      // p_rep is a manager-only control; a rep passing somebody else's id must
+      // not be handed that person's book.
+      const { data: other } = await admin
+        .from("profiles")
+        .select("id")
+        .neq("id", userId)
+        .limit(1)
+        .single();
+      const counts = await sales.rpc("loads_status_counts", { p_rep: other?.id });
+      expect(counts.error).toBeNull();
+      expect(Object.keys(counts.data ?? {})).toHaveLength(0);
+    });
+
+    it("tells a deactivated profile nothing", async () => {
+      await admin.from("profiles").update({ active: false }).eq("id", userId);
+      try {
+        const { data } = await sales.rpc("dashboard_stats", {
+          p_follow_up_cutoff: new Date().toISOString(),
+        });
+        expect(data).toBeNull();
+      } finally {
+        await admin.from("profiles").update({ active: true }).eq("id", userId);
+      }
+    });
+  });
+
   it("denies the anon role outright", async () => {
     const anon = createClient(url, anonKey, {
       auth: { autoRefreshToken: false, persistSession: false },

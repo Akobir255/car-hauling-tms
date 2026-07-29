@@ -57,12 +57,6 @@ const VEHICLE_COLORS: Record<string, string> = {
   other: "text-muted-foreground",
 };
 
-function daysAgo(n: number): Date {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d;
-}
-
 export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
@@ -71,8 +65,6 @@ export default async function DashboardPage() {
   const loadsTable = canSeeMargin ? "loads_full" : "loads_sales_safe";
   const supabase = await createClient();
 
-  const since60 = daysAgo(60).toISOString();
-  const since90 = daysAgo(90).toISOString();
   const in30Days = new Date();
   in30Days.setDate(in30Days.getDate() + 30);
   // Same business-timezone boundary as the Follow-up Today tabs, so this
@@ -84,10 +76,6 @@ export default async function DashboardPage() {
   // another rep's order, which means these queries have to name the owner
   // themselves — the row policy no longer narrows them.
   const isSales = profile.role === "sales";
-  let loads60Query = supabase
-    .from(loadsTable)
-    .select("id, created_at, status, customer_rate")
-    .gte("created_at", since60);
   let recentQuery = supabase
     .from(loadsTable)
     .select("*")
@@ -108,23 +96,26 @@ export default async function DashboardPage() {
     .order("follow_up_at", { ascending: false })
     .limit(6);
   if (isSales) {
-    loads60Query = loads60Query.eq("sales_owner_id", profile.id);
     recentQuery = recentQuery.eq("sales_owner_id", profile.id);
     openQuotesQuery = openQuotesQuery.eq("sales_owner_id", profile.id);
     dueFollowUpsQuery = dueFollowUpsQuery.eq("sales_owner_id", profile.id);
   }
 
   const [
-    { data: loads60Data },
+    { data: statsData, error: statsError },
     { data: recentLoadsData },
     { count: openQuotes },
     { data: dueFollowUpsData },
     { data: unassignedData },
     { data: expiringCarriersData },
-    { data: vehicles90Data },
     { data: recentMessagesData },
   ] = await Promise.all([
-    loads60Query,
+    // Every headline number in one aggregate call (migration 0041). These used
+    // to be reduced in JS from a .select() of the 60-day window — 1,756 rows
+    // against PostgREST's 1,000-row cap, so revenue read ~$370k against a true
+    // $624,740 and the growth arrow said +220% against a true +28%. An
+    // aggregate returns one row and is not capped.
+    supabase.rpc("dashboard_stats", { p_follow_up_cutoff: endOfToday.toISOString() }),
     recentQuery,
     openQuotesQuery,
     dueFollowUpsQuery,
@@ -148,11 +139,23 @@ export default async function DashboardPage() {
       .lte("coi_expiry_date", in30Days.toISOString().slice(0, 10))
       .order("coi_expiry_date", { ascending: true })
       .limit(5),
-    supabase.from("load_vehicles").select("vehicle_type, created_at").gte("created_at", since90),
     supabase.from("messages").select("*").order("created_at", { ascending: false }).limit(8),
   ]);
 
-  const loads60 = (loads60Data ?? []) as Pick<Load, "id" | "created_at" | "status" | "customer_rate">[];
+  // A failed aggregate must not render as a dashboard full of zeroes — that is
+  // indistinguishable from a quiet month, which is how the old truncation hid
+  // for so long.
+  type Stats = {
+    new_last_7: number;
+    new_prev_7: number;
+    rev_last_30: number;
+    rev_prev_30: number;
+    follow_ups_due: number;
+    revenue_points: { date: string; value: number }[];
+    vehicle_types: Record<string, number>;
+  };
+  const stats = (statsData ?? null) as Stats | null;
+
   const recentLoads = (recentLoadsData ?? []) as Load[];
   const followUps = (dueFollowUpsData ?? []) as Load[];
   const unassigned = (unassignedData ?? []) as Load[];
@@ -160,43 +163,25 @@ export default async function DashboardPage() {
   const recentMessages = (recentMessagesData ?? []) as Message[];
 
   // ---- KPIs with honest 7/30-day deltas ----
-  const d7 = daysAgo(7);
-  const d14 = daysAgo(14);
-  const d30 = daysAgo(30);
-  const notCancelled = loads60.filter((l) => l.status !== "cancelled");
-
-  const newLast7 = loads60.filter((l) => new Date(l.created_at) >= d7).length;
-  const newPrev7 = loads60.filter((l) => {
-    const c = new Date(l.created_at);
-    return c >= d14 && c < d7;
-  }).length;
+  const newLast7 = stats?.new_last_7 ?? 0;
+  const newPrev7 = stats?.new_prev_7 ?? 0;
   const newLoadsDelta = newPrev7 > 0 ? Math.round(((newLast7 - newPrev7) / newPrev7) * 100) : null;
 
-  const revLast30 = notCancelled
-    .filter((l) => new Date(l.created_at) >= d30)
-    .reduce((s, l) => s + (l.customer_rate ?? 0), 0);
-  const revPrev30 = notCancelled
-    .filter((l) => new Date(l.created_at) < d30)
-    .reduce((s, l) => s + (l.customer_rate ?? 0), 0);
+  const revLast30 = Number(stats?.rev_last_30 ?? 0);
+  const revPrev30 = Number(stats?.rev_prev_30 ?? 0);
   const revDelta = revPrev30 > 0 ? Math.round(((revLast30 - revPrev30) / revPrev30) * 100) : null;
 
   // ---- Cumulative revenue for the chart (last 30 days) ----
+  // The function returns one row per day, zero-filled; the running total is the
+  // only part that stays here.
   const revenuePoints: RevenuePoint[] = [];
-  let running = 0;
-  for (let i = 29; i >= 0; i--) {
-    const day = daysAgo(i).toISOString().slice(0, 10);
-    running += notCancelled
-      .filter((l) => l.created_at.slice(0, 10) === day)
-      .reduce((s, l) => s + (l.customer_rate ?? 0), 0);
-    revenuePoints.push({ date: day, value: Math.round(running) });
+  for (const p of stats?.revenue_points ?? []) {
+    const previous = revenuePoints[revenuePoints.length - 1]?.value ?? 0;
+    revenuePoints.push({ date: p.date, value: Math.round(previous + Number(p.value ?? 0)) });
   }
 
   // ---- Vehicle types donut: top 4 + fold into Other ----
-  const typeCounts = new Map<string, number>();
-  for (const v of (vehicles90Data ?? []) as Pick<LoadVehicle, "vehicle_type">[]) {
-    typeCounts.set(v.vehicle_type, (typeCounts.get(v.vehicle_type) ?? 0) + 1);
-  }
-  const ranked = [...typeCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const ranked = Object.entries(stats?.vehicle_types ?? {}).sort((a, b) => b[1] - a[1]);
   const top = ranked.slice(0, 4);
   const foldCount = ranked.slice(4).reduce((s, [, n]) => s + n, 0);
   const donutSegments: DonutSegment[] = top.map(([type, n]) => ({
@@ -255,6 +240,17 @@ export default async function DashboardPage() {
         </div>
       </div>
 
+      {/* Say so rather than drawing zeroes. A silently-empty dashboard reads as
+          a quiet month, which is exactly how the 1,000-row truncation went
+          unnoticed for as long as it did. */}
+      {(statsError || !stats) && (
+        <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm">
+          The headline figures could not be loaded, so the cards and the chart
+          below are blank rather than wrong.
+          {statsError?.message ? ` (${statsError.message})` : ""}
+        </p>
+      )}
+
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard
           title="New loads (7d)"
@@ -277,9 +273,12 @@ export default async function DashboardPage() {
           delta={revDelta}
           deltaLabel="vs prior 30 days"
         />
+        {/* The real count, not the length of the six-row list below it — which
+            is what this printed, so it could never read above 6 against 18,278
+            actually due. */}
         <StatCard
           title="Follow-ups due"
-          value={String(followUps.length)}
+          value={String(stats?.follow_ups_due ?? 0)}
           icon={CalendarClock}
           iconClass="bg-chart-2/10 text-chart-2"
         />
