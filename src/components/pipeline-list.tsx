@@ -9,7 +9,7 @@ import { requireProfile } from "@/lib/auth";
 import { phoneDigits, suppressedAmong } from "@/lib/messaging/suppression";
 import { Button } from "@/components/ui/button";
 import { formatPhone } from "@/lib/format";
-import { endOfBusinessDay } from "@/lib/dates";
+import { daysAgoIso, endOfBusinessDay } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { SelectionProvider } from "@/components/pipeline/selection-context";
 import { RepSelect } from "@/components/pipeline/rep-select";
@@ -106,6 +106,13 @@ export async function PipelineList({
   const endOfToday = endOfBusinessDay();
   const endOfTodayIso = endOfToday.toISOString();
 
+  // Age of the RECORD, not of the last touch: updated_at moves on any save, so
+  // a quote somebody merely opened would drop out of the list they were
+  // building. Read once here — the clock is impure, and a query builder runs
+  // during render.
+  const ageDays = Number(filters.age);
+  const ageCutoffIso = Number.isFinite(ageDays) && ageDays > 0 ? daysAgoIso(ageDays) : null;
+
   // Which orders have carrier offers logged — feeds msgplane's Requests tab
   // (filter, count badge, and the circled per-row offer count). Only the
   // order stage pays for this query; RLS scopes it.
@@ -197,6 +204,8 @@ export async function PipelineList({
     else if (nonRunningLoadIds) {
       out = out.in("id", nonRunningLoadIds.length ? nonRunningLoadIds : NONE);
     }
+
+    if (ageCutoffIso) out = out.lte("created_at", ageCutoffIso);
     return out;
   };
 

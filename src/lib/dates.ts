@@ -53,3 +53,11 @@ export function endOfBusinessDay(now: Date = new Date()): Date {
   );
   return guess;
 }
+
+// N days before now, as an ISO instant. Lives here rather than inline in a
+// component because reading the clock during render is impure — the same
+// reason endOfBusinessDay() is a call at the top of a component and not an
+// expression buried in a query builder.
+export function daysAgoIso(days: number, now: Date = new Date()): string {
+  return new Date(now.getTime() - days * 86_400_000).toISOString();
+}

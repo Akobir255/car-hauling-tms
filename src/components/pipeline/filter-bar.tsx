@@ -15,6 +15,7 @@ export type FilterValues = {
   signed?: string;
   docs?: string;
   vehicles?: string;
+  age?: string;
 };
 
 const FILTERS: {
@@ -60,6 +61,20 @@ const FILTERS: {
       { value: "", label: "Any" },
       { value: "enclosed", label: "Enclosed only" },
       { value: "nonrunning", label: "Non-running" },
+    ],
+  },
+  // Finds the graveyard: quotes old enough that whoever the shipper went with
+  // has already had their chance. Combine with Messaging → "Contactable" and
+  // the selection feeds straight into bulk email.
+  {
+    key: "age",
+    label: "Age",
+    options: [
+      { value: "", label: "Any" },
+      { value: "30", label: "Older than 30 days" },
+      { value: "90", label: "Older than 90 days" },
+      { value: "180", label: "Older than 6 months" },
+      { value: "365", label: "Older than a year" },
     ],
   },
 ];
