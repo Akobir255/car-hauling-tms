@@ -9,7 +9,7 @@ import { requireProfile } from "@/lib/auth";
 import { phoneDigits, suppressedAmong } from "@/lib/messaging/suppression";
 import { Button } from "@/components/ui/button";
 import { formatDateTime, formatPhone, formatRelativeTime } from "@/lib/format";
-import { daysAgoIso, endOfBusinessDay } from "@/lib/dates";
+import { daysAgoIso } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { SelectionProvider } from "@/components/pipeline/selection-context";
 import { RepSelect } from "@/components/pipeline/rep-select";
@@ -109,11 +109,10 @@ export async function PipelineList({
   const defaultTab = tabs.find((t) => t.default) ?? tabs[0];
   const activeTab = tabs.find((t) => t.key === tab) ?? defaultTab;
 
-  // "Due" = follow-up scheduled for any time up to the end of today in the
-  // business timezone (includes everything overdue). Shared with the
-  // dashboard's due-today card so the two counts can never disagree.
-  const endOfToday = endOfBusinessDay();
-  const endOfTodayIso = endOfToday.toISOString();
+  // The 24-hour line that separates Quotes from Follow-up. Read once here — the
+  // clock is impure, and a query builder runs during render, so each tab's
+  // count would otherwise be measured against a slightly different "now".
+  const dayAgoIso = daysAgoIso(1);
 
   // Age of the RECORD, not of the last touch: updated_at moves on any save, so
   // a quote somebody merely opened would drop out of the list they were
@@ -259,9 +258,12 @@ export async function PipelineList({
     // priced too. That inference is exactly how 365 archived ORDERS ended up
     // filed under Quotes > Archived beside 118 real archived quotes.
     if (t.stage) out = out.eq("pipeline_stage", t.stage);
-    if (t.followUpDue) {
-      out = out.not("follow_up_at", "is", null).lte("follow_up_at", endOfTodayIso);
-    }
+    // Quotes vs Follow-up is a question about ARRIVAL, not about a reminder:
+    // under 24 hours old is still to be quoted, older than that has to be
+    // chased. Filtering Follow-up on follow_up_at put 18,278 of the same 18,505
+    // records in both tabs.
+    if (t.arrived === "within24h") out = out.gte("created_at", dayAgoIso);
+    else if (t.arrived === "before24h") out = out.lt("created_at", dayAgoIso);
     if (canSeeMargin && rep) out = out.eq("sales_owner_id", rep);
     // A rep's pipeline is still THEIR pipeline. Until migration 0037 the row
     // policy made that true on its own; now that every record is readable, the
@@ -277,14 +279,9 @@ export async function PipelineList({
     from,
     from + PAGE_SIZE - 1
   );
-  query = activeTab.followUpDue
-    ? // Most recent follow-up first, like every other list on the site. This
-      // read oldest-first on the theory that a queue is worked from the most
-      // overdue end; in practice it made the Follow-up tab the one list that
-      // ran backwards relative to the rest, and buried today's follow-ups
-      // behind everything ever missed.
-      query.order("follow_up_at", { ascending: false })
-    : query.order("created_at", { ascending: false });
+  // Newest arrival first, on every tab without exception. The record that came
+  // in most recently is the top row, and the list runs back from there to 2022.
+  query = query.order("created_at", { ascending: false });
 
   // Exact per-tab counts. head:true fetches no rows, so this stays correct
   // past PostgREST's 1000-row response cap.
@@ -497,11 +494,11 @@ export async function PipelineList({
   });
 
   // Shared by the table's empty row and the card list's.
-  const emptyState = activeTab.followUpDue ? (
+  const emptyState = activeTab.arrived === "before24h" ? (
     <EmptyState
       icon={CalendarCheck2}
       title="Queue clear"
-      hint="No follow-ups due today. Anything you schedule lands here on its day."
+      hint={`Nothing older than a day is waiting. New ${stage}s move here 24 hours after they arrive.`}
     />
   ) : (
     <EmptyState
@@ -542,7 +539,7 @@ export async function PipelineList({
               // No badge on the follow-up queue. Nearly every open quote is due
               // or overdue, so the number reads in the thousands — it tells a
               // rep nothing they can act on and the old system never showed it.
-              const showBadge = t.badge && !t.followUpDue && count > 0;
+              const showBadge = t.badge && t.arrived !== "before24h" && count > 0;
               return (
                 <Link
                   key={t.key}

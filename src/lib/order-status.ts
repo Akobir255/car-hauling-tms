@@ -110,7 +110,14 @@ export type OrderTab = {
   label: string;
   statuses?: LoadStatus[];
   notSigned?: boolean;
-  followUpDue?: boolean;
+  /**
+   * Splits a stage by WHEN THE RECORD ARRIVED, which is how the old system
+   * divides Quotes: anything under 24 hours old is still to be quoted and sits
+   * in Quotes; anything older has to be chased and sits in Follow-up. It is not
+   * a question about follow_up_at — that is a reminder a rep sets by hand, and
+   * using it here put 18,278 of 18,505 records in both tabs at once.
+   */
+  arrived?: "within24h" | "before24h";
   // msgplane's Requests tab: posted orders that have carrier offers logged
   // in load_requests — the dispatcher's "review the offers" queue.
   hasRequests?: boolean;
@@ -149,15 +156,15 @@ export type OrderTab = {
 // msgplane's Quotes/Leads modules: Follow-up Today is the FIRST (default)
 // tab, there is no Cancelled tab — cancelled/lost park under Archived.
 export const LEAD_TABS: OrderTab[] = [
-  { key: "followup", label: "Follow-up Today", statuses: ["lead"], followUpDue: true },
-  { key: "leads", label: "Leads", statuses: ["lead"], default: true },
+  { key: "followup", label: "Follow-up Today", statuses: ["lead"], arrived: "before24h" },
+  { key: "leads", label: "Leads", statuses: ["lead"], arrived: "within24h", default: true },
   { key: "hold", label: "Hold", statuses: ["hold"], stage: "lead" },
   { key: "archived", label: "Archived", statuses: ["archived", "cancelled", "lost"], stage: "lead" },
 ];
 
 export const QUOTE_TABS: OrderTab[] = [
-  { key: "followup", label: "Follow-up Today", statuses: ["quote"], followUpDue: true },
-  { key: "quotes", label: "Quotes", statuses: ["quote"], default: true },
+  { key: "followup", label: "Follow-up Today", statuses: ["quote"], arrived: "before24h" },
+  { key: "quotes", label: "Quotes", statuses: ["quote"], arrived: "within24h", default: true },
   { key: "hold", label: "Hold", statuses: ["hold"], stage: "quote" },
   {
     key: "archived",
