@@ -6,11 +6,16 @@ import type { Customer, MessageTemplate } from "@/types/database";
 import { BulkCompose } from "./bulk-compose";
 
 export default async function NewBlastPage() {
-  await requireProfile();
+  const profile = await requireProfile();
   const supabase = await createClient();
 
+  // Own book only for a rep — a blast list is not a place to browse the
+  // company's shippers, which 0037 otherwise made readable everywhere.
+  let customerQuery = supabase.from("customers").select("*").order("contact_name");
+  if (profile.role === "sales") customerQuery = customerQuery.eq("sales_owner_id", profile.id);
+
   const [{ data: customers }, { data: templates }] = await Promise.all([
-    supabase.from("customers").select("*").order("contact_name"),
+    customerQuery,
     supabase.from("message_templates").select("*").order("name"),
   ]);
 

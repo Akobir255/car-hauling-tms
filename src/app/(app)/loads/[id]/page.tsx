@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { canEdit } from "@/lib/record-access";
 import { StatusBadge } from "@/components/status-badge";
 import { DeleteButton } from "@/components/delete-button";
 import { SectionBand, BandRow, Field } from "@/components/section-band";
@@ -150,6 +151,13 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   const profById = new Map((profs ?? []).map((p) => [p.id, p]));
   const assignedTo = load.sales_owner_id ? profById.get(load.sales_owner_id) : null;
 
+  // Anyone on staff can open this record (migration 0037) — by order number,
+  // by the shipper's name or phone, by the carrier hauling it. Only its owner
+  // and the managers can change it, so for everybody else the page renders
+  // without the controls rather than with controls that quietly do nothing.
+  const readOnly = !canEdit(load, profile);
+  const ownerName = assignedTo?.full_name || assignedTo?.email || null;
+
   // The header shows the order's Loadboard SETTING when one is chosen (the
   // old system's header select); otherwise it falls back to where the order
   // actually went.
@@ -249,7 +257,21 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
             canManageCarrier &&
             ["posted_cd", "posted_sd", "booked"].includes(load.status)
           }
+          readOnly={readOnly}
         />
+      )}
+
+      {/* Says plainly whose record this is and why nothing here is clickable.
+          A page that simply has no buttons reads as broken. */}
+      {readOnly && (
+        <p className="rounded-lg border border-chart-2 bg-chart-2/15 px-4 py-2.5 text-sm">
+          Read-only —{" "}
+          {ownerName ? <>this record belongs to {ownerName}.</> : <>this record has no owner yet.</>}{" "}
+          <span className="text-muted-foreground">
+            You can see everything on it; only {ownerName ? "they" : "a manager"} or a manager can
+            change it.
+          </span>
+        </p>
       )}
 
       {/* Record header, laid out like the system this replaces: the ID/Status/
@@ -289,20 +311,27 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
             <Field label="Loadboard">{loadboard}</Field>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <OrderActionBar
-              loadId={load.id}
-              actions={actionsFor(load.status, profile.role)}
-              loadboard={load.loadboard}
-            />
+            {/* Dropped whole rather than handed an empty list — the bar would
+                answer "No actions for this status", and the status is not the
+                reason. The banner above already gives the real one. */}
+            {!readOnly && (
+              <OrderActionBar
+                loadId={load.id}
+                actions={actionsFor(load.status, profile.role)}
+                loadboard={load.loadboard}
+              />
+            )}
             {/* The one colored box in the bar: green EDIT, light-green 500 with
                 a white label, same as the gray boxes beside it. */}
-            <Button
-              size="sm"
-              className="h-8 bg-msg-btn-edit text-xs font-medium uppercase tracking-wide text-msg-btn-foreground hover:bg-msg-btn-edit-hover max-md:min-h-12"
-              render={<Link href={`/loads/${load.id}/edit`} />}
-            >
-              Edit
-            </Button>
+            {!readOnly && (
+              <Button
+                size="sm"
+                className="h-8 bg-msg-btn-edit text-xs font-medium uppercase tracking-wide text-msg-btn-foreground hover:bg-msg-btn-edit-hover max-md:min-h-12"
+                render={<Link href={`/loads/${load.id}/edit`} />}
+              >
+                Edit
+              </Button>
+            )}
           </div>
         </div>
         <p className="mt-2 border-t pt-2 text-sm text-muted-foreground">
@@ -327,6 +356,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               sentAt={load.contract_sent_at}
               sentUndated={load.contract_sent}
               canManage={canManageCarrier}
+              readOnly={readOnly}
               signedName={load.contract_signed_name}
               signedIp={load.contract_signed_ip}
               signedEmail={load.contract_signed_email}
@@ -388,6 +418,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                       model={v.model}
                       type={v.vehicle_type}
                       hasOverride={Boolean(v.photo_path)}
+                      readOnly={readOnly}
                     />
                     <div>
                       <p className="text-sm">
@@ -453,7 +484,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
           </SectionBand>
 
           <SectionBand title="Internal Notes">
-            <NotesThread loadId={load.id} notes={threadNotes} />
+            <NotesThread loadId={load.id} notes={threadNotes} readOnly={readOnly} />
           </SectionBand>
 
           {/* msgplane's Dispatch Information band: the carrier, how they get
@@ -618,7 +649,13 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                   {messages.length === 0 && (
                     <tr>
                       <td colSpan={5} className="px-4 py-4 text-muted-foreground">
-                        No messages with this customer yet.
+                        {/* The conversation itself stays with the rep who owns
+                            the shipper — a shared record is not a shared inbox.
+                            Saying "no messages" to everyone else would be
+                            stating something this page cannot know. */}
+                        {readOnly
+                          ? `The conversation with this shipper is visible to ${ownerName ?? "its owner"}.`
+                          : "No messages with this customer yet."}
                       </td>
                     </tr>
                   )}
@@ -671,6 +708,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
           customerId={load.customer_id}
           blacklisted={customer?.blacklisted ?? false}
           canManage={canManageCarrier}
+          readOnly={readOnly}
         />
         {profile.role === "admin" && (
           <DeleteButton

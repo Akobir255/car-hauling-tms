@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
+import { blockedFromWritingLoad } from "@/lib/record-access";
 
 // Internal notes thread with attachments (migration 0018). Uploads go to the
 // private "load-files" bucket; downloads are short-lived signed URLs minted
@@ -29,6 +30,8 @@ export async function addNote(
   formData: FormData
 ): Promise<NoteState> {
   const profile = await requireRole("admin", "dispatcher", "sales");
+  const notMine = await blockedFromWritingLoad(loadId, profile);
+  if (notMine) return { error: notMine };
   const body = (formData.get("body") || "").toString().trim();
   const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
 
@@ -86,7 +89,9 @@ export async function updateNote(
   noteId: string,
   body: string
 ): Promise<NoteState> {
-  await requireRole("admin", "dispatcher", "sales");
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const notMine = await blockedFromWritingLoad(loadId, profile);
+  if (notMine) return { error: notMine };
   const supabase = await createClient();
   // RLS allows the author, or a manager, to edit.
   const { error } = await supabase
@@ -99,7 +104,9 @@ export async function updateNote(
 }
 
 export async function deleteNote(loadId: string, noteId: string): Promise<NoteState> {
-  await requireRole("admin", "dispatcher", "sales");
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const notMine = await blockedFromWritingLoad(loadId, profile);
+  if (notMine) return { error: notMine };
   const supabase = await createClient();
 
   // Collect the storage paths BEFORE the cascade removes the document rows,

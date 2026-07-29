@@ -76,6 +76,39 @@ export default async function DashboardPage() {
   // card's count always agrees with the queue.
   const endOfToday = endOfBusinessDay();
 
+  // The dashboard is a PERSONAL dashboard: a rep's numbers are their own
+  // numbers. Migration 0037 made every record readable so that search can find
+  // another rep's order, which means these queries have to name the owner
+  // themselves — the row policy no longer narrows them.
+  const isSales = profile.role === "sales";
+  let loads60Query = supabase
+    .from(loadsTable)
+    .select("id, created_at, status, customer_rate")
+    .gte("created_at", since60);
+  let recentQuery = supabase
+    .from(loadsTable)
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(6);
+  let openQuotesQuery = supabase
+    .from(loadsTable)
+    .select("id", { count: "exact", head: true })
+    .eq("status", "quote");
+  let dueFollowUpsQuery = supabase
+    .from(loadsTable)
+    .select("*")
+    .not("follow_up_at", "is", null)
+    .lte("follow_up_at", endOfToday.toISOString())
+    .in("status", ACTIVE_STATUSES)
+    .order("follow_up_at", { ascending: true })
+    .limit(6);
+  if (isSales) {
+    loads60Query = loads60Query.eq("sales_owner_id", profile.id);
+    recentQuery = recentQuery.eq("sales_owner_id", profile.id);
+    openQuotesQuery = openQuotesQuery.eq("sales_owner_id", profile.id);
+    dueFollowUpsQuery = dueFollowUpsQuery.eq("sales_owner_id", profile.id);
+  }
+
   const [
     { data: loads60Data },
     { data: recentLoadsData },
@@ -86,20 +119,10 @@ export default async function DashboardPage() {
     { data: vehicles90Data },
     { data: recentMessagesData },
   ] = await Promise.all([
-    supabase
-      .from(loadsTable)
-      .select("id, created_at, status, customer_rate")
-      .gte("created_at", since60),
-    supabase.from(loadsTable).select("*").order("created_at", { ascending: false }).limit(6),
-    supabase.from(loadsTable).select("id", { count: "exact", head: true }).eq("status", "quote"),
-    supabase
-      .from(loadsTable)
-      .select("*")
-      .not("follow_up_at", "is", null)
-      .lte("follow_up_at", endOfToday.toISOString())
-      .in("status", ACTIVE_STATUSES)
-      .order("follow_up_at", { ascending: true })
-      .limit(6),
+    loads60Query,
+    recentQuery,
+    openQuotesQuery,
+    dueFollowUpsQuery,
     // carrier_id is revoked from `authenticated` by migration 0013 and is not
     // in loads_sales_safe, so this filter is only valid for managers reading
     // loads_full. For sales it would return 42703, and the ignored error would

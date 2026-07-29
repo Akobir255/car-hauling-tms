@@ -15,13 +15,18 @@ export default async function NewTicketPage({
   const profile = await requireRole("admin", "dispatcher", "sales");
   const supabase = await createClient();
 
+  // The picker offers the 100 most recent orders — a rep's own, since 0037
+  // made the whole board readable and an unscoped list would bury theirs.
+  let loadQuery = supabase
+    .from(profile.role === "sales" ? "loads_sales_safe" : MANAGER_LOADS_TABLE)
+    .select("id, load_number, pickup_city, delivery_city")
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (profile.role === "sales") loadQuery = loadQuery.eq("sales_owner_id", profile.id);
+
   const [{ data: profs }, { data: loadRows }] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email").eq("active", true).order("full_name"),
-    supabase
-      .from(profile.role === "sales" ? "loads_sales_safe" : MANAGER_LOADS_TABLE)
-      .select("id, load_number, pickup_city, delivery_city")
-      .order("created_at", { ascending: false })
-      .limit(100),
+    loadQuery,
   ]);
 
   const reps = ((profs ?? []) as Pick<Profile, "id" | "full_name" | "email">[]).map((p) => ({

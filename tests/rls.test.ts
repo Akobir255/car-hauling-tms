@@ -178,13 +178,42 @@ d("RLS + column grants (migration 0013)", () => {
     expect(data ?? []).toHaveLength(0);
   });
 
-  it("shows a sales user no loads or customers they do not own", async () => {
-    // The throwaway user owns nothing, so every scoped table must be empty.
-    for (const table of ["loads_sales_safe", "customers", "messages"]) {
+  // Migration 0037 deliberately turned ownership into an EDIT boundary rather
+  // than a visibility one: a rep answering the phone has to be able to pull up
+  // any order. These two tests are the pair that pins that down — the first
+  // says the records are readable, the second says they are still not writable.
+  it("lets a sales user READ orders and shippers they do not own", async () => {
+    for (const table of ["loads_sales_safe", "customers"]) {
       const { data, error } = await sales.from(table).select("id").limit(1);
       expect(error, `${table} should be readable`).toBeNull();
-      expect(data ?? [], `${table} should be empty for a non-owner`).toHaveLength(0);
+      expect((data ?? []).length, `${table} should not be empty for a non-owner`).toBeGreaterThan(0);
     }
+  });
+
+  it("still refuses to let a sales user WRITE a record they do not own", async () => {
+    const { data: someone } = await admin
+      .from("loads")
+      .select("id, status, sales_owner_id")
+      .neq("sales_owner_id", userId)
+      .limit(1)
+      .single();
+    if (!someone) throw new Error("no foreign load to test against");
+
+    // PostgREST reports a policy-filtered UPDATE as a successful no-op, so the
+    // assertion is on the ROW, not on the absence of an error.
+    await sales.from("loads").update({ notes: "tampered" }).eq("id", someone.id);
+    const { data: after } = await admin
+      .from("loads")
+      .select("notes")
+      .eq("id", someone.id)
+      .single();
+    expect(after?.notes ?? "").not.toBe("tampered");
+  });
+
+  it("keeps another rep's message thread private", async () => {
+    const { data, error } = await sales.from("messages").select("id").limit(1);
+    expect(error, "messages should be readable").toBeNull();
+    expect(data ?? [], "a shared record is not a shared inbox").toHaveLength(0);
   });
 
   it("cuts off access the moment a profile is deactivated", async () => {

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth";
+import { blockedFromWritingLoad } from "@/lib/record-access";
 import { assignCarrier } from "../actions";
 
 // msgplane's Load Requests: dispatchers log carrier offers by hand — the
@@ -23,6 +24,8 @@ export async function addLoadRequest(
   formData: FormData
 ): Promise<RequestFormState> {
   const profile = await requireRole("admin", "dispatcher", "sales");
+  const notMine = await blockedFromWritingLoad(loadId, profile);
+  if (notMine) return { error: notMine };
 
   const carrierName = (formData.get("carrier_name") || "").toString().trim().slice(0, 200);
   if (!carrierName) return { error: "Type the carrier name." };

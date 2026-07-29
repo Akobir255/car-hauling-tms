@@ -23,7 +23,16 @@ const initialState: NoteState = { error: null };
 // Internal-notes thread: a compose box with quick-note buttons and a multi-file
 // picker, then the notes newest-first with per-note edit/remove and attachment
 // links (signed on click, since the bucket is private).
-export function NotesThread({ loadId, notes }: { loadId: string; notes: ThreadNote[] }) {
+export function NotesThread({
+  loadId,
+  notes,
+  readOnly = false,
+}: {
+  loadId: string;
+  notes: ThreadNote[];
+  /** Another rep's order: the thread is readable, the composer is gone. */
+  readOnly?: boolean;
+}) {
   const boundAdd = addNote.bind(null, loadId);
   const [state, formAction, pending] = useActionState(boundAdd, initialState);
   const formRef = useRef<HTMLFormElement>(null);
@@ -83,6 +92,7 @@ export function NotesThread({ loadId, notes }: { loadId: string; notes: ThreadNo
 
   return (
     <div className="space-y-4">
+      {!readOnly && (
       <form ref={formRef} action={formAction} className="space-y-2">
         <Textarea
           name="body"
@@ -132,6 +142,7 @@ export function NotesThread({ loadId, notes }: { loadId: string; notes: ThreadNo
           </p>
         )}
       </form>
+      )}
 
       <div className="divide-y border-t">
         {notes.length === 0 && (
@@ -145,7 +156,7 @@ export function NotesThread({ loadId, notes }: { loadId: string; notes: ThreadNo
               {note.updated_at !== note.created_at && <span>(edited)</span>}
               {/* remove deletes the note and its files — it must not sit a few
                   px from edit under a thumb. */}
-              {note.canEdit && (
+              {note.canEdit && !readOnly && (
                 <span className="ml-auto flex items-center gap-1 max-md:gap-3">
                   <button
                     type="button"

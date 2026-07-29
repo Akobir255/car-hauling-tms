@@ -45,11 +45,15 @@ export default async function LoadsPage({
     .limit(200);
   if (statusFilter) query = query.eq("status", statusFilter);
   if (canSeeMargin && repParam) query = query.eq("sales_owner_id", repParam);
+  // Every record is readable since 0037, so "my orders" is now something this
+  // query has to say rather than something the row policy says for it.
+  if (profile.role === "sales") query = query.eq("sales_owner_id", profile.id);
 
-  // Per-status counts for the section tabs (one lightweight column, RLS-scoped
-  // and rep-scoped to match the visible list).
+  // Per-status counts for the section tabs (one lightweight column, scoped the
+  // same way so the numbers match the visible list).
   let countQuery = supabase.from(table).select("status");
   if (canSeeMargin && repParam) countQuery = countQuery.eq("sales_owner_id", repParam);
+  if (profile.role === "sales") countQuery = countQuery.eq("sales_owner_id", profile.id);
 
   const [{ data, error }, { data: countRows }] = await Promise.all([query, countQuery]);
   const loads = (data ?? []) as Load[];

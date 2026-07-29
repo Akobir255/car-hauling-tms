@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { canEdit } from "@/lib/record-access";
 import type { Customer, Message, Profile } from "@/types/database";
 import { CustomerForm } from "../customer-form";
 import { updateCustomer, deleteCustomer } from "../actions";
@@ -23,12 +24,24 @@ export default async function EditCustomerPage({
   if (!data) notFound();
   const customer = data as Customer;
   const canAssignOwner = profile.role !== "sales";
+  // Shippers are searchable by anyone since 0037 — by name, phone or email —
+  // so this page now opens for people who do not own the account.
+  const readOnly = !canEdit(customer, profile);
 
   let salesReps: Profile[] = [];
   if (canAssignOwner) {
     const { data: reps } = await supabase.from("profiles").select("*").order("full_name");
     salesReps = (reps ?? []) as Profile[];
   }
+  const owner = customer.sales_owner_id
+    ? ((
+        await supabase
+          .from("profiles")
+          .select("full_name, email")
+          .eq("id", customer.sales_owner_id)
+          .maybeSingle()
+      ).data as Pick<Profile, "full_name" | "email"> | null)
+    : null;
 
   const { data: messagesData } = await supabase
     .from("messages")
@@ -54,25 +67,45 @@ export default async function EditCustomerPage({
           />
         )}
       </div>
+      {readOnly && (
+        <p className="rounded-lg border border-chart-2 bg-chart-2/15 px-4 py-2.5 text-sm">
+          Read-only —{" "}
+          {owner ? (
+            <>this shipper belongs to {owner.full_name || owner.email}.</>
+          ) : (
+            <>this shipper has no owner yet.</>
+          )}{" "}
+          <span className="text-muted-foreground">
+            Their details are here so you can answer a call about them; the account itself is
+            theirs to change.
+          </span>
+        </p>
+      )}
       <CustomerForm
         action={boundUpdate}
         customer={customer}
         salesReps={salesReps}
         canAssignOwner={canAssignOwner}
+        readOnly={readOnly}
       />
-      <Card>
-        <CardHeader>
-          <CardTitle>SMS conversation</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <SmsThread
-            messages={messages}
-            action={boundReply}
-            optedOut={customer.sms_opt_out}
-            hasPhone={toE164(customer.phone) !== null}
-          />
-        </CardContent>
-      </Card>
+      {/* The thread itself is still owner-scoped in the database, so this
+          section has nothing to show a visitor and would only invite them to
+          text somebody else's shipper. */}
+      {!readOnly && (
+        <Card>
+          <CardHeader>
+            <CardTitle>SMS conversation</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SmsThread
+              messages={messages}
+              action={boundReply}
+              optedOut={customer.sms_opt_out}
+              hasPhone={toE164(customer.phone) !== null}
+            />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

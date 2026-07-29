@@ -1,8 +1,9 @@
 import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { canEdit } from "@/lib/record-access";
 import { SectionBand } from "@/components/section-band";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,9 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
     .single();
   if (!loadData) notFound();
   const load = loadData as Load;
+  // Reachable now that every record is readable (0037), including by typing
+  // the URL. The record itself stays open — only the form is off limits.
+  if (!canEdit(load, profile)) redirect(`/loads/${id}`);
 
   const [{ data: customerData }, { data: vehiclesData }, { data: carriers }, { data: campaignRows }] =
     await Promise.all([

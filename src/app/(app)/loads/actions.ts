@@ -7,6 +7,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
+import { blockedFromWritingLoad } from "@/lib/record-access";
 import { isSmsConfigured, sendSms, toE164 } from "@/lib/messaging/ringcentral";
 import { isEmailConfigured, isPlausibleEmail, sendEmail, sendEmailBatch } from "@/lib/messaging/email";
 import { buildContext, renderTemplate } from "@/lib/messaging/render";
@@ -275,6 +276,10 @@ export async function updateLoad(
   formData: FormData
 ): Promise<LoadFormState> {
   const profile = await requireRole("admin", "dispatcher", "sales");
+  // Records are shared for READING (0037). Saving one that isn't yours would
+  // otherwise update zero rows and redirect as though it had worked.
+  const notMine = await blockedFromWritingLoad(id, profile);
+  if (notMine) return { error: notMine };
 
   const parsedCore = loadCoreSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsedCore.success) {
@@ -414,6 +419,10 @@ async function transition(
   roles: StaffRole[] = ALL_STAFF
 ): Promise<{ ok: boolean; error?: string }> {
   const profile = await requireRole(...roles);
+  // Every lifecycle button lands here, so this is the one place the shared-
+  // record rule has to be stated for all of them.
+  const notMine = await blockedFromWritingLoad(id, profile);
+  if (notMine) return { ok: false, error: notMine };
   const supabase = await createClient();
   const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
   const { data: current } = await supabase.from(table).select("status").eq("id", id).single();
@@ -569,6 +578,7 @@ export async function reactivateOrder(id: string): Promise<void> {
 // so this just records that we re-sent it).
 export async function resendPost(id: string): Promise<void> {
   const profile = await requireRole("admin", "dispatcher", "sales");
+  if (await blockedFromWritingLoad(id, profile)) return;
   const supabase = await createClient();
   const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
   const { data: current } = await supabase.from(table).select("status").eq("id", id).single();
@@ -585,6 +595,8 @@ export async function resendPost(id: string): Promise<void> {
 export async function markLost(id: string, _prevState: LoadFormState, formData: FormData): Promise<LoadFormState> {
   const reason = (formData.get("lost_reason") || "").toString().trim() || null;
   const profile = await requireRole("admin", "dispatcher", "sales");
+  const notMine = await blockedFromWritingLoad(id, profile);
+  if (notMine) return { error: notMine };
   const supabase = await createClient();
   const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
   const { data: current } = await supabase.from(table).select("status").eq("id", id).single();
@@ -617,6 +629,8 @@ export async function recordPayment(
   if (!Number.isFinite(amount) || amount <= 0) {
     return { error: "Enter a payment amount greater than 0." };
   }
+  const notMine = await blockedFromWritingLoad(id, profile);
+  if (notMine) return { error: notMine };
   const supabase = await createClient();
   const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
   const { data: current } = await supabase
@@ -655,6 +669,8 @@ export async function updateLoadStatus(
 
   const parsed = statusSchema.safeParse(formData.get("status"));
   if (!parsed.success) return { error: "Invalid status." };
+  const notMine = await blockedFromWritingLoad(id, profile);
+  if (notMine) return { error: notMine };
   const note = (formData.get("note") || "").toString().trim() || null;
 
   const supabase = await createClient();
@@ -687,7 +703,9 @@ export async function saveVehicleTariffs(
   _prevState: LoadFormState,
   formData: FormData
 ): Promise<LoadFormState> {
-  await requireRole("admin", "dispatcher", "sales");
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const notMine = await blockedFromWritingLoad(loadId, profile);
+  if (notMine) return { error: notMine };
   const supabase = await createClient();
 
   const updates = new Map<string, Record<string, unknown>>();
@@ -728,6 +746,9 @@ export async function saveVehicleTariffs(
 // 22222222-US -> 22222223US).
 export async function duplicateLoad(id: string): Promise<void> {
   const profile = await requireRole("admin", "dispatcher", "sales");
+  // Reading another rep's order is fine; walking away with a copy of it under
+  // your own name is not.
+  if (await blockedFromWritingLoad(id, profile)) return;
   const supabase = await createClient();
 
   // Sales reps read via the safe view, so a sales-made duplicate simply
@@ -1005,6 +1026,8 @@ export async function sendContract(
   formData: FormData
 ): Promise<EsignState> {
   const profile = await requireRole("admin", "dispatcher", "sales");
+  const notMine = await blockedFromWritingLoad(loadId, profile);
+  if (notMine) return { error: notMine };
   const viaSms = formData.get("via") === "sms";
   const cardField = (formData.get("require_card") || "").toString();
   const supabase = await createClient();
@@ -1027,6 +1050,8 @@ export async function changeTermsAndSend(
   formData: FormData
 ): Promise<EsignState> {
   const profile = await requireRole("admin", "dispatcher", "sales");
+  const notMine = await blockedFromWritingLoad(loadId, profile);
+  if (notMine) return { error: notMine };
   const tariff = numeric.parse(formData.get("tariff")?.toString());
   const deposit = numeric.parse(formData.get("deposit")?.toString());
   const requiresCard = formData.get("require_card") === "on";
@@ -1305,7 +1330,9 @@ export async function setFollowUp(
   _prevState: LoadFormState,
   formData: FormData
 ): Promise<LoadFormState> {
-  await requireRole("admin", "dispatcher", "sales");
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const notMine = await blockedFromWritingLoad(id, profile);
+  if (notMine) return { error: notMine };
 
   const preset = (formData.get("preset") || "").toString();
   const custom = (formData.get("follow_up_at") || "").toString();
@@ -1335,7 +1362,8 @@ export async function setFollowUp(
 }
 
 export async function clearFollowUp(id: string): Promise<void> {
-  await requireRole("admin", "dispatcher", "sales");
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  if (await blockedFromWritingLoad(id, profile)) return;
   const supabase = await createClient();
   await supabase
     .from("loads")
@@ -1352,7 +1380,9 @@ export async function addVehicle(
   _prevState: LoadFormState,
   formData: FormData
 ): Promise<LoadFormState> {
-  await requireRole("admin", "dispatcher", "sales");
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const notMine = await blockedFromWritingLoad(loadId, profile);
+  if (notMine) return { error: notMine };
 
   const year = (formData.get("year") || "").toString().trim();
   const tariffRaw = (formData.get("tariff") || "").toString().trim();
@@ -1379,7 +1409,8 @@ export async function addVehicle(
 }
 
 export async function removeVehicle(loadId: string, vehicleId: string): Promise<void> {
-  await requireRole("admin", "dispatcher", "sales");
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  if (await blockedFromWritingLoad(loadId, profile)) return;
   const supabase = await createClient();
   await supabase.from("load_vehicles").delete().eq("id", vehicleId).eq("load_id", loadId);
   revalidatePath(`/loads/${loadId}`);
@@ -1404,16 +1435,20 @@ export async function bulkReassign(loadIds: string[], repId: string): Promise<vo
 }
 
 export async function bulkSetFollowUp(loadIds: string[], preset: string): Promise<void> {
-  await requireRole("admin", "dispatcher", "sales");
+  const profile = await requireRole("admin", "dispatcher", "sales");
   const days = FOLLOW_UP_PRESET_DAYS[preset];
   if (loadIds.length === 0 || !days) return;
   const followUpAt = new Date();
   followUpAt.setDate(followUpAt.getDate() + days);
   const supabase = await createClient();
-  await supabase
+  // Reads are shared, writes are not (0037) — say so in the query rather than
+  // leaving it to a policy that would drop the extra rows without a word.
+  let q = supabase
     .from("loads")
     .update({ follow_up_at: followUpAt.toISOString() })
     .in("id", loadIds);
+  if (profile.role === "sales") q = q.eq("sales_owner_id", profile.id);
+  await q;
   revalidatePipeline();
 }
 
@@ -1434,11 +1469,13 @@ export async function bulkCancel(
   if (loadIds.length === 0) return { cancelled: 0, skipped: 0 };
   const supabase = await createClient();
 
-  // RLS scopes this: a sales rep can only cancel loads they can already see.
-  const { data: rows } = await supabase
-    .from("loads")
-    .select("id, status")
-    .in("id", loadIds);
+  // Seeing a record and cancelling it are different rights since 0037, so the
+  // rep's own loads have to be selected for here — RLS no longer narrows the
+  // read, only the write, and a silently-dropped row would be reported back as
+  // "cancelled" by the count below.
+  let rowQuery = supabase.from("loads").select("id, status").in("id", loadIds);
+  if (profile.role === "sales") rowQuery = rowQuery.eq("sales_owner_id", profile.id);
+  const { data: rows } = await rowQuery;
 
   const target = (rows ?? []).filter((l) => l.status !== "cancelled").map((l) => l.id);
   const skipped = (rows ?? []).length - target.length;
@@ -1508,10 +1545,14 @@ export async function bulkEmail(
   if (loadIds.length > 100) return empty("Max 100 recipients per send — narrow the selection.");
 
   const supabase = await createClient();
-  const { data: loads, error: loadsError } = await supabase
+  // Owner-scoped for sales: since 0037 a rep can READ every order in the
+  // system, and writing to a customer's inbox is not a read.
+  let loadQuery = supabase
     .from(profile.role === "sales" ? "loads_sales_safe" : MANAGER_LOADS_TABLE)
     .select("id, customer_id, customer_rate, load_number, pickup_city, pickup_state, delivery_city, delivery_state, pickup_ready_date")
     .in("id", loadIds);
+  if (profile.role === "sales") loadQuery = loadQuery.eq("sales_owner_id", profile.id);
+  const { data: loads, error: loadsError } = await loadQuery;
   if (loadsError) return empty(loadsError.message);
 
   const customerIds = [...new Set((loads ?? []).map((l) => l.customer_id).filter(Boolean))];
@@ -1624,11 +1665,15 @@ export async function bulkSmsChunk(loadIds: string[], body: string): Promise<Bul
 
   const supabase = await createClient();
   // Role-appropriate view, not the base table — the standing rule for every
-  // loads read, even though only id/customer_id are selected here.
-  const { data: loads, error: loadsError } = await supabase
+  // loads read, even though only id/customer_id are selected here. Owner-
+  // scoped as well, for the same reason as bulkEmail: reading another rep's
+  // order is now allowed, texting their shipper is not.
+  let loadQuery = supabase
     .from(profile.role === "sales" ? "loads_sales_safe" : MANAGER_LOADS_TABLE)
     .select("id, customer_id")
     .in("id", loadIds);
+  if (profile.role === "sales") loadQuery = loadQuery.eq("sales_owner_id", profile.id);
+  const { data: loads, error: loadsError } = await loadQuery;
   if (loadsError) return empty(loadsError.message);
 
   const customerIds = [...new Set((loads ?? []).map((l) => l.customer_id).filter(Boolean))];

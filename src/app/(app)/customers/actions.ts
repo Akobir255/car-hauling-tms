@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile, requireRole } from "@/lib/auth";
+import { blockedFromWriting } from "@/lib/record-access";
 
 export type CustomerFormState = { error: string | null };
 
@@ -71,7 +72,13 @@ export async function updateCustomer(
   _prevState: CustomerFormState,
   formData: FormData
 ): Promise<CustomerFormState> {
-  await requireRole("admin", "dispatcher", "sales");
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  // Shippers are readable by everyone since 0037. Saving one you don't own
+  // would not just fail quietly — parseCustomerForm stamps sales_owner_id with
+  // the editor's id, so a save from the wrong rep is an attempt to take the
+  // account over. The policy already refuses it; this says so out loud.
+  const notMine = await blockedFromWriting("customers", id, profile);
+  if (notMine) return { error: notMine };
   const parsed = await parseCustomerForm(formData);
   if (!parsed.success) return { error: parsed.error };
 

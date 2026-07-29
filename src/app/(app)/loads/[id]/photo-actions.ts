@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
+import { blockedFromWritingLoad } from "@/lib/record-access";
 
 // Uploading the REAL photo of a vehicle, overriding the make/model lookup.
 // Same private bucket as every other upload; only /api/vehicles/image reads
@@ -20,10 +21,14 @@ export async function uploadVehiclePhoto(
   _prev: PhotoState,
   formData: FormData
 ): Promise<PhotoState> {
-  await requireRole("admin", "dispatcher", "sales");
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  // Seeing the vehicle is no longer the same as being allowed to change its
+  // picture (0037), and the file lands in storage before the row is touched —
+  // so the check has to come first, not be left to the row policy.
+  const notMine = await blockedFromWritingLoad(loadId, profile);
+  if (notMine) return { error: notMine };
   const supabase = await createClient();
 
-  // RLS check first: the caller must be able to see this vehicle's load.
   const { data: vehicle } = await supabase
     .from("load_vehicles")
     .select("id, photo_path")
@@ -69,7 +74,9 @@ export async function clearVehiclePhoto(
   loadId: string,
   vehicleId: string
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireRole("admin", "dispatcher", "sales");
+  const profile = await requireRole("admin", "dispatcher", "sales");
+  const notMine = await blockedFromWritingLoad(loadId, profile);
+  if (notMine) return { ok: false, error: notMine };
   const supabase = await createClient();
 
   const { data: vehicle } = await supabase

@@ -20,11 +20,14 @@ export function OrderMoreMenu({
   customerId,
   blacklisted,
   canManage,
+  readOnly = false,
 }: {
   loadId: string;
   customerId: string | null;
   blacklisted: boolean;
   canManage: boolean;
+  /** Viewing another rep's order: history and tickets stay, copies do not. */
+  readOnly?: boolean;
 }) {
   const [pending, start] = useTransition();
 
@@ -43,16 +46,20 @@ export function OrderMoreMenu({
           <History />
           View history
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() =>
-            start(async () => {
-              await duplicateLoad(loadId);
-            })
-          }
-        >
-          <Copy />
-          Duplicate
-        </DropdownMenuItem>
+        {/* Duplicating somebody else's order would hand you a copy of their
+            work under your own name. Reading it is allowed; taking it is not. */}
+        {!readOnly && (
+          <DropdownMenuItem
+            onClick={() =>
+              start(async () => {
+                await duplicateLoad(loadId);
+              })
+            }
+          >
+            <Copy />
+            Duplicate
+          </DropdownMenuItem>
+        )}
 
         {canManage && customerId && (
           <>

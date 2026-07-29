@@ -41,6 +41,7 @@ export function EsignPanel({
   sentAt,
   sentUndated = false,
   canManage,
+  readOnly = false,
   signedName,
   signedIp,
   signedEmail,
@@ -56,6 +57,12 @@ export function EsignPanel({
   /** Imported order: a contract went out, send date unrecorded. */
   sentUndated?: boolean;
   canManage: boolean;
+  /**
+   * Another rep's order. The contract's state is readable — that is the whole
+   * point of a shared record — but nothing here may put a document in front of
+   * their customer.
+   */
+  readOnly?: boolean;
   signedName?: string | null;
   signedIp?: string | null;
   signedEmail?: string | null;
@@ -144,7 +151,7 @@ export function EsignPanel({
           </a>
         )}
 
-        {!signedAt && (
+        {!signedAt && !readOnly && (
           <>
             {!sentAt ? (
               <>
@@ -173,7 +180,7 @@ export function EsignPanel({
           view all
         </button>
 
-        {!signedAt && (
+        {!signedAt && !readOnly && (
           <button
             type="button"
             onClick={() => setPanel(panel === "terms" ? "none" : "terms")}

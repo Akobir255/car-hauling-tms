@@ -38,10 +38,13 @@ export function LoadRequestsBand({
   loadId,
   requests,
   canDispatch,
+  readOnly = false,
 }: {
   loadId: string;
   requests: LoadRequest[];
   canDispatch: boolean;
+  /** Another rep's order: offers are readable, logging one is not. */
+  readOnly?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(addLoadRequest.bind(null, loadId), initial);
   const [carrierName, setCarrierName] = useState("");
@@ -93,6 +96,7 @@ export function LoadRequestsBand({
         <div className="min-w-0 md:min-w-[64rem]">
           {/* The blue band: add-form row + column labels */}
           <div className="bg-primary px-3 pb-2 pt-3 text-primary-foreground">
+            {!readOnly && (
             <form ref={formRef} action={formAction} className={GRID}>
               <Input
                 name="price"
@@ -154,6 +158,7 @@ export function LoadRequestsBand({
                 {pending ? "…" : "Add"}
               </Button>
             </form>
+            )}
             <div className={cn(GRID, "mt-2 text-xs max-md:hidden")}>
               <span>Price</span>
               <span>Requested</span>

@@ -9,12 +9,14 @@ import { formatDate, formatPhone } from "@/lib/format";
 import type { Customer } from "@/types/database";
 
 export default async function CustomersPage() {
-  await requireProfile();
+  const profile = await requireProfile();
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("customers")
-    .select("*")
-    .order("created_at", { ascending: false });
+  let query = supabase.from("customers").select("*").order("created_at", { ascending: false });
+  // A rep's customer list stays their book of business. Everyone else's is
+  // reachable — by name, phone or email from the search bar — but it does not
+  // belong in this list. (Before 0037 the row policy did this silently.)
+  if (profile.role === "sales") query = query.eq("sales_owner_id", profile.id);
+  const { data, error } = await query;
 
   const customers = (data ?? []) as Customer[];
 

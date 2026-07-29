@@ -20,6 +20,7 @@ export function VehiclePhotoEditor({
   model,
   type,
   hasOverride,
+  readOnly = false,
 }: {
   loadId: string;
   vehicleId: string;
@@ -28,6 +29,8 @@ export function VehiclePhotoEditor({
   model: string | null;
   type: VehicleType | string;
   hasOverride: boolean;
+  /** Someone else's order: the picture still shows, the control does not. */
+  readOnly?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(
     uploadVehiclePhoto.bind(null, loadId, vehicleId),
@@ -41,17 +44,22 @@ export function VehiclePhotoEditor({
     else if (state.ok) toast.success("Photo updated.");
   }, [state]);
 
+  const photo = (
+    <VehiclePhoto
+      year={year}
+      make={make}
+      model={model}
+      type={type}
+      vehicleId={vehicleId}
+      hasOverride={hasOverride}
+      className="h-20 w-32 rounded-md"
+    />
+  );
+  if (readOnly) return photo;
+
   return (
     <div className="space-y-1">
-      <VehiclePhoto
-        year={year}
-        make={make}
-        model={model}
-        type={type}
-        vehicleId={vehicleId}
-        hasOverride={hasOverride}
-        className="h-20 w-32 rounded-md"
-      />
+      {photo}
       <form ref={formRef} action={formAction} className="flex items-center gap-2 text-xs max-md:gap-4">
         <label className="inline-flex cursor-pointer items-center gap-1 text-muted-foreground hover:text-foreground hover:underline max-md:min-h-12">
           <Camera className="size-3" aria-hidden="true" />

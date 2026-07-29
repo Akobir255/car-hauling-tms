@@ -100,18 +100,22 @@ type Recipient = {
 async function resolveRecipients(opts: {
   supabase: Awaited<ReturnType<typeof createClient>>;
   role: string;
+  /** Set for a sales rep: only their own shippers may be messaged. */
+  ownerId: string | null;
   agent: string;
   customerIds: string[];
   isEmail: boolean;
   body: string;
   subject: string;
 }): Promise<{ recipients: Recipient[]; skipped: number } | { error: string }> {
-  const { supabase, role, agent, customerIds, isEmail, body, subject } = opts;
+  const { supabase, role, ownerId, agent, customerIds, isEmail, body, subject } = opts;
 
-  const { data: customersData, error: customersError } = await supabase
-    .from("customers")
-    .select("*")
-    .in("id", customerIds);
+  // Since 0037 a rep can READ every shipper in the system, which is how search
+  // finds them — it is not permission to put a message in front of one. The
+  // owner filter is what keeps a blast inside the sender's own book.
+  let customerQuery = supabase.from("customers").select("*").in("id", customerIds);
+  if (ownerId) customerQuery = customerQuery.eq("sales_owner_id", ownerId);
+  const { data: customersData, error: customersError } = await customerQuery;
   if (customersError) return { error: customersError.message };
   const customers = (customersData ?? []) as Customer[];
 
@@ -243,6 +247,7 @@ export async function sendBulk(
   const resolved = await resolveRecipients({
     supabase,
     role: profile.role,
+    ownerId: profile.role === "sales" ? profile.id : null,
     agent: profile.full_name || profile.email || "",
     customerIds,
     isEmail: true,
@@ -337,6 +342,7 @@ export async function sendSmsBulkChunk(input: {
   const resolved = await resolveRecipients({
     supabase,
     role: profile.role,
+    ownerId: profile.role === "sales" ? profile.id : null,
     agent: profile.full_name || profile.email || "",
     customerIds: parsed.data.customerIds,
     isEmail: false,

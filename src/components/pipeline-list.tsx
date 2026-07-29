@@ -127,6 +127,10 @@ export async function PipelineList({
   let optOutCustomerIds: string[] | null = null;
   if (filters.optout) {
     let cq = supabase.from("customers").select("id");
+    // Narrowed to the rep's own book, matching the loads query below: the
+    // result is the same either way, but since 0037 an unscoped read would
+    // drag every opted-out shipper in the company into a URL filter.
+    if (profile.role === "sales") cq = cq.eq("sales_owner_id", profile.id);
     if (filters.optout === "sms") cq = cq.eq("sms_opt_out", true);
     else if (filters.optout === "email") cq = cq.eq("email_opt_out", true);
     else if (filters.optout === "blacklisted") cq = cq.eq("blacklisted", true);
@@ -228,6 +232,11 @@ export async function PipelineList({
       out = out.not("follow_up_at", "is", null).lte("follow_up_at", endOfTodayIso);
     }
     if (canSeeMargin && rep) out = out.eq("sales_owner_id", rep);
+    // A rep's pipeline is still THEIR pipeline. Until migration 0037 the row
+    // policy made that true on its own; now that every record is readable, the
+    // list has to ask for its own rows or a rep opens Leads to the whole
+    // company's book. Search is the deliberate way to reach somebody else's.
+    if (profile.role === "sales") out = out.eq("sales_owner_id", profile.id);
     return applyUserFilters(out);
   };
 

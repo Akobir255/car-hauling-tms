@@ -17,16 +17,23 @@ export function CustomerForm({
   customer,
   salesReps,
   canAssignOwner,
+  readOnly = false,
 }: {
   action: (state: CustomerFormState, formData: FormData) => Promise<CustomerFormState>;
   customer?: Customer;
   salesReps: Profile[];
   canAssignOwner: boolean;
+  /** Another rep's shipper: the details are readable, the form is not live. */
+  readOnly?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(action, initialState);
 
   return (
     <form action={formAction} className="max-w-2xl space-y-6">
+      {/* One disabled fieldset rather than a disabled prop on each control —
+          the browser applies it to every field inside, including ones added
+          later, so a read-only form cannot drift back into an editable one. */}
+      <fieldset disabled={readOnly} className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="contact_name">Contact name *</Label>
@@ -90,20 +97,23 @@ export function CustomerForm({
           Opted out of email
         </label>
       </div>
+      </fieldset>
 
       {state.error && <p className="text-sm text-destructive">{state.error}</p>}
 
       <div className="flex gap-3">
-        <Button type="submit" className="max-md:min-h-12" disabled={pending}>
-          {pending ? "Saving..." : customer ? "Save changes" : "Create customer"}
-        </Button>
+        {!readOnly && (
+          <Button type="submit" className="max-md:min-h-12" disabled={pending}>
+            {pending ? "Saving..." : customer ? "Save changes" : "Create customer"}
+          </Button>
+        )}
         <Button
           type="button"
           variant="outline"
           className="max-md:min-h-12"
           render={<Link href="/customers" />}
         >
-          Cancel
+          {readOnly ? "Back" : "Cancel"}
         </Button>
       </div>
     </form>
