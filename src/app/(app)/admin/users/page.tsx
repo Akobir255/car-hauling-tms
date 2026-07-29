@@ -8,7 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { Profile } from "@/types/database";
-import { InviteForm } from "./invite-form";
+import { CreateUserForm } from "./create-form";
 import { UserRow } from "./user-row";
 
 export default async function AdminUsersPage() {
@@ -21,7 +21,7 @@ export default async function AdminUsersPage() {
     <div className="space-y-6">
       <h1 className="text-[15px]">Users</h1>
 
-      <InviteForm />
+      <CreateUserForm />
 
       <Table>
         <TableHeader>
