@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
@@ -22,6 +23,8 @@ import {
   type LoadVehicle,
   type Profile,
 } from "@/types/database";
+
+export const metadata: Metadata = { title: "Loads" };
 
 export default async function LoadsPage({
   searchParams,

@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { requireRole } from "@/lib/auth";
 import { CarrierForm } from "../carrier-form";
 import { createCarrier } from "../actions";
+
+export const metadata: Metadata = { title: "Add carrier" };
 
 export default async function NewCarrierPage() {
   await requireRole("admin", "dispatcher");

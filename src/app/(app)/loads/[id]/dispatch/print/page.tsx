@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { loadNumber } from "@/lib/page-title";
 import { notFound, redirect } from "next/navigation";
 import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import { createClient } from "@/lib/supabase/server";
@@ -11,6 +13,16 @@ import { PrintButton } from "./print-button";
 // The dispatch sheet the carrier receives — the document a dispatcher prints
 // or PDFs and sends with the load. Deliberately plain: black on white, no app
 // chrome, so it prints identically everywhere.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const n = await loadNumber(id);
+  return { title: n ? `Dispatch sheet ${n}` : "Dispatch sheet" };
+}
+
 export default async function DispatchSheetPrintPage({
   params,
 }: {

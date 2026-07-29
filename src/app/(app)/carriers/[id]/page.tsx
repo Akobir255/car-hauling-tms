@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { carrierName } from "@/lib/page-title";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
@@ -7,6 +9,16 @@ import { updateCarrier, deleteCarrier } from "../actions";
 import { DeleteButton } from "@/components/delete-button";
 import { SectionBand } from "@/components/section-band";
 import { CarrierDocs, type CarrierDoc } from "../carrier-docs";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const n = await carrierName(id);
+  return { title: n ?? "Carrier" };
+}
 
 export default async function EditCarrierPage({
   params,

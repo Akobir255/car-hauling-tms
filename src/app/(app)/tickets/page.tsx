@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Ticket as TicketIcon, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -16,6 +17,8 @@ const TABS = [
   { key: "closed", label: "Closed", statuses: ["closed"] as const },
   { key: "all", label: "All", statuses: TICKET_STATUSES },
 ];
+
+export const metadata: Metadata = { title: "Tickets" };
 
 export default async function TicketsPage({
   searchParams,

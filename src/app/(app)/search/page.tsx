@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import { createClient } from "@/lib/supabase/server";
@@ -18,6 +19,18 @@ function esc(term: string): string {
 function likePattern(term: string): string {
   const escaped = esc(term).replace(/"/g, '\\"');
   return `"%${escaped}%"`;
+}
+
+// The term itself, so a history row says which search it was. This is the page
+// a rep runs a dozen times a day; "Search" twelve times over is no better than
+// "Broker TMS" twelve times over.
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}): Promise<Metadata> {
+  const q = ((await searchParams).q || "").trim().slice(0, 60);
+  return { title: q ? `“${q}” — Search` : "Search" };
 }
 
 export default async function SearchPage({

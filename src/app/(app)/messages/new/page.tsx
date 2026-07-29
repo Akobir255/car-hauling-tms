@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { isSmsConfigured } from "@/lib/messaging/ringcentral";
 import { isEmailConfigured } from "@/lib/messaging/email";
 import type { Customer, MessageTemplate } from "@/types/database";
 import { BulkCompose } from "./bulk-compose";
+
+export const metadata: Metadata = { title: "New blast" };
 
 export default async function NewBlastPage() {
   const profile = await requireProfile();

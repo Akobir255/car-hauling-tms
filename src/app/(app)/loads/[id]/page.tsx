@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { loadNumber } from "@/lib/page-title";
 import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -31,6 +33,16 @@ import { LoadRequestsBand } from "./load-requests";
 import { deleteLoad } from "../actions";
 
 const BACK_PATH = { lead: "/leads", quote: "/quotes", order: "/orders" } as const;
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const n = await loadNumber(id);
+  return { title: n ?? "Order" };
+}
 
 export default async function LoadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

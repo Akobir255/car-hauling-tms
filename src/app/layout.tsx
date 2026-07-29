@@ -13,8 +13,12 @@ const lato = Lato({
   weight: ["400", "700"],
 });
 
+// Every page names itself, and the app name trails behind it. Tabs and browser
+// history truncate from the RIGHT, so what identifies the page — an order
+// number, a shipper — has to come first or five open orders all read
+// "Broker TMS" and you have to click each one to find out which is which.
 export const metadata: Metadata = {
-  title: "Broker TMS",
+  title: { default: "Broker TMS", template: "%s · Broker TMS" },
   description: "Internal load, carrier, customer, and billing management.",
 };
 

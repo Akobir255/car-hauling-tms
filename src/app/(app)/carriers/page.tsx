@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Phone, Truck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -8,6 +9,8 @@ import { CoiBadge } from "@/components/coi-badge";
 import { EmptyState } from "@/components/empty-state";
 import { formatPhone } from "@/lib/format";
 import type { Carrier } from "@/types/database";
+
+export const metadata: Metadata = { title: "Carriers" };
 
 export default async function CarriersPage() {
   const profile = await requireProfile();

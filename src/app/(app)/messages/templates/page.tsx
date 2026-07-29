@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
@@ -12,6 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { MessageTemplate } from "@/types/database";
+
+export const metadata: Metadata = { title: "Message templates" };
 
 export default async function TemplatesPage() {
   await requireProfile();

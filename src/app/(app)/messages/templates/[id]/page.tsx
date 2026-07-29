@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { templateName } from "@/lib/page-title";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
@@ -5,6 +7,16 @@ import { DeleteButton } from "@/components/delete-button";
 import type { MessageTemplate } from "@/types/database";
 import { TemplateForm } from "../template-form";
 import { saveTemplate, deleteTemplate } from "../../actions";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const n = await templateName(id);
+  return { title: n ?? "Template" };
+}
 
 export default async function EditTemplatePage({
   params,

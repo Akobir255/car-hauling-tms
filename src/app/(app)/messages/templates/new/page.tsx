@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { requireProfile } from "@/lib/auth";
 import { TemplateForm } from "../template-form";
 import { saveTemplate } from "../../actions";
+
+export const metadata: Metadata = { title: "New template" };
 
 export default async function NewTemplatePage() {
   await requireProfile();

@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import { PipelineList } from "@/components/pipeline-list";
+
+export const metadata: Metadata = { title: "Quotes" };
 
 export default async function QuotesPage({
   searchParams,

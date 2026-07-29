@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Mail, Phone, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -7,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/empty-state";
 import { formatDate, formatPhone } from "@/lib/format";
 import type { Customer } from "@/types/database";
+
+export const metadata: Metadata = { title: "Customers" };
 
 export default async function CustomersPage() {
   const profile = await requireProfile();

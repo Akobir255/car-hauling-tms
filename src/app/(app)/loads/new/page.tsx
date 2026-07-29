@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { requireRole } from "@/lib/auth";
 import { NewLoadForm } from "./new-load-form";
+
+export const metadata: Metadata = { title: "New load" };
 
 export default async function NewLoadPage() {
   await requireRole("admin", "dispatcher", "sales");

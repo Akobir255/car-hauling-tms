@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth";
 import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
@@ -6,6 +7,8 @@ import { TicketForm } from "./ticket-form";
 
 // ?load=<id> pre-selects an order — that's how "Create ticket" on the order
 // detail page arrives here.
+export const metadata: Metadata = { title: "New ticket" };
+
 export default async function NewTicketPage({
   searchParams,
 }: {

@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { customerName } from "@/lib/page-title";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
@@ -10,6 +12,16 @@ import { SmsThread } from "../sms-thread";
 import { DeleteButton } from "@/components/delete-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toE164 } from "@/lib/messaging/ringcentral";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const n = await customerName(id);
+  return { title: n ?? "Shipper" };
+}
 
 export default async function EditCustomerPage({
   params,

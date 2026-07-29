@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { ticketSubject } from "@/lib/page-title";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -10,6 +12,16 @@ import { formatDateTime } from "@/lib/format";
 import type { Profile, Ticket, TicketComment } from "@/types/database";
 import { CommentForm, TicketControls } from "./ticket-controls";
 import { deleteTicket } from "../actions";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const n = await ticketSubject(id);
+  return { title: n ?? "Ticket" };
+}
 
 export default async function TicketDetailPage({
   params,

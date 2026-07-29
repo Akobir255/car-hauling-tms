@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 import { describePending } from "@/lib/pending-login";
 import { VerifyForm } from "./verify-form";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Check your email" };
 
 export default async function VerifyPage() {
   // No session exists yet at this point — that is the entire design. The only

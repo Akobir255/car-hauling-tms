@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { Truck } from "lucide-react";
 import { LoginForm } from "./login-form";
+
+export const metadata: Metadata = { title: "Sign in" };
 
 export default async function LoginPage({
   searchParams,

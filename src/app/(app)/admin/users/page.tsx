@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth";
 import {
@@ -10,6 +11,8 @@ import {
 import type { Profile } from "@/types/database";
 import { CreateUserForm } from "./create-form";
 import { UserRow } from "./user-row";
+
+export const metadata: Metadata = { title: "Users" };
 
 export default async function AdminUsersPage() {
   const profile = await requireRole("admin");

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -61,6 +62,8 @@ function daysAgo(n: number): Date {
   d.setDate(d.getDate() - n);
   return d;
 }
+
+export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
   const profile = await requireProfile();

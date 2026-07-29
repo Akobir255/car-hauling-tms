@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import type { Profile } from "@/types/database";
 import { CustomerForm } from "../customer-form";
 import { createCustomer } from "../actions";
+
+export const metadata: Metadata = { title: "Add customer" };
 
 export default async function NewCustomerPage() {
   const profile = await requireProfile();

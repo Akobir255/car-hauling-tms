@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
@@ -25,6 +26,8 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   delivered: "default",
   failed: "destructive",
 };
+
+export const metadata: Metadata = { title: "Messages" };
 
 export default async function MessagesPage() {
   const profile = await requireProfile();

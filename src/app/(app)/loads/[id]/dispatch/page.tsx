@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { loadNumber } from "@/lib/page-title";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
@@ -12,6 +14,16 @@ import { DispatchSheetForm } from "./dispatch-sheet-form";
 // dates, carrier, driver, instructions, and the payment terms in one place.
 // SAVE keeps the sheet; SAVE AND DISPATCH also assigns the carrier — which
 // is the only thing that flips a posted order to Dispatched.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const n = await loadNumber(id);
+  return { title: n ? `Dispatch ${n}` : "Dispatch sheet" };
+}
+
 export default async function DispatchSheetPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const profile = await requireProfile();

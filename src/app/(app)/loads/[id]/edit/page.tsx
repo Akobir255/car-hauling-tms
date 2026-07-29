@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { loadNumber } from "@/lib/page-title";
 import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
@@ -21,6 +23,16 @@ import {
   removeVehicle,
   saveVehicleTariffs,
 } from "../../actions";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const n = await loadNumber(id);
+  return { title: n ? `Edit ${n}` : "Edit order" };
+}
 
 export default async function EditLoadPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
