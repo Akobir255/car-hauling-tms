@@ -64,6 +64,46 @@ export async function createUser(
   return { error: null, success: `${email} can sign in now.` };
 }
 
+// Set a new password for somebody else.
+//
+// There is deliberately no "show me their current password" counterpart, and
+// there cannot be one: Supabase stores a one-way hash, so the plaintext does
+// not exist anywhere to be shown. Keeping a readable copy so an admin could
+// look it up would mean storing 200 employees' passwords in a form a leaked
+// backup hands straight to an attacker — and most people reuse passwords, so
+// the damage would not stop at this system. Resetting and handing over the new
+// one does the same job without ever holding the old.
+export async function setUserPassword(
+  _prevState: UserFormState,
+  formData: FormData
+): Promise<UserFormState> {
+  await requireRole("admin");
+  const id = (formData.get("id") || "").toString();
+  const password = (formData.get("password") || "").toString();
+  if (!id) return { error: "No user selected." };
+  if (password.length < 8) return { error: "Password must be at least 8 characters." };
+
+  const admin = createAdminClient();
+  const { data: target } = await admin
+    .from("profiles")
+    .select("email")
+    .eq("id", id)
+    .maybeSingle();
+  if (!target) return { error: "That user no longer exists." };
+
+  const { error } = await admin.auth.admin.updateUserById(id, { password });
+  if (error) return { error: error.message };
+
+  // Boot any session they already had. Our gate treats a session with no
+  // verified row as stale and signs it out on its next request, so clearing
+  // these is what stops the old password's session outliving the reset.
+  await admin.from("login_verifications").delete().eq("user_id", id);
+  await admin.from("pending_logins").delete().eq("user_id", id);
+
+  revalidatePath("/admin/users");
+  return { error: null, success: `New password set for ${target.email}. They are signed out everywhere.` };
+}
+
 // Removing a person from the system.
 //
 // Every foreign key into profiles is NO ACTION, so a plain delete fails the

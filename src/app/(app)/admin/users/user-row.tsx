@@ -1,14 +1,24 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { TableCell, TableRow } from "@/components/ui/table";
 import type { Profile } from "@/types/database";
-import { deleteUser, updateUserRole, type UserFormState } from "./actions";
+import { deleteUser, setUserPassword, updateUserRole, type UserFormState } from "./actions";
 
 const initialState: UserFormState = { error: null };
+
+// Same generator as the create form: no 0/O or 1/l/I, because someone is going
+// to read this down a phone.
+function suggestPassword(): string {
+  const alphabet = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint32Array(14);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+}
 
 export function UserRow({
   profile,
@@ -22,13 +32,21 @@ export function UserRow({
 }) {
   const [pending, startTransition] = useTransition();
   const [confirming, setConfirming] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [state, deleteAction, deleting] = useActionState(deleteUser, initialState);
+  const [pwState, pwAction, pwPending] = useActionState(setUserPassword, initialState);
+  const pwRef = useRef<HTMLInputElement>(null);
   const boundUpdate = updateUserRole.bind(null, profile.id);
 
   useEffect(() => {
     if (state.error) toast.error(state.error);
     if (state.success) toast.success(state.success);
   }, [state]);
+
+  useEffect(() => {
+    if (pwState.error) toast.error(pwState.error);
+    if (pwState.success) toast.success(pwState.success);
+  }, [pwState]);
 
   return (
     <TableRow>
@@ -64,6 +82,11 @@ export function UserRow({
             <Button type="submit" size="sm" variant="outline" disabled={pending || isSelf}>
               {pending ? "Saving..." : "Save"}
             </Button>
+            {!resetting && (
+              <Button type="button" size="sm" variant="outline" onClick={() => setResetting(true)}>
+                Set password
+              </Button>
+            )}
             {!isSelf && !confirming && (
               <Button
                 type="button"
@@ -76,6 +99,54 @@ export function UserRow({
               </Button>
             )}
           </form>
+
+          {resetting && (
+            // There is no "view password" beside this on purpose — see the note
+            // on setUserPassword. Setting a new one and reading it out is the
+            // only thing any system can honestly offer.
+            <form action={pwAction} className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 p-3">
+              <input type="hidden" name="id" value={profile.id} />
+              <span className="text-sm">New password for {profile.email}:</span>
+              <Input
+                ref={pwRef}
+                name="password"
+                type="text"
+                required
+                minLength={8}
+                autoComplete="new-password"
+                className="h-8 w-52 font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => { if (pwRef.current) pwRef.current.value = suggestPassword(); }}
+                className="text-xs text-msg-link hover:underline"
+              >
+                Suggest
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const v = pwRef.current?.value ?? "";
+                  if (!v) return toast.error("Nothing to copy yet.");
+                  navigator.clipboard?.writeText(v);
+                  toast.success("Copied.");
+                }}
+                className="text-xs text-msg-link hover:underline"
+              >
+                Copy
+              </button>
+              <Button type="submit" size="sm" variant="outline" disabled={pwPending}>
+                {pwPending ? "Saving..." : "Set password"}
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setResetting(false)}>
+                Cancel
+              </Button>
+              <span className="basis-full text-xs text-muted-foreground">
+                Signs them out everywhere. Copy it before you save — it cannot be
+                looked up afterwards.
+              </span>
+            </form>
+          )}
 
           {confirming && !isSelf && (
             // Deleting is permanent, so it asks who takes over first. Notes and
