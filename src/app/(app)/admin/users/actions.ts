@@ -64,6 +64,93 @@ export async function createUser(
   return { error: null, success: `${email} can sign in now.` };
 }
 
+// Removing a person from the system.
+//
+// Every foreign key into profiles is NO ACTION, so a plain delete fails the
+// moment someone has touched anything — which is everyone. The references
+// split into two kinds and they must NOT be treated the same:
+//
+//   OWNERSHIP  (who works this account) — moves to whoever takes over.
+//   AUTHORSHIP (who wrote this note, who changed this status) — is set to
+//              NULL. Reassigning it would put one person's words in another
+//              person's mouth, which is falsifying a record, not tidying one.
+//
+// The app already renders a null author as "Unknown", so history survives
+// readable; it just stops naming someone who no longer exists.
+const OWNERSHIP: [string, string][] = [
+  ["customers", "sales_owner_id"],
+  ["loads", "sales_owner_id"],
+  ["loads", "dispatcher_id"],
+  ["tickets", "assigned_to"],
+];
+const AUTHORSHIP: [string, string][] = [
+  ["carriers", "created_by"],
+  ["load_status_history", "changed_by"],
+  ["documents", "uploaded_by"],
+  ["messages", "sent_by"],
+  ["message_templates", "created_by"],
+  ["tickets", "created_by"],
+  ["ticket_comments", "author_id"],
+  ["load_notes", "author_id"],
+  ["load_requests", "created_by"],
+  ["contract_versions", "created_by"],
+  ["sms_suppressions", "created_by"],
+];
+
+export async function deleteUser(
+  _prevState: UserFormState,
+  formData: FormData
+): Promise<UserFormState> {
+  const me = await requireRole("admin");
+  const id = (formData.get("id") || "").toString();
+  const reassignTo = (formData.get("reassign_to") || "").toString() || null;
+  if (!id) return { error: "No user selected." };
+  if (id === me.id) return { error: "You cannot delete your own account." };
+  if (reassignTo === id) return { error: "Reassign the work to somebody else." };
+
+  const admin = createAdminClient();
+  const { data: target } = await admin
+    .from("profiles")
+    .select("id, email, role")
+    .eq("id", id)
+    .maybeSingle();
+  if (!target) return { error: "That user no longer exists." };
+
+  // Never leave the system without a way back in.
+  if (target.role === "admin") {
+    const { count } = await admin
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("role", "admin")
+      .eq("active", true);
+    if ((count ?? 0) <= 1) {
+      return { error: "This is the last active admin. Promote somebody else first." };
+    }
+  }
+
+  for (const [table, column] of OWNERSHIP) {
+    const { error } = await admin.from(table).update({ [column]: reassignTo }).eq(column, id);
+    if (error) return { error: `Could not reassign ${table}.${column}: ${error.message}` };
+  }
+  for (const [table, column] of AUTHORSHIP) {
+    const { error } = await admin.from(table).update({ [column]: null }).eq(column, id);
+    if (error) return { error: `Could not clear ${table}.${column}: ${error.message}` };
+  }
+
+  // profiles.id references auth.users on delete cascade, so removing the auth
+  // user removes the profile with it.
+  const { error: delError } = await admin.auth.admin.deleteUser(id);
+  if (delError) return { error: delError.message };
+
+  revalidatePath("/admin/users");
+  return {
+    error: null,
+    success: reassignTo
+      ? `${target.email} deleted; their accounts were reassigned.`
+      : `${target.email} deleted; their accounts are now unassigned.`,
+  };
+}
+
 export async function updateUserRole(id: string, formData: FormData): Promise<void> {
   await requireRole("admin");
   const role = (formData.get("role") || "").toString();

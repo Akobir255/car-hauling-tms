@@ -33,7 +33,14 @@ export default async function AdminUsersPage() {
         </TableHeader>
         <TableBody>
           {users.map((u) => (
-            <UserRow key={u.id} profile={u} isSelf={u.id === profile.id} />
+            <UserRow
+              key={u.id}
+              profile={u}
+              isSelf={u.id === profile.id}
+              others={users
+                .filter((o) => o.id !== u.id && o.active)
+                .map((o) => ({ id: o.id, label: o.full_name || o.email }))}
+            />
           ))}
         </TableBody>
       </Table>
