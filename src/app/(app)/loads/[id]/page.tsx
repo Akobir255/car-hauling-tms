@@ -460,7 +460,17 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                 <BandRow label="Received" value={formatCurrency(load.received_amount)} />
                 {canManageCarrier && (
                   <>
-                    <BandRow label="Carrier Pay" value={formatCurrency(load.carrier_pay)} />
+                    {/* Says which number this is. Until a carrier agrees one,
+                        it is total − reservation fee — what goes on the board,
+                        not what anybody is owed. */}
+                    <BandRow
+                      label="Carrier Pay"
+                      value={
+                        load.carrier_pay != null && !load.carrier_pay_confirmed
+                          ? `${formatCurrency(load.carrier_pay)} (offer)`
+                          : formatCurrency(load.carrier_pay)
+                      }
+                    />
                     <BandRow label="Carrier received" value={formatCurrency(load.carrier_received)} />
                     <BandRow label="COD to Carrier" value={formatCurrency(load.cod_to_carrier)} />
                   </>

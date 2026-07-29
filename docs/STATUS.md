@@ -39,6 +39,13 @@ login role, so no database password is needed.
      `requireRole` check (see `updateLoad`, `duplicateLoad`, `createLoad`).
    - Adding a loads column? Grant it explicitly and add it to both views.
    - `npm run test:rls` is the regression alarm for all of this.
+   - **`carrier_pay` is not automatically a fact.** It is DERIVED at creation as
+     `customer_rate − deposit_amount` — the offer posted to CD/SD — and only
+     becomes a settlement when a human types the real figure on the dispatch
+     sheet. `carrier_pay_confirmed` (0038) is what tells the two apart, and any
+     margin report must filter on it. When 0038 landed, 195 of 25,848 priced
+     loads were confirmed — 13 of 91 *delivered* ones. Do not aggregate that
+     column without the flag.
 
 2. **Postgres applies SELECT policies to UPDATE ... WHERE.** An earlier version
    of 0013 removed sales' SELECT policy on `loads`; every sales write then

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { FormSection, FieldLabel } from "@/components/form-section";
+import { defaultReservationFee, offeredCarrierPay } from "@/lib/pricing";
 import type { LoadFormState } from "../actions";
 import { createLoad } from "../actions";
 import { VehiclesFieldArray } from "./vehicles-field-array";
@@ -178,6 +179,10 @@ export function NewLoadForm() {
   const [transport, setTransport] = useState("open");
   const [rate, setRate] = useState("");
   const [reservation, setReservation] = useState("");
+  // Once the rep types in the fee themselves, the total stops driving it —
+  // otherwise a negotiated fee would be overwritten by the next keystroke in
+  // the total.
+  const [reservationTouched, setReservationTouched] = useState(false);
   const [distance, setDistance] = useState("");
   // Once the agent types a distance themselves, the estimator stops
   // overwriting it (it re-runs on transport/vehicle changes too). A ref so
@@ -282,7 +287,7 @@ export function NewLoadForm() {
   const reservationNum = Number(reservation || 0);
   const carrierPay =
     rate.trim() !== "" && Number.isFinite(rateNum) && Number.isFinite(reservationNum)
-      ? Math.max(0, Math.round((rateNum - reservationNum) * 100) / 100)
+      ? offeredCarrierPay(rateNum, reservationNum)
       : null;
 
   const pickupField = (field: keyof EndpointState, value: string) =>
@@ -436,7 +441,17 @@ export function NewLoadForm() {
               name="customer_rate"
               inputMode="decimal"
               value={rate}
-              onChange={(e) => setRate(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setRate(next);
+                // The fee follows the total at the house rate until somebody
+                // overrides it. Left blank it used to reach the server as
+                // zero, and the load was recorded earning nothing.
+                if (!reservationTouched) {
+                  const n = Number(next);
+                  setReservation(next.trim() !== "" && Number.isFinite(n) ? String(defaultReservationFee(n)) : "");
+                }
+              }}
             />
           </div>
           <div className="space-y-1.5">
@@ -446,7 +461,10 @@ export function NewLoadForm() {
               name="deposit_amount"
               inputMode="decimal"
               value={reservation}
-              onChange={(e) => setReservation(e.target.value)}
+              onChange={(e) => {
+                setReservationTouched(true);
+                setReservation(e.target.value);
+              }}
             />
           </div>
 

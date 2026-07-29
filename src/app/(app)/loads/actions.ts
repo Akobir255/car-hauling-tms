@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
 import { blockedFromWritingLoad } from "@/lib/record-access";
+import { defaultReservationFee, offeredCarrierPay } from "@/lib/pricing";
 import { isSmsConfigured, sendSms, toE164 } from "@/lib/messaging/ringcentral";
 import { isEmailConfigured, isPlausibleEmail, sendEmail, sendEmailBatch } from "@/lib/messaging/email";
 import { buildContext, renderTemplate } from "@/lib/messaging/render";
@@ -203,16 +204,26 @@ export async function createLoad(
 
   // Carrier pay is derived, never taken from the client: the customer's total
   // minus the reservation fee we keep. That's the figure posted to CD/SD.
+  //
+  // A BLANK reservation fee used to fall through as zero here, which made
+  // carrier pay equal the customer's total — a load recorded as earning the
+  // brokerage nothing. That was the median outcome for loads created in
+  // May–July 2026. It now falls back to the house rate, which the rep sees
+  // prefilled on the form and can type over.
   const totalRate = parsedCore.data.customer_rate;
-  const reservationFee = parsedCore.data.deposit_amount;
-  const derivedCarrierPay =
-    totalRate != null ? Math.max(0, Math.round((totalRate - (reservationFee ?? 0)) * 100) / 100) : null;
+  const reservationFee =
+    parsedCore.data.deposit_amount ??
+    (totalRate != null ? defaultReservationFee(totalRate) : null);
+  const derivedCarrierPay = totalRate != null ? offeredCarrierPay(totalRate, reservationFee) : null;
 
   // carrier_pay deliberately NOT in this payload: that column's INSERT is
   // revoked for the user client (margin protection) — it's written below via
   // the service role.
   const payload = {
     ...coreValues(parsedCore.data),
+    // The fallback above has to be persisted too, or the stored fee and the
+    // stored carrier pay disagree about the same load.
+    deposit_amount: reservationFee,
     customer_id,
     status: initialStatus,
     sales_owner_id: profile.role === "sales" ? profile.id : null,
@@ -236,9 +247,12 @@ export async function createLoad(
   const load = { id: loadId };
 
   if (derivedCarrierPay != null) {
+    // Left UNCONFIRMED on purpose (0038): this is the offer that goes to the
+    // loadboards, not a figure any carrier has agreed to. It becomes confirmed
+    // when somebody types the real one on the dispatch sheet.
     const { error: cpError } = await createAdminClient()
       .from("loads")
-      .update({ carrier_pay: derivedCarrierPay })
+      .update({ carrier_pay: derivedCarrierPay, carrier_pay_confirmed: false })
       .eq("id", loadId);
     if (cpError) console.error("Setting derived carrier_pay failed:", cpError);
   }
@@ -302,7 +316,18 @@ export async function updateLoad(
   if (isManager) {
     const carrier_id = (formData.get("carrier_id") || "").toString();
     values.carrier_id = carrier_id || null;
-    values.carrier_pay = numeric.parse(formData.get("carrier_pay")?.toString());
+    const submittedPay = numeric.parse(formData.get("carrier_pay")?.toString());
+    values.carrier_pay = submittedPay;
+    // A number that is exactly the offer arithmetic is still the offer — this
+    // form prefills the field, so re-saving it after changing something else
+    // must not promote an estimate into a settlement (0038). Anything a human
+    // actually moved off that figure is real.
+    const offer =
+      parsedCore.data.customer_rate != null
+        ? offeredCarrierPay(parsedCore.data.customer_rate, parsedCore.data.deposit_amount ?? null)
+        : null;
+    values.carrier_pay_confirmed =
+      submittedPay != null && (offer == null || Math.abs(submittedPay - offer) > 0.005);
     if (carrier_id) values.dispatcher_id = profile.id;
   }
 
@@ -1195,9 +1220,12 @@ export async function saveDispatchSheet(
   const carrierPay = money("carrier_pay");
   if (carrierPay === null) return { error: "Amounts must be positive numbers." };
   if (carrierPay !== undefined) {
+    // Typed by a human on the dispatch sheet, which is the moment the number
+    // stops being customer_rate − deposit and starts being what the carrier
+    // agreed to. That is what makes it countable as margin (0038).
     const { error: payError } = await createAdminClient()
       .from("loads")
-      .update({ carrier_pay: carrierPay })
+      .update({ carrier_pay: carrierPay, carrier_pay_confirmed: true })
       .eq("id", loadId);
     if (payError) return { error: payError.message };
   }

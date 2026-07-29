@@ -110,6 +110,9 @@ export interface Load {
   distance_miles: number | null;
   customer_rate: number | null;
   carrier_pay: number | null;
+  /** False while carrier_pay is still customer_rate − deposit, i.e. the offer
+   *  posted to the boards rather than a figure a carrier agreed to (0038). */
+  carrier_pay_confirmed: boolean;
   deposit_amount: number | null;
   balance_due: number | null;
   sales_owner_id: string | null;
