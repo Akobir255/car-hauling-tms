@@ -121,6 +121,22 @@ export default async function SearchPage({
     for (const c of loadCarriers ?? []) carrierById.set(c.id, c);
   }
 
+  // Whose order this is. Since 0037 a search reaches the whole board, so the
+  // rep's name is the column that tells you what to do with a hit you did not
+  // recognise — call them, or open it read-only. Names are staff-readable
+  // (0002), so this resolves for sales as well as managers.
+  const ownerIds = [
+    ...new Set(loads.map((l) => l.sales_owner_id).filter(Boolean)),
+  ] as string[];
+  const ownerById = new Map<string, { full_name: string | null; email: string | null }>();
+  if (ownerIds.length > 0) {
+    const { data: owners } = await supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", ownerIds);
+    for (const o of owners ?? []) ownerById.set(o.id, o);
+  }
+
   return (
     <div className="space-y-5">
       <div>
@@ -142,6 +158,7 @@ export default async function SearchPage({
                 <tr className="border-b text-left text-sm text-msg-header [&>th]:font-normal">
                   <th className="px-4 py-2.5">ID</th>
                   <th className="px-4 py-2.5">Status</th>
+                  <th className="px-4 py-2.5">Assigned</th>
                   <th className="px-4 py-2.5">Shipper</th>
                   <th className="px-4 py-2.5">Orig/Dest</th>
                   <th className="px-4 py-2.5">Carrier</th>
@@ -153,6 +170,7 @@ export default async function SearchPage({
                 {loads.map((l, i) => {
                   const c = customerById.get(l.customer_id);
                   const hauler = l.carrier_id ? carrierById.get(l.carrier_id) : null;
+                  const owner = l.sales_owner_id ? ownerById.get(l.sales_owner_id) : null;
                   return (
                     <tr
                       key={l.id}
@@ -174,6 +192,15 @@ export default async function SearchPage({
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={l.status as LoadStatus} />
+                      </td>
+                      {/* "Unassigned" rather than an em dash: a lead nobody
+                          owns is something to pick up, not a missing value. */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {owner ? (
+                          (owner.full_name || owner.email)
+                        ) : (
+                          <span className="text-muted-foreground">Unassigned</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">{c?.contact_name ?? "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground">
