@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { SectionBand } from "@/components/section-band";
 import { StatusBadge } from "@/components/status-badge";
+import { PaperworkBadge } from "@/components/paperwork-badge";
 import { formatCurrency, formatDate, formatPhone } from "@/lib/format";
 import type { Load, LoadStatus } from "@/types/database";
 
@@ -171,6 +172,10 @@ export default async function SearchPage({
                 <tr className="border-b text-left text-sm text-msg-header [&>th]:font-normal">
                   <th className="px-4 py-2.5">ID</th>
                   <th className="px-4 py-2.5">Status</th>
+                  {/* Beside the status, because "quote" and "signed" are two
+                      different facts and a result that shows only the first
+                      reads as though we do not hold the second. */}
+                  <th className="px-4 py-2.5">Paperwork</th>
                   <th className="px-4 py-2.5">Assigned</th>
                   <th className="px-4 py-2.5">Shipper</th>
                   <th className="px-4 py-2.5">Orig/Dest</th>
@@ -205,6 +210,13 @@ export default async function SearchPage({
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={l.status as LoadStatus} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <PaperworkBadge
+                          signedAt={l.date_signed}
+                          sentAt={l.contract_sent_at}
+                          sentUndated={l.contract_sent}
+                        />
                       </td>
                       {/* "Unassigned" rather than an em dash: a lead nobody
                           owns is something to pick up, not a missing value. */}
