@@ -8,13 +8,7 @@ import { DeleteButton } from "@/components/delete-button";
 import { SectionBand, BandRow, Field } from "@/components/section-band";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate, formatPhone } from "@/lib/format";
-import {
-  actionsFor,
-  stageOf,
-  LEAD_STATUSES,
-  QUOTE_STATUSES,
-  ORDER_STATUSES,
-} from "@/lib/order-status";
+import { actionsFor } from "@/lib/order-status";
 import { Mail } from "lucide-react";
 import type {
   ContractCard,
@@ -176,7 +170,12 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                 : " ";
 
   const boundDelete = deleteLoad.bind(null, load.id);
-  const stage = stageOf(load.status);
+  // The record's STORED stage, not one inferred from its status. stageOf()
+  // returns "order" for every parked status, so a cancelled QUOTE used to get
+  // the full order treatment: "Back to list" and the header ID pointed at
+  // /orders, isPreOrder was false, and the E-Sign, Load Requests and Dispatch
+  // bands all rendered on a record that never became an order.
+  const stage = load.pipeline_stage;
   // Leads and quotes are pre-agreement: no contract, no payment, no dispatch.
   // The old system only offers Convert to Order at this point.
   const isPreOrder = stage === "lead" || stage === "quote";
@@ -186,13 +185,12 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   const cardOnFile = ((cardRows ?? [])[0] ?? null) as ContractCard | null;
 
   // msgplane's orange NEXT: walk the list this record lives in (newest-first,
-  // same stage) without going back to it.
-  const stageStatuses =
-    stage === "lead" ? LEAD_STATUSES : stage === "quote" ? QUOTE_STATUSES : ORDER_STATUSES;
+  // same stage) without going back to it. Walking by STATUS sent every parked
+  // record off through the order list, however it got there.
   const { data: nextRow } = await supabase
     .from(canManageCarrier ? MANAGER_LOADS_TABLE : "loads_sales_safe")
     .select("id")
-    .in("status", stageStatuses)
+    .eq("pipeline_stage", stage)
     .lt("created_at", load.created_at)
     .order("created_at", { ascending: false })
     .limit(1)

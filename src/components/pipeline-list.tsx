@@ -218,10 +218,12 @@ export async function PipelineList({
         requestLoadIds.length ? requestLoadIds : ["00000000-0000-0000-0000-000000000000"]
       );
     }
-    // Parked tabs (hold/archived) are shared across stages: a priced record
-    // was a quote, an unpriced one was still a lead.
-    if (t.stage === "quote") out = out.not("customer_rate", "is", null);
-    else if (t.stage === "lead") out = out.is("customer_rate", null);
+    // Parked tabs (hold/archived/lost) are shared across stages. Which stage a
+    // record was parked FROM is STORED on the row (loads.pipeline_stage,
+    // migration 0030) — it is not derivable from price, because orders are
+    // priced too. That inference is exactly how 365 archived ORDERS ended up
+    // filed under Quotes > Archived beside 118 real archived quotes.
+    if (t.stage) out = out.eq("pipeline_stage", t.stage);
     if (t.followUpDue) {
       out = out.not("follow_up_at", "is", null).lte("follow_up_at", endOfTodayIso);
     }
@@ -388,7 +390,9 @@ export async function PipelineList({
   // incomplete / on-hold-order); anything created here shows our own status.
   const statusText = (load: Load) => {
     if (load.msgplane_status) return load.msgplane_status;
-    if (load.status === "hold" && stage === "order") return "on-hold-order";
+    // The RECORD's stage, not the list's: `stage` is the page you are on, so a
+    // held quote read "on-hold-order" whenever it surfaced in an order list.
+    if (load.status === "hold" && load.pipeline_stage === "order") return "on-hold-order";
     return load.status.replace(/_/g, "-");
   };
 

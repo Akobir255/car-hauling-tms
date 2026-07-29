@@ -129,10 +129,16 @@ export type OrderTab = {
   // Draw the red count badge beside the label (the old system shows one only
   // on Issues).
   badge?: boolean;
-  // Restrict a shared status (hold/cancelled/archived) to records that belong
-  // to this stage. Which stage a parked record came from is derived from its
-  // price rather than stored: pricing is exactly what promotes a lead to a
-  // quote, so "has a price" IS "was a quote". No extra column to keep in sync.
+  // Restrict a shared status (hold/cancelled/archived/lost) to records that
+  // belong to this stage. Which stage a parked record came from is STORED on
+  // the row — loads.pipeline_stage, maintained by a trigger (migration 0030).
+  //
+  // It used to be derived from price, on the reasoning that pricing is what
+  // promotes a lead to a quote, so "has a price" IS "was a quote". That tells
+  // a lead from a quote and is useless for telling a quote from an ORDER,
+  // because orders are priced too: 365 archived orders were filed under
+  // Quotes > Archived next to 118 genuine archived quotes, and Orders > Hold
+  // and Orders > Archived listed the same records over again.
   stage?: PipelineStage;
 };
 
@@ -224,10 +230,15 @@ export const ORDER_TABS: OrderTab[] = [
     dateCol: { label: "Picked UP", field: "picked_up_at" },
     carrierCol: true,
   },
+  // Both parked tabs scope to stage "order" for the same reason the quote and
+  // lead ones do. Without it they showed every parked record in the system,
+  // so a held quote appeared here AND under Quotes > Hold — 483 of the 484
+  // rows in this Archived tab were the same records the quote tab was listing.
   {
     key: "hold",
     label: "Hold",
     statuses: ["hold"],
+    stage: "order",
     dateCol: { label: "Signed", field: "date_signed" },
     carrierCol: true,
   },
@@ -237,6 +248,7 @@ export const ORDER_TABS: OrderTab[] = [
     // Their Archived tab holds both completed and lost orders; the row keeps
     // showing whichever word it had.
     statuses: ["archived", "lost", "cancelled", "invoiced", "paid"],
+    stage: "order",
     dateCol: { label: "Archived", field: "updated_at" },
     carrierCol: true,
   },

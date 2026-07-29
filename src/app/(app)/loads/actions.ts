@@ -542,8 +542,27 @@ export async function archiveOrder(id: string): Promise<void> {
   );
 }
 
+// Reactivating returns a record to the stage it was PARKED FROM. Sending
+// everything to "ready" promoted a cancelled quote — or a dead lead — straight
+// into an order, skipping the stage it never finished. Reachable today: Mark
+// as Lost is offered on leads and quotes, and bulkCancel runs from the quotes
+// list.
 export async function reactivateOrder(id: string): Promise<void> {
-  await transition(id, ["hold", "archived", "lost", "cancelled"], {}, "ready", "Reactivated");
+  const profile = await requireRole(...ALL_STAFF);
+  const supabase = await createClient();
+  const table = profile.role === "sales" ? "loads_sales_safe" : "loads";
+  const { data: current } = await supabase
+    .from(table)
+    .select("pipeline_stage")
+    .eq("id", id)
+    .single();
+  const to: LoadStatus =
+    current?.pipeline_stage === "lead"
+      ? "lead"
+      : current?.pipeline_stage === "quote"
+        ? "quote"
+        : "ready";
+  await transition(id, ["hold", "archived", "lost", "cancelled"], {}, to, "Reactivated");
 }
 
 // Resend the posting notification without changing status (no board API yet,

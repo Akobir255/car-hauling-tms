@@ -137,6 +137,12 @@ export interface Load {
   // The old system's verbatim status word on imported records (null for
   // anything created here) — shown in lists so they read identically.
   msgplane_status: string | null;
+  // Which list this record lives in. Stored and trigger-maintained (migration
+  // 0030) because a parked status — hold, archived, lost, cancelled — does not
+  // say which stage it was parked FROM, and price cannot tell you: an order is
+  // priced too. The union is inlined rather than imported from
+  // @/lib/order-status, which already imports LoadStatus from this file.
+  pipeline_stage: "lead" | "quote" | "order";
   // Where this order should be posted: "all" | "cd" | "sd" (null = ask).
   loadboard: string | null;
   balance_paid_by: string | null;
