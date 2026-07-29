@@ -76,8 +76,9 @@ export default async function EditCustomerPage({
             <>this shipper has no owner yet.</>
           )}{" "}
           <span className="text-muted-foreground">
-            Their details are here so you can answer a call about them; the account itself is
-            theirs to change.
+            Their details are here so you can answer a call about them; only{" "}
+            {owner ? "they, a dispatcher or an admin" : "a dispatcher or an admin"} can change the
+            account.
           </span>
         </p>
       )}

@@ -13,7 +13,7 @@ import type { Profile } from "@/types/database";
 // believe the change landed.
 
 export const NOT_YOURS =
-  "This record belongs to another rep. You can open it, but only its owner or a manager can change it.";
+  "This record belongs to another rep. You can open it, but only its owner, a dispatcher or an admin can change it.";
 
 /** Read-only for this viewer? Both loads and customers carry sales_owner_id. */
 export function canEdit(

@@ -267,9 +267,13 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
         <p className="rounded-lg border border-chart-2 bg-chart-2/15 px-4 py-2.5 text-sm">
           Read-only —{" "}
           {ownerName ? <>this record belongs to {ownerName}.</> : <>this record has no owner yet.</>}{" "}
+          {/* Named as the roles staff actually pick in /admin/users. "Manager"
+              is our word for admin+dispatcher and appears nowhere they can see
+              it, so it would send someone looking for a role that isn't there. */}
           <span className="text-muted-foreground">
-            You can see everything on it; only {ownerName ? "they" : "a manager"} or a manager can
-            change it.
+            You can see everything on it; only{" "}
+            {ownerName ? "they, a dispatcher or an admin" : "a dispatcher or an admin"} can change
+            it.
           </span>
         </p>
       )}
