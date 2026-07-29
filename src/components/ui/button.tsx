@@ -1,3 +1,4 @@
+import * as React from "react"
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
 
@@ -56,14 +57,35 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  render,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+  const classes = cn(buttonVariants({ variant, size, className }))
+
+  // `render={<Link/>}` asks for a control that NAVIGATES, and that is a link,
+  // not a button. Base UI's Button assumes it wraps a real <button> and warns
+  // on every page when it doesn't; the documented escape (nativeButton={false})
+  // is worse than the warning, because its non-native branch merges
+  // `{ role: "button" }` onto the element (internals/use-button/useButton.js),
+  // which tells a screen reader "button" about an <a href> and throws away the
+  // affordances a link carries — open in new tab, copy address, the lot.
+  //
+  // So a non-<button> render skips the primitive entirely and just wears the
+  // button's clothes. Nothing is lost: focus ring and sizing are the classes,
+  // and a link cannot be disabled or submit a form, which is all the primitive
+  // was contributing. `type` is dropped for the same reason — its only job is
+  // to stop a form submit, which an anchor never does.
+  if (React.isValidElement<{ className?: string }>(render) && render.type !== "button") {
+    const { type: _type, ...rest } = props
+    return React.cloneElement(render, {
+      "data-slot": "button",
+      ...rest,
+      className: cn(classes, render.props.className),
+    } as Partial<typeof render.props>)
+  }
+
   return (
-    <ButtonPrimitive
-      data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
-      {...props}
-    />
+    <ButtonPrimitive data-slot="button" className={classes} render={render} {...props} />
   )
 }
 
