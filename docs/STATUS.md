@@ -177,6 +177,31 @@ by <carrier>" emails from do-not-reply@centraldispatch.com straight onto
 the order — no API; their home page even warns post-dispatch CRM edits do
 NOT sync back to CD).
 
+## The event spine (0049)
+
+`load_events` is the one timeline every new feature writes onto — append-only,
+`(load_id, occurred_at desc)`, with `source` in user | gps | sms | call | ai |
+integration. Written ONLY through `recordEvent()` in `src/lib/events/`.
+
+- **Append-only twice over**: no update/delete policy AND no update/delete grant
+  to `authenticated`. Policy alone is what left `documents` wipeable by any
+  staff session.
+- **Reads are `is_active_staff()`, writes are `user_can_access_load()`.** The
+  first draft got this wrong and gated reads on ownership, which silently blanks
+  the History band for a rep looking at a colleague's order — 0037 had already
+  removed that predicate from every child of a load for exactly that reason. RLS
+  returns zero rows rather than an error, so the regression is invisible.
+  `tests/events.test.ts` now pins both halves.
+- **Nothing margin-bearing may go in `payload`.** It is readable by all staff,
+  so a jsonb blob routes straight around the column grants that hide margin from
+  sales (rule 1). A margin-bearing event needs its own table.
+- `load_status_history` is now a **view** over it (`security_invoker`), with an
+  INSTEAD OF INSERT trigger so the 15 existing writers keep working while they
+  move to `recordEvent()` one at a time. Applied 2026-07-30: 32,570 rows
+  backfilled with their original ids, all 32,570 visible through the view.
+- `scripts/backup.mjs` backs up `load_events`, not the view — this project has
+  no PITR, so that file is the only copy.
+
 ## Integrations
 
 | | |
@@ -297,6 +322,14 @@ storage too, so nothing is orphaned.
 
 ## Open items
 
+- **Drop `load_status_history_pre_0049`** once 0049 is confirmed good in
+  production. It is the rollback copy — locked (grants revoked, RLS on, no
+  policy) in the same migration that made it, unlike
+  `messages_backup_pre_0013`, which is still sitting in the schema holding every
+  pre-2026-07-25 message body. Dropping it also retires the
+  `["load_status_history_pre_0049", "changed_by"]` entry in the admin
+  AUTHORSHIP list, which exists only because that copy keeps a NO ACTION foreign
+  key to `profiles` and would otherwise make `deleteUser` fail outright.
 - Supabase dashboard: password policy (min length 12, complexity, secure
   password change) — no API for it.
 - DMARC record for the sending domain.

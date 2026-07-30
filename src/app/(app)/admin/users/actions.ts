@@ -125,7 +125,14 @@ const OWNERSHIP: [string, string][] = [
 ];
 const AUTHORSHIP: [string, string][] = [
   ["carriers", "created_by"],
-  ["load_status_history", "changed_by"],
+  // 0049: the status history is a VIEW now, and a view is not updatable — the
+  // authorship it carries lives on load_events.actor_user_id.
+  ["load_events", "actor_user_id"],
+  // The 0049 rollback copy still carries `changed_by uuid references profiles`
+  // with no ON DELETE, so leaving it out here does not merely skip a table — it
+  // makes deleteUser fail outright on the profiles cascade. Goes away with the
+  // migration that drops the copy.
+  ["load_status_history_pre_0049", "changed_by"],
   ["documents", "uploaded_by"],
   ["messages", "sent_by"],
   ["message_templates", "created_by"],

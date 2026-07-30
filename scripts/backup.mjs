@@ -41,7 +41,12 @@ const TABLES = [
   "load_vehicles",
   "load_notes",
   "load_requests",
-  "load_status_history",
+  // 0049: the event spine, and the base TABLE — not the load_status_history
+  // view that now sits over it. Backing up the view would capture only status
+  // events, drop event_type/source/payload, and restore through an INSTEAD OF
+  // trigger that renumbers every id. This file is the only disaster-recovery
+  // copy this project has.
+  "load_events",
   "documents",
   "messages",
   "message_templates",

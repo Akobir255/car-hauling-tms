@@ -6,7 +6,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { canEdit } from "@/lib/record-access";
-import { StatusBadge } from "@/components/status-badge";
+import { EventTimeline } from "@/components/loads/event-timeline";
+import type { LoadEventRow } from "@/lib/events/types";
 import { DeleteButton } from "@/components/delete-button";
 import { SectionBand, BandRow, Field } from "@/components/section-band";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,6 @@ import type {
   Customer,
   Load,
   LoadRequest,
-  LoadStatusHistoryEntry,
   LoadVehicle,
   Message,
   Profile,
@@ -73,12 +73,15 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   ] = await Promise.all([
     supabase.from("customers").select("*").eq("id", load.customer_id).single(),
     supabase.from("load_vehicles").select("*").eq("load_id", id).order("created_at"),
+    // The event spine (0049), not the status table it replaced: this band is
+    // now the ONE timeline every later phase writes onto. 50 rather than the
+    // old 12 because it carries more than status changes now.
     supabase
-      .from("load_status_history")
+      .from("load_events")
       .select("*")
       .eq("load_id", id)
-      .order("created_at", { ascending: false })
-      .limit(12),
+      .order("occurred_at", { ascending: false })
+      .limit(50),
     supabase
       .from("contract_events")
       .select("event, ip, created_at")
@@ -133,7 +136,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   ]);
   const customer = customerData as Customer | null;
   const vehicles = (vehiclesData ?? []) as LoadVehicle[];
-  const historyRows = (history ?? []) as LoadStatusHistoryEntry[];
+  const eventRows = (history ?? []) as LoadEventRow[];
   const messages = (messagesData ?? []) as Message[];
 
   type NoteRow = {
@@ -151,7 +154,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
     ...new Set(
       [
         load.sales_owner_id,
-        ...historyRows.map((h) => h.changed_by),
+        ...eventRows.map((e) => e.actor_user_id),
         ...messages.map((m) => m.sent_by),
         ...notesData.map((n) => n.author_id),
       ].filter(Boolean) as string[]
@@ -699,29 +702,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
           </SectionBand>
 
           <SectionBand title="History" bodyClassName="p-0" className="scroll-mt-4" id="history">
-            <div className="divide-y">
-              {historyRows.map((h) => {
-                const who = h.changed_by ? profById.get(h.changed_by) : null;
-                return (
-                  <div
-                    key={h.id}
-                    className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3 text-sm"
-                  >
-                    <StatusBadge status={h.status} />
-                    <span className="text-muted-foreground">
-                      {who?.full_name || who?.email || "System"}
-                      {h.note ? ` — ${h.note}` : ""}
-                    </span>
-                    <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-                      {formatDate(h.created_at)}
-                    </span>
-                  </div>
-                );
-              })}
-              {historyRows.length === 0 && (
-                <p className="px-5 py-4 text-sm text-muted-foreground">No history yet.</p>
-              )}
-            </div>
+            <EventTimeline events={eventRows} profById={profById} />
           </SectionBand>
       </div>
 
