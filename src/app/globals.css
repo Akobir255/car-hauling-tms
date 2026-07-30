@@ -74,6 +74,19 @@
   /* Ink for text sitting ON a --destructive tint. --destructive itself is only
      4.3:1 once composited over its own /10 fill. */
   --color-destructive-ink: var(--destructive-ink);
+  /* The pipeline ROW's own family — see the block in :root for why it exists
+     and is not msg-*. --ord-shadow is not registered here: it is consumed as
+     var() inside an arbitrary shadow utility, not as a colour utility. */
+  --color-ord-accent: var(--ord-accent);
+  --color-ord-head: var(--ord-head);
+  --color-ord-hover: var(--ord-hover);
+  --color-ord-chip: var(--ord-chip);
+  --color-ord-tariff: var(--ord-tariff);
+  --color-ord-tariff-bg: var(--ord-tariff-bg);
+  --color-ord-deposit: var(--ord-deposit);
+  --color-ord-deposit-bg: var(--ord-deposit-bg);
+  --color-ord-carrier: var(--ord-carrier);
+  --color-ord-carrier-bg: var(--ord-carrier-bg);
   /* msgplane's whole type scale is three sizes, pinned in px so they survive
      the 15px root below.
      Each is one step above the measured value. msgplane's 12px is genuinely
@@ -196,6 +209,45 @@
   --msg-btn-foreground: #ffffff;
   --msg-btn-edit: #8bc34a;
   --msg-btn-edit-hover: #7cb342;
+
+  /* ---- Pipeline row -------------------------------------------------------
+     Deliberately NOT the msg-* family. Everywhere else this app is a clone of
+     the system it replaces; the list ROW is where it stops being one, so the
+     row is a raised card with US Star's own accent instead of a flat zebra
+     stripe with msgplane's light-blue links. Ratios below are computed, not
+     eyeballed.
+     --ord-accent is BRAND_BLUE from brand-mark.tsx — the navy in the star
+     badge — at 6.7:1 on white. It carries the row's links where --msg-link
+     used to, which is the whole point: the ID no longer reads as msgplane. */
+  --ord-accent: #0b5cab;
+  /* Column headers: blue-grey in place of msgplane's brown, 6.2:1. Uppercase
+     and letter-spaced in the row itself, so the header band is the second
+     thing that says "not the old system". */
+  --ord-head: #52646e;
+  /* Row hover. A navy-tinted step off white rather than the neutral
+     --msg-hover, so a card reads as lifting toward the accent. Accent text
+     stays at 6.3:1 on it. */
+  --ord-hover: #f4f8fc;
+  /* Chip fill for the status word and the secondary-contact label. Near-white
+     and untinted on purpose: the status HUE is the text (see STATUS_COLORS),
+     and a coloured fill under it would eat the contrast that palette was
+     measured for — ready still lands at 5.3:1 here, quote at 8.5:1. */
+  --ord-chip: #f2f5f8;
+  /* The three money pills. Each ink is measured against ITS OWN fill, not
+     against the page: tariff 8.2:1, deposit 6.7:1, carrier 8.4:1. Tariff wears
+     the brand navy because it is the customer's number; deposit a warm ochre;
+     carrier pay graphite, so the margin figure a manager sees stays the
+     quietest of the three rather than the loudest. */
+  --ord-tariff: #08477f;
+  --ord-tariff-bg: #e7f0fa;
+  --ord-deposit: #7a4a06;
+  --ord-deposit-bg: #fbf1de;
+  --ord-carrier: #37474f;
+  --ord-carrier-bg: #eceff1;
+  /* The card lift. msgplane raises nothing anywhere — that is exactly why a
+     shadow reads as a different system — so this stays a 2px navy-tinted hint.
+     Anything deeper turns 100 rows into corduroy. */
+  --ord-shadow: rgba(11, 92, 171, 0.14);
 }
 
 .dark {
@@ -266,6 +318,23 @@
   --msg-btn-foreground: #ffffff;
   --msg-btn-edit: #7cb342;
   --msg-btn-edit-hover: #8bc34a;
+
+  /* Pipeline row, dark. The brand navy cannot survive on #1e1e1e, so the
+     accent is that hue lifted to a Material 200-ish tone (7.5:1 on the card);
+     the pill inks sit on deep tints of their own families at 8.8–9.2:1. The
+     shadow turns neutral and deeper, because on near-black a tinted glow reads
+     as a halo rather than a lift. */
+  --ord-accent: #7fb2e8;
+  --ord-head: #9fb0ba;
+  --ord-hover: #26303a;
+  --ord-chip: #262c33;
+  --ord-tariff: #a8cef5;
+  --ord-tariff-bg: #14283c;
+  --ord-deposit: #efc178;
+  --ord-deposit-bg: #33260f;
+  --ord-carrier: #cfd8dc;
+  --ord-carrier-bg: #2a3238;
+  --ord-shadow: rgba(0, 0, 0, 0.55);
 }
 
 @layer base {

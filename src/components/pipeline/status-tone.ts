@@ -37,6 +37,35 @@ export const STATUS_COLORS: Record<LoadStatus, string> = {
   cancelled: "text-destructive",
 };
 
+// The same hues as a 4px stripe down the left edge of a pipeline card, so the
+// stage of a row is readable before any of its words are. It lives here and not
+// in the list for the reason above: a status colour is decided in one file.
+//
+// Where STATUS_COLORS reaches for a token, so does this — the stripe and the
+// word must not drift apart. Two deliberate differences: the stripe is
+// decorative and redundant (the word is right beside it), so it is not held to
+// a text contrast floor; and `archived` takes a real grey instead of
+// --muted-foreground, which is near-black ink and would paint a mourning bar
+// down the busiest tab in the app.
+export const STATUS_STRIPES: Record<LoadStatus, string> = {
+  lead: "border-l-[#9e9e9e] dark:border-l-[#757575]",
+  quote: "border-l-[#5d4037] dark:border-l-[#bcaaa4]",
+  ready: "border-l-primary",
+  posted_cd: "border-l-[#283593] dark:border-l-[#9fa8da]",
+  posted_sd: "border-l-[#4527a0] dark:border-l-[#b39ddb]",
+  booked: "border-l-msg-link",
+  dispatched: "border-l-[#455a64] dark:border-l-[#b0bec5]",
+  picked_up: "border-l-[#00695c] dark:border-l-[#80cbc4]",
+  in_transit: "border-l-[#00838f] dark:border-l-[#80deea]",
+  delivered: "border-l-[#2e7d32] dark:border-l-[#81c784]",
+  hold: "border-l-[#bf360c] dark:border-l-[#ffb74d]",
+  archived: "border-l-[#bdbdbd] dark:border-l-[#616161]",
+  lost: "border-l-[#c62828] dark:border-l-[#ef9a9a]",
+  invoiced: "border-l-[#6a1b9a] dark:border-l-[#ce93d8]",
+  paid: "border-l-[#2e7d32] dark:border-l-[#81c784]",
+  cancelled: "border-l-destructive",
+};
+
 // Records imported from msgplane carry its own vocabulary in `msgplane_status`,
 // which the list renders verbatim. These are the words that mean one of ours.
 const ALIASES: Record<string, LoadStatus> = {
@@ -52,4 +81,12 @@ export function statusTone(word: string): string {
   // An unrecognised imported word is still a word being worked, so it keeps
   // msgplane's gray position at a legible weight.
   return STATUS_COLORS[key] ?? "text-muted-foreground";
+}
+
+/** The card's left stripe for a rendered status word. Keyed exactly like statusTone. */
+export function statusStripe(word: string): string {
+  const key = ALIASES[word] ?? (word.replace(/-/g, "_") as LoadStatus);
+  // An imported word nobody has mapped yet gets the neutral border rather than
+  // a hue that would claim a stage it may not be in.
+  return STATUS_STRIPES[key] ?? "border-l-border";
 }

@@ -190,10 +190,28 @@ Workspace domain; sending bulk from it would put real business email at risk.
 (Its root SPF also has a typo — `include:_spf.google.com~all` is missing the
 space before `~all`, making the include unresolvable. Registrar is Squarespace.)
 
-## Pipeline lists = a clone of the old system's
+## Pipeline lists = a clone of the old system's — except the ROW
 
 Tabs, column labels, per-tab date columns, statuses and paging are copied
-from the system this replaces (audited live, 2026-07-27):
+from the system this replaces (audited live, 2026-07-27). The row itself is
+deliberately NOT a clone since 2026-07-29: same information and same column
+logic, its own look.
+
+- The **Orig/Dest tags are gone from the row**; a stacked Tariff / Deposit /
+  Carrier pricing block stands in their place, on both column layouts, so
+  neither carries a second money column at the end. The lane still lives in the
+  row's quick view — if that popup ever goes, the route loses its last place on
+  the list.
+- A **secondary contact line** sits under the shipper: the order's pickup
+  contact, else its delivery contact, else the customer's company name.
+- Rows are **cards** (border + 2px lift + 8px gap, `border-separate`) with a
+  status-coloured **left stripe**, drawn on the CELLS — see the comment on the
+  negative shadow spread before touching it. Colours come from the `--ord-*`
+  token family in `globals.css`, which is US Star's brand navy rather than
+  msgplane's link blue, and stripes from `STATUS_STRIPES` in `status-tone.ts`
+  (still the one file allowed to decide a status colour).
+- Phone cards carry the same block, the same stripe and the same second line —
+  the two layouts must not drift.
 
 - Orders module tabs: Orders · Posted CD · Posted SD · Requests · Not Signed
   · Dispatched · Issues · Picked-Up · Hold · Archived. There is no Delivered

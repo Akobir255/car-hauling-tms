@@ -1,6 +1,6 @@
 import { MANAGER_LOADS_CONTACT_TABLE, SALES_LOADS_CONTACT_TABLE } from "@/lib/loads-table";
 import Link from "next/link";
-import { CalendarCheck2, Inbox, MapPin, Phone, Plus, User } from "lucide-react";
+import { CalendarCheck2, Inbox, Phone, Plus, User, Users } from "lucide-react";
 import { VehiclePhoto } from "@/components/vehicle-photo";
 import { RowMessageButton } from "@/components/messaging/row-message-buttons";
 import { NotesQuickButton } from "@/components/messaging/notes-quick";
@@ -17,7 +17,7 @@ import { QuickView, type QuickViewData } from "@/components/pipeline/quick-view"
 import { FilterBar, type FilterValues } from "@/components/pipeline/filter-bar";
 import { RowCheckbox, SelectAllCheckbox } from "@/components/pipeline/row-checkbox";
 import { PhoneOnly } from "@/components/pipeline/phone-only";
-import { statusTone } from "@/components/pipeline/status-tone";
+import { statusStripe, statusTone } from "@/components/pipeline/status-tone";
 import { BulkActionBar } from "@/components/pipeline/bulk-action-bar";
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -44,26 +44,114 @@ type PipelineLoad = Load & {
 // msgplane money style: "Tariff:$500" — whole dollars, no separators.
 const money0 = (v: number | null | undefined) => (v == null ? "—" : `$${Math.round(v)}`);
 
-// The Quote cell, shared by both column layouts. Carrier pay renders only
-// for managers — the sales view never carries the column.
-function QuoteCell({ load, canSeeMargin }: { load: Load; canSeeMargin: boolean }) {
+// One money figure. msgplane sets these as plain "Tariff:$500" text at body
+// size and body weight, which makes the price the least visible thing in a row
+// that exists to price freight. Here each is a pill: label small and
+// letter-spaced, figure a size up at weight 700 — 700 and not 600 because only
+// the 400 and 700 Lato faces are loaded, so semibold would be synthesised.
+function MoneyPill({
+  label,
+  value,
+  tone,
+  title,
+}: {
+  label: string;
+  value: number | null | undefined;
+  tone: "tariff" | "deposit" | "carrier";
+  title?: string;
+}) {
   return (
-    <>
-      <p>
-        <span className="text-muted-foreground">Tariff:</span>
-        <span className="text-foreground">{money0(load.customer_rate)}</span>
-      </p>
-      <p>
-        <span className="text-muted-foreground">Deposit:</span>
-        <span className="text-foreground">{money0(load.deposit_amount)}</span>
-      </p>
-      {canSeeMargin && load.carrier_pay != null && (
-        <p>
-          <span className="text-muted-foreground">Carrier:</span>
-          <span className="text-foreground">{money0(load.carrier_pay)}</span>
-        </p>
+    <span
+      title={title}
+      className={cn(
+        "flex w-full items-baseline justify-between gap-2 rounded-full px-2 py-0.5 leading-tight",
+        tone === "tariff" && "bg-ord-tariff-bg text-ord-tariff",
+        tone === "deposit" && "bg-ord-deposit-bg text-ord-deposit",
+        tone === "carrier" && "bg-ord-carrier-bg text-ord-carrier"
       )}
-    </>
+    >
+      <span className="text-[12px] uppercase tracking-wide">{label}</span>
+      <span className="text-[15px] font-bold tabular-nums">{money0(value)}</span>
+    </span>
+  );
+}
+
+// The row's pricing summary, stacked: what the customer pays, what they have
+// paid, and — managers only — what the carrier gets. Carrier pay is the one
+// figure here that may not be a fact yet: until `carrier_pay_confirmed` it is
+// still customer_rate − deposit, i.e. the offer posted to the boards (0038), so
+// the pill says so on hover rather than presenting an offer as a settlement.
+// Fixed width, because three pills of differing content should still line up
+// down the column.
+function PriceBlock({
+  load,
+  canSeeMargin,
+  className,
+}: {
+  load: Load;
+  canSeeMargin: boolean;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex w-[136px] flex-col gap-1", className)}>
+      <MoneyPill label="Tariff" value={load.customer_rate} tone="tariff" />
+      <MoneyPill label="Deposit" value={load.deposit_amount} tone="deposit" />
+      {canSeeMargin && load.carrier_pay != null && (
+        <MoneyPill
+          label="Carrier"
+          value={load.carrier_pay}
+          tone="carrier"
+          title={
+            load.carrier_pay_confirmed
+              ? "Confirmed carrier pay"
+              : "Offer posted to the boards — not a confirmed settlement"
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+// The order's OTHER human. msgplane keeps the pickup and delivery contacts on
+// the edit page only, and the lane tags that used to hold this row's second
+// line are now the price block — so the second contact surfaces here instead:
+// whoever is actually standing at the truck. Falls back to the account name,
+// which is the company behind a personal contact and the one thing a rep needs
+// when two shippers share a first name.
+type SecondaryContact = { label: string; name: string | null; phone: string | null };
+
+const secondaryContactFor = (
+  load: Load,
+  customer: { company_name: string | null }
+): SecondaryContact | null => {
+  const end = (kind: "pickup" | "delivery"): SecondaryContact | null => {
+    const name = kind === "pickup" ? load.pickup_contact_name : load.delivery_contact_name;
+    const phone =
+      (kind === "pickup" ? load.pickup_contact_phone : load.delivery_contact_phone) ??
+      (kind === "pickup" ? load.pickup_contact_cell : load.delivery_contact_cell);
+    return name || phone ? { label: kind, name, phone } : null;
+  };
+  return (
+    end("pickup") ??
+    end("delivery") ??
+    (customer.company_name ? { label: "account", name: customer.company_name, phone: null } : null)
+  );
+};
+
+// Rendered under the primary contact, one type step down: this is context, not
+// the person a rep is calling.
+function SecondaryContactLine({ contact }: { contact: SecondaryContact }) {
+  return (
+    <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+      <Users className="size-3.5 shrink-0 text-ord-accent" aria-hidden="true" />
+      <span className="shrink-0 rounded-full bg-ord-chip px-1.5 text-[12px] uppercase tracking-wide">
+        {contact.label}
+      </span>
+      {contact.name && <span className="min-w-0 truncate">{contact.name}</span>}
+      {contact.phone && (
+        <span className="shrink-0 tabular-nums">{formatPhone(contact.phone)}</span>
+      )}
+    </p>
   );
 }
 
@@ -314,12 +402,17 @@ export async function PipelineList({
       customerIds.length
         ? supabase
             .from("customers")
-            .select("id, contact_name, phone, email, sms_opt_out, email_opt_out, blacklisted")
+            // company_name feeds the row's secondary contact line when the
+            // order carries no pickup/delivery contact of its own.
+            .select(
+              "id, contact_name, company_name, phone, email, sms_opt_out, email_opt_out, blacklisted"
+            )
             .in("id", customerIds)
         : Promise.resolve({
             data: [] as {
               id: string;
               contact_name: string;
+              company_name: string | null;
               phone: string | null;
               email: string | null;
               sms_opt_out: boolean;
@@ -493,6 +586,12 @@ export async function PipelineList({
     assignedTo: rp ? rp.full_name || rp.email : null,
   });
 
+  // Eight columns every stage draws — select, ID, date, notes, assigned,
+  // shipper, vehicles, pricing — then the tail: orders add 1st Avail and, on
+  // the parked/dispatched tabs, Carrier; quotes and leads add Est. Ship and
+  // Status.
+  const colCount = 8 + (stage === "order" ? (activeTab.carrierCol ? 2 : 1) : 2);
+
   // Shared by the table's empty row and the card list's.
   const emptyState = activeTab.arrived === "before24h" ? (
     <EmptyState
@@ -630,48 +729,49 @@ export async function PipelineList({
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
 
-      {/* No shadow — the nav bar is the only thing in msgplane that carries
-          one, so the border gray is what makes the list read as a region. */}
-      {/* Eleven columns have a min-content width of ~1250px against ~330px of
-          phone, so below md this whole region is replaced by the card list
-          under it. Everything inside stays exactly as it was — the table is
-          desktop's, untouched. */}
-      <div className="hidden overflow-x-auto rounded-md border bg-card md:block">
-        {/* Cells are pinned in px: the file also carries 12px sub-lines, and a
+      {/* The region itself is now unframed: each ROW is the card, so a box
+          around the whole list would put a border immediately outside another
+          border. (msgplane frames the list and rules the rows — this is the one
+          structural place the two systems disagree on purpose.)
+          Ten columns have a min-content width well past a phone's, so below md
+          this whole region is replaced by the card list under it. */}
+      <div className="hidden overflow-x-auto pb-1 md:block">
+        {/* border-separate, not collapse: the 8px of vertical border-spacing is
+            what turns rows into free-standing cards, and a collapsed table
+            cannot hold a gap between them.
+            Cells are pinned in px: the file also carries 12px sub-lines, and a
             rem step would drift away from them if the root size ever moves. */}
-        <table className="w-full border-collapse text-[14px]">
+        <table className="w-full border-separate border-spacing-x-0 border-spacing-y-2 text-[14px]">
           <thead>
-            {/* msgplane header row: quiet Title-case labels; the date column
-                is renamed per tab (Converted/Posted/Sent/Signed/Delivered…),
-                and the parked/dispatched tabs add a Carrier column. Quotes
-                order theirs: Quote money, then Est. Ship, then Status. */}
-            {/* Brown headers are msgplane's most recognisable tell. The th
-                override stays: the UA sheet bolds th and preflight never
+            {/* Same labels and same per-tab renaming as msgplane (the date
+                column becomes Converted/Posted/Sent/Signed/Delivered…, and the
+                parked/dispatched tabs add a Carrier column), set differently:
+                brown Title-case is that system's most recognisable tell, so
+                these are blue-grey, 12px, uppercase and letter-spaced. Pricing
+                now occupies the slot the Orig/Dest tags held, on both column
+                layouts, so there is no second money column at the end.
+                The th override stays: the UA sheet bolds th and preflight never
                 resets it, so this is not the global weight it undoes. */}
-            <tr className="border-b border-msg-rule text-left text-msg-header [&>th]:font-normal">
-              <th className="w-8 px-2 py-3">
+            <tr className="text-left [&>th:first-child]:px-2 [&>th]:border-b [&>th]:px-3 [&>th]:pb-2 [&>th]:text-[12px] [&>th]:font-normal [&>th]:uppercase [&>th]:tracking-wide [&>th]:text-ord-head">
+              <th className="w-8">
                 <SelectAllCheckbox ids={loadIds} />
               </th>
-              <th className="px-3 py-3">ID</th>
-              <th className="px-3 py-3">
-                {stage === "order" ? (activeTab.dateCol?.label ?? "Converted") : "Quoted"}
-              </th>
-              <th className="px-3 py-3">Notes</th>
-              <th className="px-3 py-3">Assigned to</th>
-              <th className="px-3 py-3">Shipper</th>
-              <th className="px-3 py-3">Vehicles</th>
-              <th className="px-3 py-3">Orig/Dest</th>
+              <th>ID</th>
+              <th>{stage === "order" ? (activeTab.dateCol?.label ?? "Converted") : "Quoted"}</th>
+              <th>Notes</th>
+              <th>Assigned to</th>
+              <th>Shipper</th>
+              <th>Vehicles</th>
+              <th>Pricing</th>
               {stage === "order" ? (
                 <>
-                  <th className="px-3 py-3">1st. Avail</th>
-                  {activeTab.carrierCol && <th className="px-3 py-3">Carrier</th>}
-                  <th className="px-3 py-3">Quote</th>
+                  <th>1st. Avail</th>
+                  {activeTab.carrierCol && <th>Carrier</th>}
                 </>
               ) : (
                 <>
-                  <th className="px-3 py-3">Quote</th>
-                  <th className="px-3 py-3">Est. Ship</th>
-                  <th className="px-3 py-3">Status</th>
+                  <th>Est. Ship</th>
+                  <th>Status</th>
                 </>
               )}
             </tr>
@@ -683,26 +783,54 @@ export async function PipelineList({
               const loadVehicles = vehiclesByLoad.get(load.id) ?? [];
               const colDate = tabDate(load);
               const rowCarrier = load.carrier_id ? carrierById.get(load.carrier_id) : undefined;
+              const rowSecondary = customer ? secondaryContactFor(load, customer) : null;
               return (
-                // Plain white rows with a thin rule — the msgplane look. The
-                // 88px is a minimum on a table row, so tall rows still grow.
+                // A card, not a striped row: the border, the 2px lift and the
+                // status stripe are drawn on the CELLS, because the geometry has
+                // to stay a table (ten columns aligned down 100 rows is what
+                // makes the list scannable) while reading as a stack of cards.
+                // Only the left edge takes a colour — the stage of the row, from
+                // the same table that colours the word beside it.
+                // The 92px is a minimum on a table row, so tall rows still grow.
                 <tr
                   key={load.id}
-                  className="h-[88px] border-b border-msg-rule align-top transition-colors last:border-b-0 hover:bg-msg-hover"
+                  className={cn(
+                    "group h-[92px] align-top",
+                    "[&>td]:border-y [&>td]:bg-card [&>td]:px-3 [&>td]:py-4 [&>td]:align-top [&>td]:transition-colors",
+                    // Negative spread, and it matters: the shadow is drawn per
+                    // CELL (a <tr> is not a reliable box-shadow host outside
+                    // Chrome), so a blur that reaches sideways paints a seam at
+                    // every cell edge and the card reads as nine boxes. Pulling
+                    // the spread back by the blur radius keeps the drop under
+                    // the row and nothing at its internal joins.
+                    "[&>td]:shadow-[0_2px_2px_-2px_var(--ord-shadow)]",
+                    "[&>td:first-child]:rounded-l-md [&>td:first-child]:border-l-4 [&>td:first-child]:px-2",
+                    "[&>td:last-child]:rounded-r-md [&>td:last-child]:border-r",
+                    "hover:[&>td]:bg-ord-hover"
+                  )}
                 >
-                  <td className="px-2 py-4">
+                  <td className={statusStripe(statusText(load))}>
                     <RowCheckbox id={load.id} label={`Select ${load.load_number}`} />
                   </td>
-                  <td className="px-3 py-4">
-                    {/* Order ID: light blue, no underline — msgplane never
-                        underlines it, even on hover. */}
+                  <td>
+                    {/* Order ID in the brand navy, no underline. msgplane never
+                        underlines it either — but this is US Star's blue, not
+                        the old system's link colour. */}
                     <Link
                       href={`/loads/${load.id}`}
-                      className="focus-ring tabular-nums text-msg-link"
+                      className="focus-ring tabular-nums text-ord-accent"
                     >
                       {load.load_number}
                     </Link>
-                    <p className={cn("mt-1 text-[12px] lowercase", statusTone(statusText(load)))}>
+                    {/* The status word keeps its position and its hue, in a chip
+                        rather than bare text — the fill is neutral so the hue
+                        stays the only thing carrying meaning. */}
+                    <p
+                      className={cn(
+                        "mt-1 inline-flex rounded-full border border-current/25 bg-ord-chip px-2 text-[12px] lowercase",
+                        statusTone(statusText(load))
+                      )}
+                    >
                       {statusText(load)}
                     </p>
                     {/* Right under the ID, where the eye already is: this
@@ -737,7 +865,7 @@ export async function PipelineList({
                         rep can neither act on nor clear. The Follow-up Today
                         tab is where that queue is worked. */}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-4">
+                  <td className="whitespace-nowrap">
                     {colDate ? (
                       <>
                         <p className="tabular-nums text-foreground">{colDate.date}</p>
@@ -757,7 +885,7 @@ export async function PipelineList({
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-4">
+                  <td>
                     {/* Stacked counters, msgplane-style: notes (click to read
                         or add without opening the order), then unread inbound
                         messages (red when attention is needed). */}
@@ -780,24 +908,26 @@ export async function PipelineList({
                       </span>
                     </div>
                   </td>
-                  <td className="px-3 py-4">
+                  <td>
                     {/* msgplane stacks the badge over the name. */}
                     <div className="flex flex-col items-center gap-0.5 text-center">
-                      {/* account_box in msgplane, brown like the headers. */}
-                      <User className="size-4 text-msg-header" aria-hidden="true" />
+                      {/* account_box in msgplane; here it follows the header
+                          blue-grey rather than msgplane's brown. */}
+                      <User className="size-4 text-ord-head" aria-hidden="true" />
                       <span className="text-foreground">{rp ? rp.full_name || rp.email : "—"}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-4">
+                  <td>
                     {customer ? (
                       <div className="space-y-0.5">
                         {/* Nothing in the list underlines; the link colour on
-                            hover is the affordance instead. */}
+                            hover is the affordance instead — the brand navy
+                            here, like every other link on the card. */}
                         <Link
                           href={`/customers/${customer.id}`}
-                          className="focus-ring flex items-center gap-1.5 text-foreground hover:text-msg-link"
+                          className="focus-ring flex items-center gap-1.5 text-foreground hover:text-ord-accent"
                         >
-                          <User className="size-4 shrink-0 text-msg-shipper" aria-hidden="true" />
+                          <User className="size-4 shrink-0 text-ord-accent" aria-hidden="true" />
                           {customer.contact_name}
                           {/* Anyone who asked us to stop, marked right on the
                               row so nobody texts them by accident. */}
@@ -877,8 +1007,13 @@ export async function PipelineList({
                             </span>
                           </p>
                         )}
+                        {/* The second human on the order, under the first. */}
+                        {rowSecondary && <SecondaryContactLine contact={rowSecondary} />}
                         {/* The old system's per-row "quick view": a popup of
-                            the record's key facts, without leaving the list. */}
+                            the record's key facts, without leaving the list.
+                            It also still carries the lane, which is where
+                            origin/destination moved when this row's tags became
+                            the price block. */}
                         <QuickView
                           canSeeMargin={canSeeMargin}
                           data={quickViewFor(load, customer, rp, loadVehicles)}
@@ -888,28 +1023,33 @@ export async function PipelineList({
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-4">
+                  <td>
                     <div className="space-y-2">
                       {loadVehicles.length === 0 && <span className="text-muted-foreground">—</span>}
                       {loadVehicles.map((v) => (
                         <div key={v.id} className="flex items-center gap-2.5">
                           {/* generic: the list shows the body type's stock
                               photo, the way the old system does. The actual
-                              model is on the order page. */}
+                              model is on the order page.
+                              48x80 rather than the component's 36x56 — the
+                              cutouts hold up at that size and the shape of the
+                              vehicle is half of what a rep scans a row for. */}
                           <VehiclePhoto
                             year={v.year}
                             make={v.make}
                             model={v.model}
                             type={v.vehicle_type}
                             generic
+                            className="h-12 w-20"
                           />
                           <div className="leading-tight">
-                            {/* msgplane: gray vehicle title, type under, red
-                                "enclosed" flag on its own line. */}
-                            <p className="text-muted-foreground">
+                            {/* Title in ink and the body type under it in the
+                                accent — msgplane greys the title and blacks the
+                                type, which buries the year/make/model. */}
+                            <p className="text-foreground">
                               {[v.year, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}
                             </p>
-                            <p className="text-[12px] text-foreground">
+                            <p className="text-[12px] uppercase tracking-wide text-ord-head">
                               {VEHICLE_TYPE_LABELS[v.vehicle_type] ?? v.vehicle_type}
                             </p>
                             {load.transport_type === "enclosed" && (
@@ -920,29 +1060,24 @@ export async function PipelineList({
                       ))}
                     </div>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-4">
-                    {/* msgplane pins: blue origin, red destination. */}
-                    <p className="flex items-center gap-1.5">
-                      <MapPin className="size-3.5 shrink-0 text-msg-shipper" aria-hidden="true" />
-                      {load.pickup_city || "—"} {load.pickup_state || ""} {load.pickup_zip || ""}
-                    </p>
-                    <p className="mt-1 flex items-center gap-1.5">
-                      <MapPin className="size-3.5 shrink-0 text-destructive" aria-hidden="true" />
-                      {load.delivery_city || "—"} {load.delivery_state || ""} {load.delivery_zip || ""}
-                    </p>
+                  {/* Where the Orig/Dest pins used to be: the money, as pills.
+                      Both column layouts read it here, so neither carries a
+                      second money column at the end of the row. */}
+                  <td className="whitespace-nowrap">
+                    <PriceBlock load={load} canSeeMargin={canSeeMargin} />
                   </td>
                   {stage === "order" ? (
                     <>
-                      <td className="whitespace-nowrap px-3 py-4 tabular-nums text-foreground">
+                      <td className="whitespace-nowrap tabular-nums text-foreground">
                         {usDateOnly(load.pickup_ready_date)}
                       </td>
                       {activeTab.carrierCol && (
-                        <td className="px-3 py-4">
+                        <td>
                           {rowCarrier ? (
                             <>
                               <Link
                                 href={`/carriers/${rowCarrier.id}`}
-                                className="text-msg-link"
+                                className="focus-ring text-ord-accent"
                               >
                                 {rowCarrier.company_name}
                               </Link>
@@ -957,20 +1092,21 @@ export async function PipelineList({
                           )}
                         </td>
                       )}
-                      <td className="whitespace-nowrap px-3 py-4 tabular-nums">
-                        <QuoteCell load={load} canSeeMargin={canSeeMargin} />
-                      </td>
                     </>
                   ) : (
                     <>
-                      <td className="whitespace-nowrap px-3 py-4 tabular-nums">
-                        <QuoteCell load={load} canSeeMargin={canSeeMargin} />
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-4 tabular-nums text-foreground">
+                      <td className="whitespace-nowrap tabular-nums text-foreground">
                         {usDateOnly(load.pickup_ready_date)}
                       </td>
-                      <td className={cn("px-3 py-4 lowercase", statusTone(statusText(load)))}>
-                        {statusText(load)}
+                      <td>
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full border border-current/25 bg-ord-chip px-2 text-[12px] lowercase",
+                            statusTone(statusText(load))
+                          )}
+                        >
+                          {statusText(load)}
+                        </span>
                       </td>
                     </>
                   )}
@@ -979,7 +1115,12 @@ export async function PipelineList({
             })}
             {loads.length === 0 && (
               <tr>
-                <td colSpan={11}>{emptyState}</td>
+                {/* The empty state is the one row that has to be told how wide
+                    the table is, so the count is derived rather than typed:
+                    eight shared columns plus the per-stage tail. */}
+                <td colSpan={colCount} className="rounded-md border bg-card">
+                  {emptyState}
+                </td>
               </tr>
             )}
           </tbody>
@@ -988,10 +1129,13 @@ export async function PipelineList({
 
       {/* The phone layout of the same rows, fed by the same already-fetched
           data. Order follows what a rep checks between sessions: ID + status,
-          shipper, route, price, date — then the secondary block. Sub-lines use
-          the sanctioned 13px rather than the table's 12px, which is only
-          legible at a desk. */}
-      <ul className="divide-y divide-msg-rule overflow-hidden rounded-md border bg-card text-sm max-md:mb-28 md:hidden">
+          shipper, price, date — then the secondary block. Sub-lines use the
+          sanctioned 13px rather than the table's 12px, which is only legible at
+          a desk.
+          Separate cards here too, with the same left stripe and the same lift:
+          the desktop row and this one must show a rep the same facts in the
+          same shape, or the layout that drifts is the one they stop trusting. */}
+      <ul className="space-y-2 text-sm max-md:mb-28 md:hidden">
         {loads.map((load) => {
           const customer = customerById.get(load.customer_id);
           const rp = load.sales_owner_id ? repById.get(load.sales_owner_id) : undefined;
@@ -1000,8 +1144,15 @@ export async function PipelineList({
           const rowCarrier = load.carrier_id ? carrierById.get(load.carrier_id) : undefined;
           const unread = unreadByCustomer.get(load.customer_id) ?? 0;
           const offers = requestCountByLoad.get(load.id) ?? 0;
+          const cardSecondary = customer ? secondaryContactFor(load, customer) : null;
           return (
-            <li key={load.id} className="relative p-3">
+            <li
+              key={load.id}
+              className={cn(
+                "relative rounded-md border border-l-4 bg-card p-3 shadow-[0_1px_2px_var(--ord-shadow)]",
+                statusStripe(statusText(load))
+              )}
+            >
               {/* The card is one tap target. Controls that do something OTHER
                   than open the record take z-10 to sit above this overlay. */}
               <Link
@@ -1013,8 +1164,13 @@ export async function PipelineList({
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex flex-wrap items-baseline gap-x-2">
-                    <span className="tabular-nums text-msg-link">{load.load_number}</span>
-                    <span className={cn("text-xs lowercase", statusTone(statusText(load)))}>
+                    <span className="tabular-nums text-ord-accent">{load.load_number}</span>
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full border border-current/25 bg-ord-chip px-2 text-xs lowercase",
+                        statusTone(statusText(load))
+                      )}
+                    >
                       {statusText(load)}
                     </span>
                   </div>
@@ -1042,7 +1198,7 @@ export async function PipelineList({
               {customer ? (
                 <div className="mt-2 space-y-1">
                   <p className="flex items-center gap-1.5">
-                    <User className="size-4 shrink-0 text-msg-shipper" aria-hidden="true" />
+                    <User className="size-4 shrink-0 text-ord-accent" aria-hidden="true" />
                     <span className="min-w-0 break-words text-foreground">
                       {customer.contact_name}
                     </span>
@@ -1119,34 +1275,18 @@ export async function PipelineList({
                       </span>
                     </p>
                   )}
+                  {/* Same second line as the table row. */}
+                  {cardSecondary && <SecondaryContactLine contact={cardSecondary} />}
                 </div>
               ) : (
                 <p className="mt-2 text-muted-foreground">—</p>
               )}
 
-              <div className="mt-2 space-y-0.5">
-                <p className="flex items-start gap-1.5">
-                  <MapPin
-                    className="mt-1 size-3.5 shrink-0 text-msg-shipper"
-                    aria-hidden="true"
-                  />
-                  <span className="min-w-0">
-                    {load.pickup_city || "—"} {load.pickup_state || ""} {load.pickup_zip || ""}
-                  </span>
-                </p>
-                <p className="flex items-start gap-1.5">
-                  <MapPin className="mt-1 size-3.5 shrink-0 text-destructive" aria-hidden="true" />
-                  <span className="min-w-0">
-                    {load.delivery_city || "—"} {load.delivery_state || ""}{" "}
-                    {load.delivery_zip || ""}
-                  </span>
-                </p>
-              </div>
-
+              {/* The lane tags are gone from the card as they are from the row —
+                  the price block stands where they were, and the quick view at
+                  the foot of the card still carries origin and destination. */}
               <div className="mt-2 flex flex-wrap items-start justify-between gap-x-4 gap-y-1 tabular-nums">
-                <div>
-                  <QuoteCell load={load} canSeeMargin={canSeeMargin} />
-                </div>
+                <PriceBlock load={load} canSeeMargin={canSeeMargin} />
                 <div className="text-right text-xs">
                   <p>
                     <span className="text-muted-foreground">
@@ -1165,24 +1305,26 @@ export async function PipelineList({
               </div>
 
               {/* Secondary: still here, just smaller and below the glance. */}
-              <div className="mt-2 space-y-2 border-t border-msg-rule pt-2 text-xs">
+              <div className="mt-2 space-y-2 border-t pt-2 text-xs">
                 {loadVehicles.length > 0 && (
                   <div className="space-y-1">
                     {loadVehicles.map((v) => (
                       <div key={v.id} className="flex items-center gap-2">
+                        {/* 40x64: a step up like the table's, but held under it —
+                            the phone card puts the price and the shipper first. */}
                         <VehiclePhoto
                           year={v.year}
                           make={v.make}
                           model={v.model}
                           type={v.vehicle_type}
                           generic
-                          className="h-8 w-12"
+                          className="h-10 w-16"
                         />
                         <div className="min-w-0 leading-tight">
-                          <p className="text-muted-foreground">
+                          <p className="text-foreground">
                             {[v.year, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}
                           </p>
-                          <p className="text-foreground">
+                          <p className="uppercase tracking-wide text-ord-head">
                             {VEHICLE_TYPE_LABELS[v.vehicle_type] ?? v.vehicle_type}
                             {load.transport_type === "enclosed" && (
                               <span className="text-destructive"> · enclosed</span>
@@ -1200,7 +1342,7 @@ export async function PipelineList({
                     <span className="relative z-10">
                       <Link
                         href={`/carriers/${rowCarrier.id}`}
-                        className="focus-ring inline-flex min-h-12 items-center text-msg-link"
+                        className="focus-ring inline-flex min-h-12 items-center text-ord-accent"
                       >
                         {rowCarrier.company_name}
                       </Link>
@@ -1215,7 +1357,7 @@ export async function PipelineList({
 
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                   <span className="flex items-center gap-1 text-muted-foreground">
-                    <User className="size-3.5 shrink-0 text-msg-header" aria-hidden="true" />
+                    <User className="size-3.5 shrink-0 text-ord-head" aria-hidden="true" />
                     <span className="text-foreground">{rp ? rp.full_name || rp.email : "—"}</span>
                   </span>
 
