@@ -202,6 +202,41 @@ integration. Written ONLY through `recordEvent()` in `src/lib/events/`.
 - `scripts/backup.mjs` backs up `load_events`, not the view — this project has
   no PITR, so that file is the only copy.
 
+## GPS tracking (0050) — SHIPPED DARK
+
+Applied 2026-07-30 with `feature_flags.gps_tracking = false`. Nothing below is
+reachable until an admin flips that row; both public pages and the ingest route
+check it and 404 when it is off.
+
+- `shipment_locations` (positions), `geofence_events` (arrival/departure),
+  `load_geofences` (the centres), `tracking_tokens`, `feature_flags`.
+- **`authenticated` cannot write positions at all** — select only. The single
+  writer is `/api/track/[token]`, running as the service role after validating
+  the token. There is no anon-writable table in this schema and this did not
+  add one.
+- **Two no-login URLs**, same contract as `/sign/[token]`: `/t/<token>` is the
+  driver's location page (write), `/track/<token>` is the customer's (read-only,
+  and it never SELECTS carrier, rates or contact details — redaction by not
+  fetching). `kind` is checked on every resolve so a customer's token cannot
+  post positions.
+- **Geofence dedup is three mechanisms**, because one is not enough: hysteresis
+  (enter at the radius, leave at 1.5x it), a dwell of 2 agreeing fixes, and a
+  unique index `(load_id, fence, transition)` as the backstop. The tradeoff: a
+  genuine second visit to a fence is not recorded. `tests/geofence.test.ts`
+  simulates an idling truck across the boundary and asserts one arrival.
+- **Geofence centres are geocoded lazily**, when a driver link is issued — one
+  ORS call pair per tracked load, not a 26k backfill. An address that will not
+  geocode simply gets no fence; positions still record.
+- Coordinates deliberately live in `load_geofences`, NOT on `loads`: a column on
+  `loads` would trigger 0013's checklist (grant it, then recreate all four
+  frozen `select *` views).
+- `shipment_locations` is in the `supabase_realtime` publication. RLS applies to
+  `postgres_changes`, so a subscriber gets only what its select policy allows.
+- **NOT built**: the Mapbox dashboard map and the map on the customer page. No
+  Mapbox token exists, and Mapbox GL also needs `api.mapbox.com`,
+  `events.mapbox.com` in `connect-src` plus `worker-src blob:` in
+  `security-headers.ts` or it fails silently under the CSP.
+
 ## Integrations
 
 | | |

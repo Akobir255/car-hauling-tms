@@ -16,6 +16,7 @@ export const EVENT_TYPES = [
   "status_changed",
   "note_added",
   // Phase 2 — GPS
+  "tracking_link_issued",
   "geofence_entered",
   "geofence_exited",
   "eta_updated",
@@ -39,6 +40,7 @@ export type EventType = (typeof EVENT_TYPES)[number];
 export type EventPayloads = {
   status_changed: { status: LoadStatus; note?: string | null };
   note_added: { note_id: string; excerpt?: string };
+  tracking_link_issued: { kind: "driver" | "customer" };
   geofence_entered: { fence: "pickup" | "delivery"; recorded_at: string };
   geofence_exited: { fence: "pickup" | "delivery"; recorded_at: string };
   eta_updated: { eta: string; reason?: string; previous_eta?: string | null };

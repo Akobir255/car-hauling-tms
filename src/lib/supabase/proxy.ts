@@ -9,14 +9,33 @@ import { buildCsp } from "@/lib/security-headers";
 // /verify is reached with a correct password but NO session — the session is
 // only minted once the emailed code is accepted — so it has to be public to
 // the middleware. Its own httpOnly cookie is what authorises it.
-const PUBLIC_PATHS = ["/login", "/verify", "/set-password", "/sign", "/api/vehicles/image"];
+// /t/<token> is the driver's location page and /track/<token> the customer's,
+// both reached from a text message with no account behind them (0050). Same
+// contract as /sign: an unguessable token, validated server-side on every
+// request, standing in for a session. Neither page renders anything the holder
+// of that token should not see -- the driver gets an order number, the customer
+// gets status and a distance.
+const PUBLIC_PATHS = [
+  "/login",
+  "/verify",
+  "/set-password",
+  "/sign",
+  "/t",
+  "/track",
+  "/api/vehicles/image",
+];
 
 // Telephony endpoints authenticate themselves (carrier signature / shared
 // token) and must never be redirected to /login — a carrier that follows a
 // 307 to an HTML page records the delivery as failed and eventually disables
 // the webhook. NOTE: this bypass is prefix-based, so anything added under
 // /api/telephony must do its own authentication.
-const SELF_AUTHENTICATING_PREFIXES = ["/api/telephony"];
+// /api/track/<token> is the driver PWA's position ingest. It carries a token,
+// not a cookie, and a phone that follows a 307 to an HTML login page just loses
+// the fix. NOTE the warning above applies with full force: this bypass is
+// prefix-based, so that handler authenticates itself -- token, kind, expiry,
+// load state and rate limit are all checked there.
+const SELF_AUTHENTICATING_PREFIXES = ["/api/telephony", "/api/track"];
 
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
