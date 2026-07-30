@@ -561,6 +561,11 @@ export function LoadDetailsForm({
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div className="col-span-1 space-y-1.5 md:col-span-2">
               <FieldLabel htmlFor="carrier_id">Carrier</FieldLabel>
+              {/* Marker input, same pattern as require_card_present: it proves
+                  this form actually carried the carrier control, so a partial
+                  or future form that omits it cannot silently release the
+                  carrier on a dispatched order. */}
+              <input type="hidden" name="carrier_id_present" value="1" />
               <NativeSelect id="carrier_id" name="carrier_id" defaultValue={load.carrier_id ?? ""}>
                 <option value="">Unassigned</option>
                 {carriers.map((c) => (

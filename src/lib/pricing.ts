@@ -56,3 +56,33 @@ export function defaultReservationFee(customerRate: number): number {
 export function offeredCarrierPay(customerRate: number, reservationFee: number | null): number {
   return Math.max(0, Math.round((customerRate - (reservationFee ?? 0)) * 100) / 100);
 }
+
+/**
+ * Is a submitted carrier-pay figure a SETTLEMENT, or still the offer?
+ *
+ * `carrier_pay_confirmed` (0038) is the column every margin report has to filter
+ * on, and it was being written by two places that disagreed. The edit form got
+ * it right — a number equal to the offer arithmetic is still the offer. The
+ * dispatch sheet wrote `true` unconditionally, and since that form PREFILLS the
+ * field with the load's current carrier_pay, opening it to set a driver's phone
+ * and pressing Save promoted an untouched estimate into a settlement. When 0038
+ * landed only 195 of 25,848 priced loads were confirmed; that path would have
+ * confirmed essentially every dispatched load, silently, and there is no way to
+ * tell afterwards which figures a human actually typed.
+ *
+ * So the rule lives here, next to the arithmetic it depends on, and both writers
+ * call it. Confirmed means: a number was submitted, and it is NOT the number we
+ * would have derived ourselves.
+ */
+export function isConfirmedCarrierPay(args: {
+  submitted: number | null | undefined;
+  customerRate: number | null | undefined;
+  reservationFee: number | null | undefined;
+  /** Preserved when nothing was submitted — never demote a settled figure. */
+  storedConfirmed?: boolean;
+}): boolean {
+  if (args.submitted == null) return args.storedConfirmed ?? false;
+  if (args.customerRate == null) return true;
+  const offer = offeredCarrierPay(args.customerRate, args.reservationFee ?? null);
+  return Math.abs(args.submitted - offer) > 0.005;
+}

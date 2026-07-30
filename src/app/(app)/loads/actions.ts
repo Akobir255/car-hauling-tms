@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
 import { blockedFromWritingLoad } from "@/lib/record-access";
-import { defaultReservationFee, offeredCarrierPay } from "@/lib/pricing";
+import { defaultReservationFee, isConfirmedCarrierPay, offeredCarrierPay } from "@/lib/pricing";
 import { isSmsConfigured, sendSms, toE164 } from "@/lib/messaging/ringcentral";
 import { isEmailConfigured, isPlausibleEmail, sendEmail, sendEmailBatch } from "@/lib/messaging/email";
 import { buildContext, renderTemplate } from "@/lib/messaging/render";
@@ -314,21 +314,26 @@ export async function updateLoad(
   // client sends, since that's how broker margin stays hidden from sales.
   const isManager = profile.role === "admin" || profile.role === "dispatcher";
   if (isManager) {
-    const carrier_id = (formData.get("carrier_id") || "").toString();
-    values.carrier_id = carrier_id || null;
+    // Only when the form actually carried the control — the marker-input
+    // pattern require_card_present already uses. Absent used to mean "clear
+    // it", which is how a save from any form without a carrier select would
+    // release a dispatched order's carrier.
+    if (formData.has("carrier_id_present")) {
+      const carrier_id = (formData.get("carrier_id") || "").toString();
+      values.carrier_id = carrier_id || null;
+      if (carrier_id) values.dispatcher_id = profile.id;
+    }
     const submittedPay = numeric.parse(formData.get("carrier_pay")?.toString());
     values.carrier_pay = submittedPay;
     // A number that is exactly the offer arithmetic is still the offer — this
     // form prefills the field, so re-saving it after changing something else
-    // must not promote an estimate into a settlement (0038). Anything a human
-    // actually moved off that figure is real.
-    const offer =
-      parsedCore.data.customer_rate != null
-        ? offeredCarrierPay(parsedCore.data.customer_rate, parsedCore.data.deposit_amount ?? null)
-        : null;
-    values.carrier_pay_confirmed =
-      submittedPay != null && (offer == null || Math.abs(submittedPay - offer) > 0.005);
-    if (carrier_id) values.dispatcher_id = profile.id;
+    // must not promote an estimate into a settlement (0038). The rule lives in
+    // pricing.ts because saveDispatchSheet has to apply the identical one.
+    values.carrier_pay_confirmed = isConfirmedCarrierPay({
+      submitted: submittedPay,
+      customerRate: parsedCore.data.customer_rate,
+      reservationFee: parsedCore.data.deposit_amount,
+    });
   }
 
   const supabase = await createClient();
@@ -1220,12 +1225,31 @@ export async function saveDispatchSheet(
   const carrierPay = money("carrier_pay");
   if (carrierPay === null) return { error: "Amounts must be positive numbers." };
   if (carrierPay !== undefined) {
-    // Typed by a human on the dispatch sheet, which is the moment the number
-    // stops being customer_rate − deposit and starts being what the carrier
-    // agreed to. That is what makes it countable as margin (0038).
-    const { error: payError } = await createAdminClient()
+    // This wrote `carrier_pay_confirmed: true` unconditionally, and the form
+    // PREFILLS this field with the load's current carrier_pay — so opening the
+    // sheet to set a driver's phone and pressing Save promoted an untouched
+    // estimate into a settlement. The rule is the same one updateLoad applies
+    // and now lives in pricing.ts so the two cannot drift again.
+    //
+    // The stored figures are read because the form may not carry either amount:
+    // whatever is not submitted still has to take part in the comparison.
+    const admin = createAdminClient();
+    const { data: current } = await admin
       .from("loads")
-      .update({ carrier_pay: carrierPay, carrier_pay_confirmed: true })
+      .select("customer_rate, deposit_amount, carrier_pay_confirmed")
+      .eq("id", loadId)
+      .maybeSingle();
+
+    const confirmed = isConfirmedCarrierPay({
+      submitted: carrierPay,
+      customerRate: tariff ?? current?.customer_rate,
+      reservationFee: deposit ?? current?.deposit_amount,
+      storedConfirmed: current?.carrier_pay_confirmed ?? false,
+    });
+
+    const { error: payError } = await admin
+      .from("loads")
+      .update({ carrier_pay: carrierPay, carrier_pay_confirmed: confirmed })
       .eq("id", loadId);
     if (payError) return { error: payError.message };
   }
@@ -1696,9 +1720,16 @@ export async function bulkSmsChunk(loadIds: string[], body: string): Promise<Bul
   // loads read, even though only id/customer_id are selected here. Owner-
   // scoped as well, for the same reason as bulkEmail: reading another rep's
   // order is now allowed, texting their shipper is not.
+  // The template columns come too. This selected only id/customer_id, and the
+  // body was then sent VERBATIM — so a rep picking any of the 34 canned texts
+  // from the template sheet (the bulk bar's SMS button opens it) blasted
+  // "Is {{quote_price}} a good rate ... text {{agent}}" to up to 100 shippers,
+  // and stored it that way. bulkEmail thirty lines up has always rendered.
   let loadQuery = supabase
     .from(profile.role === "sales" ? "loads_sales_safe" : MANAGER_LOADS_TABLE)
-    .select("id, customer_id")
+    .select(
+      "id, customer_id, load_number, customer_rate, pickup_city, pickup_state, delivery_city, delivery_state, pickup_ready_date"
+    )
     .in("id", loadIds);
   if (profile.role === "sales") loadQuery = loadQuery.eq("sales_owner_id", profile.id);
   const { data: loads, error: loadsError } = await loadQuery;
@@ -1706,9 +1737,36 @@ export async function bulkSmsChunk(loadIds: string[], body: string): Promise<Bul
 
   const customerIds = [...new Set((loads ?? []).map((l) => l.customer_id).filter(Boolean))];
   const { data: customers } = customerIds.length
-    ? await supabase.from("customers").select("id, phone, sms_opt_out").in("id", customerIds)
-    : { data: [] as { id: string; phone: string | null; sms_opt_out: boolean }[] };
+    ? await supabase
+        .from("customers")
+        .select("id, phone, sms_opt_out, contact_name, company_name")
+        .in("id", customerIds)
+    : {
+        data: [] as {
+          id: string;
+          phone: string | null;
+          sms_opt_out: boolean;
+          contact_name: string;
+          company_name: string | null;
+        }[],
+      };
   const custById = new Map((customers ?? []).map((c) => [c.id, c]));
+
+  // First vehicle per load, for {{vehicle}} — same shape bulkEmail builds.
+  const { data: vehicleRows } = loadIds.length
+    ? await supabase
+        .from("load_vehicles")
+        .select("load_id, year, make, model")
+        .in("load_id", loadIds)
+        .order("created_at")
+    : { data: [] as { load_id: string; year: number | null; make: string | null; model: string | null }[] };
+  const vehicleByLoad = new Map<string, string>();
+  for (const v of vehicleRows ?? []) {
+    if (!vehicleByLoad.has(v.load_id)) {
+      vehicleByLoad.set(v.load_id, [v.year, v.make, v.model].filter(Boolean).join(" "));
+    }
+  }
+  const agent = profile.full_name || profile.email || "";
 
   // Checked by number as well as by row: the same person often has several
   // orders, and they opted out of being texted, not out of one order.
@@ -1724,7 +1782,13 @@ export async function bulkSmsChunk(loadIds: string[], body: string): Promise<Bul
       skipped++;
       continue;
     }
-    recipients.push({ loadId: l.id, customerId: c.id, to, text });
+    // Rendered PER RECIPIENT — the whole point is that {{name}} and
+    // {{quote_price}} differ per row.
+    const ctx = buildContext(c as unknown as Customer, l as unknown as Load, {
+      agent,
+      vehicle: vehicleByLoad.get(l.id) ?? "",
+    });
+    recipients.push({ loadId: l.id, customerId: c.id, to, text: renderTemplate(text, ctx) });
   }
 
   const run = await runSmsChunk(recipients, {

@@ -64,6 +64,23 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
     ]);
   const customer = customerData as Customer | null;
   const vehicles = (vehiclesData ?? []) as LoadVehicle[];
+
+  // The carriers query above has no .limit(), so PostgREST caps it at 1,000 of
+  // the ~4,700 in the directory — alphabetically. If this order's carrier sorts
+  // past that cut, no <option> matches the select's defaultValue, the control
+  // silently lands on "Unassigned", and the next save of this form writes
+  // carrier_id = NULL on a dispatched order. Fixing a phone number released the
+  // carrier. So the assigned one is fetched by id and merged in, always.
+  const carrierList = (carriers ?? []) as Carrier[];
+  let carrierOptions = carrierList;
+  if (load.carrier_id && !carrierList.some((c) => c.id === load.carrier_id)) {
+    const { data: assigned } = await supabase
+      .from("carriers")
+      .select("*")
+      .eq("id", load.carrier_id)
+      .maybeSingle();
+    if (assigned) carrierOptions = [assigned as Carrier, ...carrierList];
+  }
   const campaigns = [
     ...new Set(((campaignRows ?? []) as { campaign: string | null }[]).map((r) => r.campaign).filter(Boolean) as string[]),
   ].sort();
@@ -129,7 +146,7 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
         <LoadDetailsForm
           action={boundUpdate}
           load={load}
-          carriers={(carriers ?? []) as Carrier[]}
+          carriers={carrierOptions}
           canManageCarrier={canManageCarrier}
           campaigns={campaigns}
           shipper={

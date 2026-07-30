@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateQuote } from "@/lib/pricing";
+import { calculateQuote, isConfirmedCarrierPay, offeredCarrierPay } from "@/lib/pricing";
 
 // The suggested-price engine. These lock in the mileage tiers and surcharges
 // so a future edit can't silently change what agents get quoted.
@@ -59,5 +59,70 @@ describe("calculateQuote", () => {
       const price = calculateQuote({ ...base, miles, transport: "enclosed" });
       expect(Number.isInteger(price)).toBe(true);
     }
+  });
+});
+
+// The offer-vs-settlement rule. carrier_pay_confirmed (0038) is the column
+// every margin report has to filter on, and it was being written by two server
+// actions that disagreed: the edit form compared against the derived offer, the
+// dispatch sheet wrote `true` unconditionally. Because that sheet PREFILLS the
+// field, opening it to type a driver's phone and pressing Save promoted an
+// untouched estimate into a settlement. Both now call this, so they cannot
+// drift apart again.
+describe("isConfirmedCarrierPay", () => {
+  const rate = 1000;
+  const deposit = 200;
+  const offer = offeredCarrierPay(rate, deposit); // 800
+
+  it("does NOT confirm a figure that is exactly the derived offer", () => {
+    // The prefilled dispatch sheet, saved untouched. This is the whole bug.
+    expect(
+      isConfirmedCarrierPay({ submitted: offer, customerRate: rate, reservationFee: deposit })
+    ).toBe(false);
+  });
+
+  it("confirms a figure a human actually moved", () => {
+    expect(
+      isConfirmedCarrierPay({ submitted: 750, customerRate: rate, reservationFee: deposit })
+    ).toBe(true);
+    expect(
+      isConfirmedCarrierPay({ submitted: 825, customerRate: rate, reservationFee: deposit })
+    ).toBe(true);
+  });
+
+  it("treats a sub-cent difference as the offer, not a settlement", () => {
+    expect(
+      isConfirmedCarrierPay({
+        submitted: offer + 0.004,
+        customerRate: rate,
+        reservationFee: deposit,
+      })
+    ).toBe(false);
+  });
+
+  it("keeps the stored verdict when nothing was submitted — never demotes silently", () => {
+    expect(
+      isConfirmedCarrierPay({
+        submitted: null,
+        customerRate: rate,
+        reservationFee: deposit,
+        storedConfirmed: true,
+      })
+    ).toBe(true);
+    expect(
+      isConfirmedCarrierPay({ submitted: undefined, customerRate: rate, reservationFee: deposit })
+    ).toBe(false);
+  });
+
+  it("confirms anything typed on an unpriced load — there is no offer to compare to", () => {
+    expect(
+      isConfirmedCarrierPay({ submitted: 700, customerRate: null, reservationFee: null })
+    ).toBe(true);
+  });
+
+  it("handles a missing reservation fee the same way offeredCarrierPay does", () => {
+    expect(
+      isConfirmedCarrierPay({ submitted: rate, customerRate: rate, reservationFee: null })
+    ).toBe(false);
   });
 });

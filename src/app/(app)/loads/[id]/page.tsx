@@ -26,6 +26,8 @@ import type {
 } from "@/types/database";
 import { OrderActionBar } from "./order-action-bar";
 import { EsignPanel } from "./esign-panel";
+import { TrackingPanel } from "./tracking-panel";
+import { isFeatureEnabled } from "@/lib/flags";
 import { OrderMoreMenu } from "./order-more-menu";
 import { NotesThread } from "./notes-thread";
 import { VehiclePhotoEditor } from "./vehicle-photo-editor";
@@ -172,6 +174,9 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   // without the controls rather than with controls that quietly do nothing.
   const readOnly = !canEdit(load, profile);
   const ownerName = assignedTo?.full_name || assignedTo?.email || null;
+
+  // One boolean read; the Tracking band below does not exist when it is false.
+  const gpsEnabled = await isFeatureEnabled("gps_tracking");
 
   // The header shows the order's Loadboard SETTING when one is chosen (the
   // old system's header select); otherwise it falls back to where the order
@@ -385,6 +390,15 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               events={contractEvents ?? []}
             />
           </SectionBand>
+          )}
+
+          {/* Phase 2, and it renders only where it means something: an order
+              (a quote has nobody hauling it) with the flag on. When the flag is
+              off this band does not exist, which is what "shipped dark" means. */}
+          {!isPreOrder && gpsEnabled && (
+            <SectionBand title="Tracking">
+              <TrackingPanel loadId={load.id} readOnly={readOnly} />
+            </SectionBand>
           )}
 
           <SectionBand title="Order Information">
