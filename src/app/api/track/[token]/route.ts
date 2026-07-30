@@ -3,7 +3,13 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isFeatureEnabled } from "@/lib/flags";
 import { resolveTrackingToken } from "@/lib/tracking/tokens";
-import { evaluateFence, isMeaningfulMove, type Coords, type Fence } from "@/lib/tracking/geofence";
+import {
+  evaluateFence,
+  isMeaningfulMove,
+  mergeHistory,
+  type Coords,
+  type Fence,
+} from "@/lib/tracking/geofence";
 import { recordEvent } from "@/lib/events/record-event";
 
 // Position ingest for the driver PWA (Phase 2).
@@ -99,9 +105,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     .update({ last_used_at: new Date(now).toISOString() })
     .eq("id", resolved.row.id);
 
+  const history = mergeHistory(
+    { lat: next.lat, lng: next.lng, at: recordedAt },
+    (recent ?? []).map((r) => ({ lat: r.lat, lng: r.lng, at: r.recorded_at }))
+  );
+
   // A phone sitting on a dock posts the same spot every three minutes. Those
-  // rows make the trail unreadable and tell a dispatcher nothing.
+  // rows make the trail unreadable and tell a dispatcher nothing, so they are
+  // not stored — but they are still EVALUATED, and that distinction is the
+  // whole feature.
+  //
+  // Arriving means the last two fixes agree that we are inside the fence. A
+  // truck at highway speed covers ~5km in a 3-minute gap, so at most ONE stored
+  // fix ever lands inside a 500m radius before it parks; every fix after that
+  // is a non-move. Returning here would mean the second agreeing fix is never
+  // seen, no arrival ever fires, and — since departure is gated behind arrival
+  // — the geofence feature emits nothing at all, ever, while the driver's
+  // screen cheerfully reports "sent".
   if (!isMeaningfulMove(previous, next, parsed.data.accuracy_m ?? null)) {
+    await evaluateGeofences(loadId, history, recent?.[0]?.id ?? null, recordedAt);
     return small(200, { ok: true, stored: false });
   }
 
@@ -119,24 +141,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     .single();
   if (error) return small(500, { error: "store_failed" });
 
-  // Re-read in true recorded order rather than assuming the fix just posted is
-  // the newest one. It usually is — but a backdated fix from a phone that was
-  // offline is explicitly allowed above, and prepending that to the history
-  // would hand the dwell check an old position as the current one and fire an
-  // arrival for somewhere the truck left an hour ago.
-  const { data: ordered } = await admin
-    .from("shipment_locations")
-    .select("lat, lng")
-    .eq("load_id", loadId)
-    .order("recorded_at", { ascending: false })
-    .limit(5);
-
-  await evaluateGeofences(
-    loadId,
-    (ordered ?? []).map((r) => ({ lat: r.lat, lng: r.lng })),
-    inserted.id,
-    recordedAt
-  );
+  // Same merged history as the not-stored path — mergeHistory already ordered
+  // it by recorded_at, so a backdated fix cannot masquerade as the current one.
+  await evaluateGeofences(loadId, history, inserted.id, recordedAt);
 
   return small(200, { ok: true, stored: true });
 }
@@ -149,7 +156,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 async function evaluateGeofences(
   loadId: string,
   fixes: Coords[],
-  locationId: string,
+  /** Null when the triggering fix was not stored — a parked truck's ping. */
+  locationId: string | null,
   occurredAt: string
 ): Promise<void> {
   const admin = createAdminClient();

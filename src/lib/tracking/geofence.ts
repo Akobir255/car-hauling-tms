@@ -85,6 +85,25 @@ export function evaluateFence(
   return { transition: allOutside ? "departed" : null, distance_m };
 }
 
+export type TimedFix = Coords & { at: string };
+
+/**
+ * The newest-first history to evaluate against, merging the fix just received
+ * with what is already stored and ordering by WHEN EACH FIX WAS TAKEN.
+ *
+ * Two reasons this is not just [next, ...stored]. A fix may be backdated — a
+ * phone posting what it buffered while out of signal — and prepending that
+ * would put an hour-old position in the "current" slot and fire an arrival for
+ * somewhere the truck has already left. And the caller must be able to evaluate
+ * a fix it chose NOT to store (see isMeaningfulMove), which is the only way a
+ * parked truck ever accumulates enough agreeing fixes to count as arrived.
+ */
+export function mergeHistory(next: TimedFix, stored: TimedFix[]): Coords[] {
+  return [next, ...stored]
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    .map(({ lat, lng }) => ({ lat, lng }));
+}
+
 /**
  * A position is worth storing only if it says something new. A phone left on a
  * dock posts the same spot every three minutes; those rows cost storage, make

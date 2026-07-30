@@ -133,6 +133,11 @@ const AUTHORSHIP: [string, string][] = [
   // makes deleteUser fail outright on the profiles cascade. Goes away with the
   // migration that drops the copy.
   ["load_status_history_pre_0049", "changed_by"],
+  // 0050. Both reference profiles with no ON DELETE, so like every row above,
+  // leaving them out does not merely skip a table — it makes deleteUser fail on
+  // the profiles cascade for anyone who ever issued a tracking link.
+  ["tracking_tokens", "created_by"],
+  ["feature_flags", "updated_by"],
   ["documents", "uploaded_by"],
   ["messages", "sent_by"],
   ["message_templates", "created_by"],

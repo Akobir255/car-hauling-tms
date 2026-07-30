@@ -7,8 +7,10 @@ import {
   evaluateFence,
   haversineMeters,
   isMeaningfulMove,
+  mergeHistory,
   type Coords,
   type Fence,
+  type TimedFix,
 } from "../src/lib/tracking/geofence";
 
 // A dealer lot in Dallas, and points measured off it.
@@ -124,6 +126,105 @@ describe("evaluateFence — departure and the idling truck", () => {
     }
     expect(arrivals).toBeLessThanOrEqual(1);
     expect(departures).toBe(0);
+  });
+});
+
+// The route's real loop, in miniature. Every earlier test in this file feeds
+// evaluateFence a history by hand, which is exactly why none of them caught the
+// defect below: the bug lived in HOW the route assembled that history, not in
+// the maths.
+function simulateIngest(
+  fence: Fence,
+  pings: TimedFix[],
+  { evaluateOnlyWhenStored }: { evaluateOnlyWhenStored: boolean }
+): string[] {
+  const stored: TimedFix[] = [];
+  const state = { arrived: false, departed: false };
+  const events: string[] = [];
+
+  for (const ping of pings) {
+    const previous = stored[0] ?? null;
+    const history = mergeHistory(ping, stored);
+    const meaningful = isMeaningfulMove(previous, ping, 10);
+    if (meaningful) stored.unshift(ping);
+    if (evaluateOnlyWhenStored && !meaningful) continue;
+
+    const v = evaluateFence(fence, history, state);
+    if (v.transition === "arrived") {
+      events.push("arrived");
+      state.arrived = true;
+    }
+    if (v.transition === "departed") {
+      events.push("departed");
+      state.departed = true;
+    }
+  }
+  return events;
+}
+
+/** Highway approach at ~5km per 3-minute ping, then parked at the dock. */
+function approachAndPark(): TimedFix[] {
+  const t = (min: number) => new Date(Date.UTC(2026, 6, 30, 12, min)).toISOString();
+  const pings: TimedFix[] = [];
+  let minute = 0;
+  // Closing from 20km out in 5km steps — the last one lands inside the fence.
+  for (const metres of [20_000, 15_000, 10_000, 5_000, 200]) {
+    pings.push({ ...at(metres), at: t(minute) });
+    minute += 3;
+  }
+  // Parked. Ten pings jittering by a few metres, none of them a real move.
+  for (let i = 0; i < 10; i++) {
+    pings.push({ ...at(200 + (i % 3)), at: t(minute) });
+    minute += 3;
+  }
+  return pings;
+}
+
+describe("ingest loop — approach and park", () => {
+  it("records the arrival of a truck that parks at the dock", () => {
+    // The ordinary case, and the one that was broken: at highway speed only ONE
+    // fix lands inside a 500m fence before the truck stops, and every fix after
+    // that is filtered out as "not a real move".
+    expect(simulateIngest(LOT, approachAndPark(), { evaluateOnlyWhenStored: false })).toEqual([
+      "arrived",
+    ]);
+  });
+
+  it("REGRESSION: gating evaluation on storage emits nothing at all", () => {
+    // Pinned deliberately. This is what the route did before: the second
+    // agreeing fix was never seen, so arrival never fired — and because
+    // departure is gated behind arrival, the whole feature produced zero rows
+    // while the driver's screen reported "sent" every three minutes.
+    expect(simulateIngest(LOT, approachAndPark(), { evaluateOnlyWhenStored: true })).toEqual([]);
+  });
+
+  it("still emits exactly one arrival, not one per parked ping", () => {
+    const events = simulateIngest(LOT, approachAndPark(), { evaluateOnlyWhenStored: false });
+    expect(events.filter((e) => e === "arrived")).toHaveLength(1);
+  });
+});
+
+describe("mergeHistory", () => {
+  const t = (min: number) => new Date(Date.UTC(2026, 6, 30, 12, min)).toISOString();
+
+  it("orders by when the fix was taken, not by arrival at the server", () => {
+    // A phone coming out of a canyon posts an hour-old fix. Prepending it blind
+    // would put a stale position in the "current" slot and fire an arrival for
+    // somewhere the truck has already left.
+    const backdated: TimedFix = { ...at(9_000), at: t(0) };
+    const stored: TimedFix[] = [
+      { ...at(100), at: t(30) },
+      { ...at(150), at: t(27) },
+    ];
+    const merged = mergeHistory(backdated, stored);
+    expect(merged[0]).toEqual({ lat: at(100).lat, lng: at(100).lng });
+    expect(merged).toHaveLength(3);
+  });
+
+  it("puts a genuinely current fix first", () => {
+    const now: TimedFix = { ...at(50), at: t(60) };
+    const stored: TimedFix[] = [{ ...at(5_000), at: t(30) }];
+    expect(mergeHistory(now, stored)[0]).toEqual({ lat: at(50).lat, lng: at(50).lng });
   });
 });
 

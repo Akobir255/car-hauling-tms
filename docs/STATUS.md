@@ -232,6 +232,17 @@ check it and 404 when it is off.
   frozen `select *` views).
 - `shipment_locations` is in the `supabase_realtime` publication. RLS applies to
   `postgres_changes`, so a subscriber gets only what its select policy allows.
+- **`Permissions-Policy` in `next.config.ts` must keep `geolocation=(self)`.**
+  It was `geolocation=()` — an EMPTY allowlist, which denies the API to every
+  origin including our own — so the driver page could never get a fix and would
+  tell the driver to change a browser setting that would not have helped. Set it
+  back to `()` and Phase 2 is silently dead again.
+- **Geofences are evaluated on every accepted ping, stored or not.** A truck at
+  highway speed lands at most ONE stored fix inside a 500m radius before it
+  parks, and every ping after that is filtered out as "not a real move" — so
+  gating evaluation on storage meant arrival never fired, and since departure is
+  gated behind arrival, the feature emitted nothing at all. `tests/geofence.test.ts`
+  pins both directions of this.
 - **NOT built**: the Mapbox dashboard map and the map on the customer page. No
   Mapbox token exists, and Mapbox GL also needs `api.mapbox.com`,
   `events.mapbox.com` in `connect-src` plus `worker-src blob:` in

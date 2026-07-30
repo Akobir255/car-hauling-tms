@@ -12,10 +12,21 @@ const SECURITY_HEADERS = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   // Don't leak internal paths (e.g. /sign/<token>) to third-party sites.
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  // This app never needs these APIs; deny them outright.
+  // Deny the APIs this app has no use for. geolocation is the exception since
+  // Phase 2: the driver page at /t/<token> IS a location tracker, and `()` is
+  // an EMPTY allowlist that denies the feature to every origin INCLUDING self —
+  // so navigator.geolocation would fail before the browser ever prompted, and
+  // the driver would be told to "allow location in your browser settings" for a
+  // denial that is a response header they cannot reach.
+  //
+  // (self) is the narrow form: our own origin may ASK, the user still has to
+  // agree, and an embedded third party still gets nothing. Scoping it to /t
+  // alone was the alternative, but two overlapping header entries for one key
+  // is browser-dependent merging, and a silently re-broken driver page is worse
+  // than one origin being allowed to prompt.
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    value: "camera=(), microphone=(), geolocation=(self), payment=(), usb=()",
   },
   // Two years, subdomains included — the app is HTTPS-only behind Vercel.
   {

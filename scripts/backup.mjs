@@ -47,6 +47,14 @@ const TABLES = [
   // trigger that renumbers every id. This file is the only disaster-recovery
   // copy this project has.
   "load_events",
+  // 0050. Parent-first, and geofence_events last because it references
+  // shipment_locations. tracking_tokens is DELIBERATELY absent: those rows are
+  // live credentials for no-login pages, and a restore that resurrects them
+  // hands back working links to whoever held them. Reissue instead.
+  "load_geofences",
+  "shipment_locations",
+  "geofence_events",
+  "feature_flags",
   "documents",
   "messages",
   "message_templates",
