@@ -15,6 +15,9 @@
 
 # next.js
 /.next/
+# ...and anywhere else. A `next build` run from a subdirectory (easy to do by
+# accident when a shell `cd` persists) drops a .next/ there instead.
+**/.next/
 /out/
 
 # production
