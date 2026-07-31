@@ -310,10 +310,23 @@ update webhook_events   set hidden_at = null;
 update sms_suppressions set hidden_at = null;
 ```
 
-**The three ALTERs are not optional.** `messages`, `webhook_events` (0055) and
-`sms_suppressions` (0056) all default `hidden_at` to `now()`, so without
-dropping the defaults the next inbound text hides itself and the restore looks
-broken.
+**Undoing the defaults is not optional.** `webhook_events` (0055) and
+`sms_suppressions` (0056) default `hidden_at` to `now()`, and `messages` is
+stamped by `trg_messages_default_hidden` (0060) — so without also running
+
+```sql
+drop trigger if exists trg_messages_default_hidden on messages;
+alter table webhook_events   alter column hidden_at drop default;
+alter table sms_suppressions alter column hidden_at drop default;
+```
+
+the next inbound text hides itself and the restore looks broken.
+
+**Outbound SMS is exempt (0060).** A text sent from the app stays visible;
+inbound still arrives dark. Not a hole: you can only text a customer you can
+see, every real customer is hidden, and there is no visible inbound thread to
+reply into. Existing messages were NOT backfilled — outbound included, since
+those carry real numbers.
 
 The views and functions need no change: every condition they carry is
 `hidden_at is null`, which is true for every row again.
@@ -672,6 +685,18 @@ signed URLs minted per click by `attachmentUrl()`, which re-checks note
 visibility through RLS first. Attachment rows reuse the existing `documents`
 table via a nullable `note_id`; deleting a note removes its objects from
 storage too, so nothing is orphaned.
+
+## The font is SELF-HOSTED — do not switch it back to next/font/google
+
+`src/app/layout.tsx` loads Lato from `src/app/fonts/*.woff2` via
+`next/font/local`. The Google loader fetches at BUILD time, so every deploy
+depended on fonts.googleapis.com answering — it failed **three separate times on
+2026-07-31**, each with `Error while requesting resource`, which says nothing
+about fonts and looks like a broken build. Verified after the switch: two
+consecutive clean builds, both weights `loaded` in the browser, fonts served
+from `/_next/static/media/`, and **zero requests to Google** across 45 captured.
+Lato is OFL-1.1, so shipping the files is permitted. Same face, same subsets —
+nothing changed visually.
 
 ## Open items
 
