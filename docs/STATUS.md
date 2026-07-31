@@ -308,15 +308,21 @@ update webhook_events set hidden_at = null;
 The views and functions need no change to restore: every condition they carry
 is `hidden_at is null`, which is true for every row again.
 
-### Five sample orders are the only visible data (seeded 2026-07-31)
+### Ten sample orders are the only visible data (seeded 2026-07-31)
 
-`10000004-US` … `10000008-US`, with fictional customers, one vehicle each, a
-follow-up on all five, and paperwork spread deliberately: **2 signed, 2 sent and
-unsigned, 1 never sent.** Each carries "Sample record seeded 2026-07-31 for
-demo. Not a real order." in its internal notes, so nobody dispatches a truck to
-one. Delete them with `delete from loads where notes like 'Sample record
-seeded%'` (vehicles and events cascade; their five customers are `source =
-'sample'`).
+`10000004-US` … `10000013-US`, with fictional customers, one vehicle each, a
+follow-up on **all ten**, and paperwork spread deliberately: **4 signed, 3 sent
+and unsigned, 3 never sent.** Statuses run quote → booked → dispatched →
+picked_up → delivered so every pipeline tab has something in it.
+
+Each carries "Sample record seeded 2026-07-31 for demo. Not a real order." in
+its internal notes, so nobody dispatches a truck to one. Remove them with
+`delete from loads where notes like 'Sample record seeded%'` — vehicles and
+events cascade; their customers are `source = 'sample'`.
+
+Everything they produce is derived, not typed in: the dashboard reads 10 new
+loads, $9,640 over 30 days, 5 follow-ups due and a vehicle mix of 6 SUV / 2
+sedan / 2 pickup, which is exactly these ten records and nothing else.
 
 ### The trap that cost THREE migrations — anything that skips RLS needs telling
 
