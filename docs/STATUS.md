@@ -16,7 +16,7 @@ Last updated: 2026-07-26.
 
 ```
 npm run dev        npm run lint      npx tsc --noEmit
-npm test           # 40 unit tests, no network
+npm test           # 141 unit tests, no network
 npm run test:rls   # 11 integration tests against the REAL database
 node scripts/email-setup.mjs [address]   # check email config / send a test
 ```
@@ -248,6 +248,44 @@ check it and 404 when it is off.
   `events.mapbox.com` in `connect-src` plus `worker-src blob:` in
   `security-headers.ts` or it fails silently under the CSP.
 
+## AI intake (0051) — BUILT, NOT APPLIED, BLOCKED ON A KEY
+
+`/loads/intake`: paste an email or attach a load sheet, get a filled-in order
+form with a confidence on every field, correct it, press confirm. Ships behind
+`feature_flags.ai_intake = false` and 404s when off. **Migration 0051 has not
+been pushed and no `ANTHROPIC_API_KEY` exists in Vercel** — the page renders a
+"not configured on this deployment" card rather than a broken form until it does.
+
+- **The AI never commits anything.** READ produces a draft; CONFIRM is a human
+  pressing a button, and it calls the ordinary `createLoad` rather than a second
+  write path — same validation, same lead/quote rules, same history.
+- `ai_extractions` stores every call, **including the failures** — a refusal and
+  a timeout are rows too, with `model`, `prompt_version`, tokens and latency.
+  `ai_corrections` stores what the human CHANGED, with the model's own
+  confidence beside it: that column is what separates confidently-wrong (fix the
+  prompt) from flagged-and-fixed (the review screen working).
+- **Both tables are append-only and both are scoped to their author** (or
+  admin/dispatcher). Not `is_active_staff()` like the 0037 load children:
+  `input_text` is a customer's email verbatim, and `customers` has been scoped to
+  the owning rep since 0001.
+- **What is on screen is what `createLoad` gets.** Every field posts twice —
+  `f:<path>` for the correction diff, and its `createLoad` name for the order —
+  and both carry the EDITED value. Building the `vehicles_json` blob from the
+  extraction instead recorded a corrected VIN in `ai_corrections` and shipped the
+  model's original; `vehiclesPayload()` in `src/lib/ai/intake-schema.ts` is now
+  the only thing that builds it, and `tests/ai-intake.test.ts` pins it.
+- **`serverActions.bodySizeLimit` in `next.config.ts` is load-bearing here.** The
+  default is 1 MB, under most phone photos, and it fails as a framework error the
+  intake screen cannot explain. It is 4 MB against the 3.5 MB the intake path
+  enforces itself — and both sit under the 4.5 MB body Vercel rejects at the
+  platform, where no limit of ours is consulted.
+- Correction writes are `ON CONFLICT DO NOTHING` against
+  `(extraction_id, field_path, human_value)`. Confirm can fail and be retried,
+  and nothing may delete from that table.
+- **Not wired**: `ai_extractions.load_id` stays null. Stamping it means owning
+  the redirect and forking the creation path, which is the one thing the confirm
+  action exists to avoid.
+
 ## Integrations
 
 | | |
@@ -368,6 +406,16 @@ storage too, so nothing is orphaned.
 
 ## Open items
 
+- **Phase 3 needs `ANTHROPIC_API_KEY` in Vercel** (Project → Settings →
+  Environment Variables, all three environments), and `supabase db push` to apply
+  0051. Until both, `/loads/intake` is a card explaining it is not configured.
+- **Phone numbers are stored E.164 as of Phase 3** — `storedPhone()` in
+  `src/lib/messaging/ringcentral.ts`, applied on customer create/update and on
+  every phone column in `coreValues()`. A number it cannot read (an extension, a
+  7-digit local, a foreign line) keeps the text the rep typed. **Rows written
+  before this are NOT backfilled**, so both shapes exist in the columns; every
+  screen renders through `formatPhone()`, which normalises for display, and
+  `find_customer_by_phone` matches on the last 10 digits, so neither cares.
 - **Drop `load_status_history_pre_0049`** once 0049 is confirmed good in
   production. It is the rollback copy — locked (grants revoked, RLS on, no
   policy) in the same migration that made it, unlike

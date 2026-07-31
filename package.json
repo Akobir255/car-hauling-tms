@@ -12,6 +12,7 @@
     "test:rls": "vitest run --config vitest.rls.config.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@base-ui/react": "^1.6.0",
     "@hookform/resolvers": "^5.4.0",
     "@supabase/ssr": "^0.12.3",

@@ -9,7 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
 import { blockedFromWritingLoad } from "@/lib/record-access";
 import { defaultReservationFee, isConfirmedCarrierPay, offeredCarrierPay } from "@/lib/pricing";
-import { isSmsConfigured, sendSms, toE164 } from "@/lib/messaging/ringcentral";
+import { isSmsConfigured, sendSms, storedPhone, toE164 } from "@/lib/messaging/ringcentral";
 import { isEmailConfigured, isPlausibleEmail, sendEmail, sendEmailBatch } from "@/lib/messaging/email";
 import { buildContext, renderTemplate } from "@/lib/messaging/render";
 import { SMS_CHUNK_MAX, runSmsChunk } from "@/lib/messaging/sms-bulk";
@@ -85,6 +85,9 @@ const loadCoreSchema = z.object({
   dispatch_instructions: z.string().optional(),
 });
 
+// Every phone column on a load goes through storedPhone: E.164 when the number
+// is readable as one, the rep's own text when it isn't. One rule, applied on
+// both create and update, so a number does not depend on which screen wrote it.
 function coreValues(d: z.infer<typeof loadCoreSchema>) {
   return {
     pickup_address: d.pickup_address || null,
@@ -92,18 +95,18 @@ function coreValues(d: z.infer<typeof loadCoreSchema>) {
     pickup_state: d.pickup_state || null,
     pickup_zip: d.pickup_zip || null,
     pickup_contact_name: d.pickup_contact_name || null,
-    pickup_contact_phone: d.pickup_contact_phone || null,
+    pickup_contact_phone: storedPhone(d.pickup_contact_phone),
     pickup_company: d.pickup_company || null,
-    pickup_contact_cell: d.pickup_contact_cell || null,
+    pickup_contact_cell: storedPhone(d.pickup_contact_cell),
     pickup_ready_date: d.pickup_ready_date || null,
     delivery_address: d.delivery_address || null,
     delivery_city: d.delivery_city || null,
     delivery_state: d.delivery_state || null,
     delivery_zip: d.delivery_zip || null,
     delivery_contact_name: d.delivery_contact_name || null,
-    delivery_contact_phone: d.delivery_contact_phone || null,
+    delivery_contact_phone: storedPhone(d.delivery_contact_phone),
     delivery_company: d.delivery_company || null,
-    delivery_contact_cell: d.delivery_contact_cell || null,
+    delivery_contact_cell: storedPhone(d.delivery_contact_cell),
     delivery_eta: d.delivery_eta || null,
     transport_type: d.transport_type,
     distance_miles: d.distance_miles,
@@ -124,7 +127,7 @@ function coreValues(d: z.infer<typeof loadCoreSchema>) {
     invoice_payment_method: d.invoice_payment_method || null,
     driver_first_name: d.driver_first_name || null,
     driver_last_name: d.driver_last_name || null,
-    driver_phone: d.driver_phone || null,
+    driver_phone: storedPhone(d.driver_phone),
     cd_note: (d.cd_note || "").slice(0, 60) || null,
     dispatch_instructions: d.dispatch_instructions || null,
   };
@@ -190,7 +193,7 @@ export async function createLoad(
       .insert({
         contact_name: customerName,
         email: customerEmail || null,
-        phone: customerPhone || null,
+        phone: storedPhone(customerPhone),
         sales_owner_id: profile.role === "sales" ? profile.id : null,
       })
       .select("id")

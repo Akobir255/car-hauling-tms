@@ -11,7 +11,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // at all (the driver PWA posts from a phone with no login). A flag is not a
 // secret — it is one boolean about whether a feature exists.
 
-export type FeatureKey = "gps_tracking";
+export type FeatureKey = "gps_tracking" | "ai_intake";
 
 export async function isFeatureEnabled(key: FeatureKey): Promise<boolean> {
   try {

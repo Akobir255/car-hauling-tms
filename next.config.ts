@@ -42,6 +42,18 @@ const nextConfig: NextConfig = {
     root: path.join(__dirname),
   },
   poweredByHeader: false, // don't advertise the framework/version
+  experimental: {
+    serverActions: {
+      // Phase 3 uploads a scanned load sheet or a phone photo through a Server
+      // Action, and the DEFAULT cap on a Server Action body is 1 MB — under
+      // which most phone photos fail, with a framework error rather than
+      // anything the intake screen could explain. Raised to sit above the 3.5 MB
+      // the intake path enforces itself (MAX_INPUT_BYTES), and kept below the
+      // 4.5 MB request body Vercel refuses at the platform, where no application
+      // limit of ours would ever be consulted.
+      bodySizeLimit: "4mb",
+    },
+  },
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile, requireRole } from "@/lib/auth";
 import { blockedFromWriting } from "@/lib/record-access";
+import { storedPhone } from "@/lib/messaging/ringcentral";
 
 export type CustomerFormState = { error: string | null };
 
@@ -39,7 +40,9 @@ async function parseCustomerForm(formData: FormData) {
     values: {
       company_name: d.company_name || null,
       contact_name: d.contact_name,
-      phone: d.phone || null,
+      // E.164 where the number can be read as one — the same rule the load
+      // screens write under, so the customer record and the load agree.
+      phone: storedPhone(d.phone),
       email: d.email || null,
       billing_address: d.billing_address || null,
       source: d.source || null,

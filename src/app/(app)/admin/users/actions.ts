@@ -138,6 +138,12 @@ const AUTHORSHIP: [string, string][] = [
   // the profiles cascade for anyone who ever issued a tracking link.
   ["tracking_tokens", "created_by"],
   ["feature_flags", "updated_by"],
+  // 0051. Same story a third time: both reference profiles with no ON DELETE.
+  // Note these are append-only to `authenticated` — this loop runs on the
+  // service role, which the revokes in 0051 do not touch, so nulling the author
+  // works while a staff member still cannot edit the audit trail.
+  ["ai_extractions", "created_by"],
+  ["ai_corrections", "corrected_by"],
   ["documents", "uploaded_by"],
   ["messages", "sent_by"],
   ["message_templates", "created_by"],

@@ -129,6 +129,23 @@ export function toE164(value: string | null | undefined): string | null {
   return `+1${d}`;
 }
 
+/**
+ * What gets STORED in a phone column. Phase 3's brief makes E.164 on write a
+ * rule, and this is the single place that applies it.
+ *
+ * Deliberately lossy in one direction only: a number toE164 cannot read — an
+ * extension ("865-328-7418 x12"), a seven-digit local, a foreign line — keeps
+ * exactly the text the rep typed rather than being normalized into nothing.
+ * Losing a contact number to a formatting rule is worse than storing it
+ * unformatted, and every screen already renders through formatPhone(), which
+ * passes anything it does not recognise straight through.
+ */
+export function storedPhone(value: string | null | undefined): string | null {
+  const raw = (value ?? "").trim();
+  if (!raw) return null;
+  return toE164(raw) ?? raw;
+}
+
 // ---- Inbound webhook subscription management ----
 // RingCentral pushes new-SMS notifications to our webhook once a subscription
 // exists. The verification token below is echoed back by RingCentral on every
