@@ -299,14 +299,22 @@ their 1,960 COI / W-9 / authority documents** — the stated exception.
 **Restore is three statements** (Supabase SQL editor, service role):
 
 ```sql
-update loads          set hidden_at = null;
-update customers      set hidden_at = null;
-update messages       set hidden_at = null;
-update webhook_events set hidden_at = null;
+alter table messages       alter column hidden_at drop default;
+alter table webhook_events alter column hidden_at drop default;
+
+update loads            set hidden_at = null;
+update customers        set hidden_at = null;
+update messages         set hidden_at = null;
+update webhook_events   set hidden_at = null;
+update sms_suppressions set hidden_at = null;
 ```
 
-The views and functions need no change to restore: every condition they carry
-is `hidden_at is null`, which is true for every row again.
+**The two ALTERs are not optional.** `messages.hidden_at` and
+`webhook_events.hidden_at` default to `now()` since 0055, so without dropping
+the defaults the next inbound text hides itself and the restore looks broken.
+
+The views and functions need no change: every condition they carry is
+`hidden_at is null`, which is true for every row again.
 
 ### Ten sample orders are the only visible data (seeded 2026-07-31)
 
@@ -334,6 +342,8 @@ showed data after the table said zero:
 | 0052 | — (the hide itself) | — |
 | 0053 | non-invoker **views** — `loads_full`, `loads_full_contact` | probing the view, not the table |
 | 0054 | **security definer RPCs** — `dashboard_stats`, `loads_status_counts` | the owner's dashboard screenshot |
+| 0055 | **a table with no load_id or customer_id** — `sms_suppressions`, 129 rows keyed on a real mobile number | counting rows in a verification script |
+| 0055 | **live inbound SMS**, which "hide the past" let straight back in | same count, an hour later |
 
 0054 is the one to remember: with all 25,867 loads hidden and the Recent Loads
 table correctly empty, the dashboard still read **171 new loads, $569,690
@@ -349,6 +359,18 @@ prints `from_addr`, a real customer's mobile number, with the message body in
 **Rule: if you add a view, an RPC, or any aggregate over a table with row
 rules, verify through the thing users actually read.** Checking the base table
 proves nothing.
+
+**Second rule, from 0055: "hides the past, not the future" is only right for
+rows a human creates on purpose.** Inbound SMS is not — customers keep texting
+the RingCentral number, and 3 messages and 18 webhook receipts had surfaced
+within the hour. `messages.hidden_at` and `webhook_events.hidden_at` therefore
+default to `now()`. Loads and customers keep the nullable default, which is
+what lets the sample orders be visible.
+
+**Opt-outs are still ENFORCED while hidden.** `is_phone_suppressed()` is
+SECURITY DEFINER, so the send guard reads the list without anyone being able to
+browse it. Verified live: `true` for an opted-out number, `false` for one that
+never opted out. Nobody who asked not to be texted will be.
 
 ### The trap in detail — non-invoker views bypass RLS
 

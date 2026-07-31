@@ -182,3 +182,44 @@ describe("migration 0054 — the aggregates", () => {
     expect(sql54).not.toMatch(/\bdrop (table|column)\b/i);
   });
 });
+
+const sql55 = readFileSync(
+  join(process.cwd(), "supabase/migrations/0055_hide_inbound_and_suppressions.sql"),
+  "utf8"
+);
+
+describe("migration 0055 — the suppression list, and live inbound", () => {
+  it("hides sms_suppressions, which is keyed on a real mobile number", () => {
+    expect(sql55).toMatch(/alter table sms_suppressions add column if not exists hidden_at timestamptz;/);
+    const p = sql55.slice(sql55.indexOf('create policy "sms_suppressions_select_staff"'));
+    expect(p.slice(0, 300)).toMatch(/hidden_at is null/);
+  });
+
+  it("keeps a suppression visible while its customer is visible", () => {
+    // Otherwise the opt-out screen goes blank for the sample records, and the
+    // rule stops being self-maintaining the moment anything is unhidden.
+    expect(sql55).toMatch(/update sms_suppressions s[\s\S]*?not exists \([\s\S]*?c\.hidden_at is null/);
+  });
+
+  it("makes inbound arrive hidden — the past/future rule does not fit SMS", () => {
+    expect(sql55).toMatch(/alter table messages\s+alter column hidden_at set default now\(\);/);
+    expect(sql55).toMatch(/alter table webhook_events alter column hidden_at set default now\(\);/);
+  });
+
+  it("does NOT default loads or customers to hidden", () => {
+    // The ten sample orders exist because those two stay visible-by-default.
+    expect(sql55).not.toMatch(/alter table (loads|customers)\s+alter column hidden_at set default/);
+  });
+
+  it("spells out that restore must drop the defaults too", () => {
+    // Clearing the column alone leaves the next inbound text hiding itself,
+    // which reads as a failed restore.
+    expect(sql55).toMatch(/alter table messages\s+alter column hidden_at drop default;/);
+    expect(sql55).toMatch(/alter table webhook_events alter column hidden_at drop default;/);
+  });
+
+  it("deletes nothing", () => {
+    expect(sql55).not.toMatch(/\bdelete from\b/i);
+    expect(sql55).not.toMatch(/\bdrop (table|column)\b/i);
+  });
+});
