@@ -286,7 +286,79 @@ been pushed and no `ANTHROPIC_API_KEY` exists in Vercel** — the page renders a
   the redirect and forking the creation path, which is the one thing the confirm
   action exists to avoid.
 
-## Customer records and SMS are HIDDEN (0052)
+## THE WHOLE BOOK IS HIDDEN (0052 + 0053) — read this before debugging "no data"
+
+Applied 2026-07-31 at the owner's instruction: nothing copied from US Star shows
+on the platform, and **nobody** sees it — not sales, not dispatch, not an admin.
+**Nothing was deleted.** If you are looking at an empty Orders page, this is why.
+
+Hidden: 25,867 loads, 25,117 customers, 7,698 messages, 26,137 vehicles, 6,082
+notes, 32,570 events, 31 load documents. Still visible: **4,740 carriers and
+their 1,960 COI / W-9 / authority documents** — the stated exception.
+
+**Restore is three statements** (Supabase SQL editor, service role):
+
+```sql
+update loads     set hidden_at = null;
+update customers set hidden_at = null;
+update messages  set hidden_at = null;
+```
+
+### The trap that cost a migration — non-invoker views bypass RLS
+
+0052 hid `customers` with a row policy and verified it: a signed-in admin
+reading `customers` got zero rows. **That verification was not enough.**
+`loads_full` and `loads_full_contact` are `security_barrier` and NOT
+`security_invoker`, so they run as the view owner and the base table's RLS is
+evaluated as the owner — who is not subject to it. Measured on production:
+
+```
+service role: customers with last_sms_at set            2657
+ADMIN via loads_full_contact, same data                 2767   <- leaked
+```
+
+**`loads_full` must STAY non-invoker** — it is how a manager reads `carrier_pay`
+at all, since 0013 revokes that column from `authenticated` and an invoker view
+would hit the revoke. So the condition goes INSIDE the view (`and hidden_at is
+null`, and `and c.hidden_at is null` on the customers join), never on the flag.
+`loads_sales_safe*` are invoker, so reps never saw it — it was manager-only.
+
+**If you add a view over a table with row-level rules, check its invoker mode,
+and verify through the view, not just the table.**
+
+### How the hiding works
+
+- One nullable `hidden_at` on `loads`, `customers`, `messages`; the SELECT
+  policy requires it to be null. No role exemption — admins included.
+- **Children follow the parent** by `exists (select 1 from loads l where l.id =
+  child.load_id)`. That EXISTS runs under the caller's RLS, so a hidden load
+  makes its children unreadable with no second marker to keep in step. Without
+  it, `/rest/v1/load_vehicles` still served 26,137 VIN rows while the UI showed
+  nothing.
+- **Two `for all` policies had to be split** (`load_vehicles_write_scoped`,
+  `documents_write_staff`). FOR ALL covers SELECT and permissive policies are
+  ORed, so either one would have handed every read straight back.
+- **This hides the past, not the future.** `hidden_at` is nullable with no
+  default, so anything created from now on is visible immediately.
+- **The service role still sees everything, deliberately**, so the RingCentral
+  webhook still matches inbound texts, dedupe still works, and sending still
+  resolves a recipient. None of it renders.
+
+### Verified as real signed-in sessions, admin and sales
+
+```
+                     admin  sales  service role
+loads_full               0      0       (25867 in the table)
+customers                0      0        25117
+messages                 0      0         7698
+load_vehicles            0      0        26137
+load_events              0      0        32570
+carriers              4740   4740         4740
+carrier documents     1960   1960         1960
+loads_full_contact w/ customer data: 0   (was 2767)
+```
+
+## Customer records and SMS (0052) — superseded by the section above
 
 Applied 2026-07-31 at the owner's instruction: nothing copied from US Star
 should be visible on the platform, and **nobody** should see it — not sales, not
