@@ -286,6 +286,37 @@ been pushed and no `ANTHROPIC_API_KEY` exists in Vercel** — the page renders a
   the redirect and forking the creation path, which is the one thing the confirm
   action exists to avoid.
 
+## Customer records and SMS are HIDDEN (0052)
+
+Applied 2026-07-31 at the owner's instruction: nothing copied from US Star
+should be visible on the platform, and **nobody** should see it — not sales, not
+dispatch, not an admin. **Nothing was deleted.** All 25,117 customers and 7,698
+messages are in their tables with every column intact.
+
+- **One nullable `hidden_at` column on `customers` and `messages`**, backfilled
+  to now() for every row that existed, and the SELECT policy requires it to be
+  null. Enforced by RLS, not by app code: a `where` clause somebody forgets is
+  exactly how this kind of hiding leaks — a page nobody remembered, an export, a
+  search box. There is no role exemption; an admin session reads zero rows.
+- **Verified with a real signed-in admin**, not by reading the policy: 0
+  customers, 0 messages, while carriers (4,740), loads (25,867), vehicles
+  (26,137) and documents (1,991) all still read normally.
+- **This hides the past, not the future.** `hidden_at` is nullable with no
+  default, so a customer created tomorrow and an SMS arriving tomorrow are both
+  visible immediately. Confirmed by inserting one and seeing it appear.
+- **The service role still sees everything, deliberately** — so the RingCentral
+  webhook still matches an inbound text to its customer, `find_customer_by_phone`
+  and createLoad's email/phone lookup still dedupe, and outbound send still
+  resolves a recipient. None of it renders anywhere.
+- **To bring it all back** (Supabase SQL editor, service role):
+  `update customers set hidden_at = null;` and
+  `update messages set hidden_at = null;` That is the entire restore.
+- **NOT covered**: `loads.pickup_contact_name/phone/cell` and the delivery
+  equivalents — site contacts that are columns on `loads`, and a policy cannot
+  blank a column. They still print on dispatch sheets. Moving them to a shadow
+  table is a 0053 if asked.
+- Carriers, their contacts, COI and authority were explicitly left alone.
+
 ## Integrations
 
 | | |
