@@ -299,8 +299,9 @@ their 1,960 COI / W-9 / authority documents** — the stated exception.
 **Restore is three statements** (Supabase SQL editor, service role):
 
 ```sql
-alter table messages       alter column hidden_at drop default;
-alter table webhook_events alter column hidden_at drop default;
+alter table messages         alter column hidden_at drop default;
+alter table webhook_events   alter column hidden_at drop default;
+alter table sms_suppressions alter column hidden_at drop default;
 
 update loads            set hidden_at = null;
 update customers        set hidden_at = null;
@@ -309,28 +310,32 @@ update webhook_events   set hidden_at = null;
 update sms_suppressions set hidden_at = null;
 ```
 
-**The two ALTERs are not optional.** `messages.hidden_at` and
-`webhook_events.hidden_at` default to `now()` since 0055, so without dropping
-the defaults the next inbound text hides itself and the restore looks broken.
+**The three ALTERs are not optional.** `messages`, `webhook_events` (0055) and
+`sms_suppressions` (0056) all default `hidden_at` to `now()`, so without
+dropping the defaults the next inbound text hides itself and the restore looks
+broken.
 
 The views and functions need no change: every condition they carry is
 `hidden_at is null`, which is true for every row again.
 
-### Ten sample orders are the only visible data (seeded 2026-07-31)
+### Eighteen sample orders are the only visible data (seeded 2026-07-31)
 
-`10000004-US` … `10000013-US`, with fictional customers, one vehicle each, a
-follow-up on **all ten**, and paperwork spread deliberately: **4 signed, 3 sent
-and unsigned, 3 never sent.** Statuses run quote → booked → dispatched →
-picked_up → delivered so every pipeline tab has something in it.
+`10000004-US` … `10000023-US` (less `…014` and `…017`, removed on request), with
+fictional customers, one vehicle each, a follow-up on **all eighteen**, and
+paperwork at **10 signed, 4 sent and unsigned, 4 never sent.** Statuses run
+quote (9) → booked (3) → dispatched (2) → picked_up (2) → delivered (2) so every
+pipeline tab has something in it. Three customers are SMS opted out, each with
+the verbatim text behind it (`sms_opt_out_source`) and a `sms_suppressions` row;
+two of those also opted out of email.
 
 Each carries "Sample record seeded 2026-07-31 for demo. Not a real order." in
 its internal notes, so nobody dispatches a truck to one. Remove them with
 `delete from loads where notes like 'Sample record seeded%'` — vehicles and
 events cascade; their customers are `source = 'sample'`.
 
-Everything they produce is derived, not typed in: the dashboard reads 10 new
-loads, $9,640 over 30 days, 5 follow-ups due and a vehicle mix of 6 SUV / 2
-sedan / 2 pickup, which is exactly these ten records and nothing else.
+Everything they produce is derived, not typed in: the dashboard reads 18 new
+loads, $17,810 over 30 days and 8 follow-ups due, which is exactly these
+eighteen records and nothing else.
 
 ### The trap that cost THREE migrations — anything that skips RLS needs telling
 
@@ -344,6 +349,7 @@ showed data after the table said zero:
 | 0054 | **security definer RPCs** — `dashboard_stats`, `loads_status_counts` | the owner's dashboard screenshot |
 | 0055 | **a table with no load_id or customer_id** — `sms_suppressions`, 129 rows keyed on a real mobile number | counting rows in a verification script |
 | 0055 | **live inbound SMS**, which "hide the past" let straight back in | same count, an hour later |
+| 0056 | **STOP replies** — 0055 gave the default to two inbound tables and missed the third | 4 visible suppressions against 3 opted-out samples |
 
 0054 is the one to remember: with all 25,867 loads hidden and the Recent Loads
 table correctly empty, the dashboard still read **171 new loads, $569,690

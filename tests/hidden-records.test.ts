@@ -223,3 +223,31 @@ describe("migration 0055 — the suppression list, and live inbound", () => {
     expect(sql55).not.toMatch(/\bdrop (table|column)\b/i);
   });
 });
+
+const sql56 = readFileSync(
+  join(process.cwd(), "supabase/migrations/0056_suppressions_arrive_hidden.sql"),
+  "utf8"
+);
+
+describe("migration 0056 — suppressions are inbound traffic too", () => {
+  it("makes a STOP reply arrive hidden, like every other inbound row", () => {
+    // 0055 gave messages and webhook_events the default and missed this table,
+    // so a real customer texting STOP put their number back on screen within
+    // the hour. The webhook writes here through suppressPhone().
+    expect(sql56).toMatch(/alter table sms_suppressions alter column hidden_at set default now\(\);/);
+  });
+
+  it("sweeps whatever already slipped through", () => {
+    expect(sql56).toMatch(/update sms_suppressions s\s+set hidden_at = now\(\)/);
+    expect(sql56).toMatch(/c\.hidden_at is null/);
+  });
+
+  it("documents the third default that restore has to drop", () => {
+    expect(sql56).toMatch(/alter table sms_suppressions {2}alter column hidden_at drop default;/);
+  });
+
+  it("deletes nothing", () => {
+    expect(sql56).not.toMatch(/\bdelete from\b/i);
+    expect(sql56).not.toMatch(/\bdrop (table|column)\b/i);
+  });
+});
