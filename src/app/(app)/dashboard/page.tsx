@@ -10,10 +10,19 @@ import {
   MessageSquare,
   Package,
   ShieldAlert,
+  TriangleAlert,
   Truck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { cn } from "@/lib/utils";
+import { isFeatureEnabled } from "@/lib/flags";
+import {
+  ACTIVE_STATUSES as RISK_STATUSES,
+  atRiskQueue,
+  type RiskAssessment,
+  type RiskInput,
+} from "@/lib/risk/score";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -161,6 +170,52 @@ export default async function DashboardPage() {
   const unassigned = (unassignedData ?? []) as Load[];
   const expiringCarriers = (expiringCarriersData ?? []) as Carrier[];
   const recentMessages = (recentMessagesData ?? []) as Message[];
+
+  // ---- Phase 7a: what is going wrong right now ----
+  //
+  // One extra query, and it reads through `loadsTable` like everything else on
+  // this page — so a sales rep is scoped to their own rows by RLS, margin
+  // columns stay revoked, and hidden loads stay hidden, with none of that
+  // restated here. The scoring itself is pure and lives in src/lib/risk.
+  // One clock for the whole panel. Reading it twice would let a snooze expire
+  // between the two reads, and Date.now() during render is a lint error under
+  // React 19's purity rule besides.
+  const asOf = new Date();
+  const exceptionsEnabled = await isFeatureEnabled("exception_engine");
+  let atRisk: RiskAssessment[] = [];
+  if (exceptionsEnabled) {
+    let riskQuery = supabase
+      .from(loadsTable)
+      .select(
+        "id, load_number, status, carrier_id, pickup_ready_date, delivery_eta, date_signed, contract_sent_at, contract_sent, follow_up_at, updated_at"
+      )
+      .in("status", RISK_STATUSES)
+      .limit(500);
+    if (isSales) riskQuery = riskQuery.eq("sales_owner_id", profile.id);
+    const { data: riskRows, error: riskError } = await riskQuery;
+    if (riskError) {
+      // A failed risk query must not take the dashboard down with it — this is
+      // an advisory panel, not the page.
+      console.error("at-risk queue failed:", riskError.message);
+    } else {
+      const acked = new Map<string, Set<string>>();
+      const ids = (riskRows ?? []).map((r) => r.id);
+      if (ids.length) {
+        const { data: acks } = await supabase
+          .from("risk_acknowledgements")
+          .select("load_id, factor, snoozed_until")
+          .in("load_id", ids);
+        for (const a of acks ?? []) {
+          // A snooze that has run out is not an acknowledgement any more.
+          if (a.snoozed_until && Date.parse(a.snoozed_until) < asOf.getTime()) continue;
+          const set = acked.get(a.load_id) ?? new Set<string>();
+          set.add(a.factor ?? "*");
+          acked.set(a.load_id, set);
+        }
+      }
+      atRisk = atRiskQueue((riskRows ?? []) as RiskInput[], asOf, acked);
+    }
+  }
 
   // ---- KPIs with honest 7/30-day deltas ----
   const newLast7 = stats?.new_last_7 ?? 0;
@@ -360,6 +415,55 @@ export default async function DashboardPage() {
         </Card>
 
         <div className="space-y-6">
+          {/* Phase 7a. Above follow-ups deliberately: a follow-up is a task
+              somebody chose, this is work going wrong whether or not anyone
+              chose to look. Scored in TypeScript from the same role view the
+              rest of this page reads, so it inherits RLS and the margin column
+              grants rather than needing its own opinion about either. */}
+          {exceptionsEnabled && atRisk.length > 0 && (
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <TriangleAlert className="size-4 text-ord-deposit" aria-hidden="true" />
+                <CardTitle>Needs attention</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1.5">
+                {atRisk.slice(0, 6).map((a) => (
+                  <Link
+                    key={a.id}
+                    href={`/loads/${a.id}`}
+                    className="flex items-start justify-between gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-msg-hover"
+                  >
+                    <span className="min-w-0">
+                      <span className="tabular-nums text-msg-link">{a.loadNumber}</span>
+                      {/* The worst factor only. A stacked list of five worries
+                          per order is a wall nobody reads; the rest are on the
+                          order itself. */}
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {a.factors[0]?.detail}
+                        {a.factors.length > 1 && ` · +${a.factors.length - 1} more`}
+                      </span>
+                    </span>
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wide",
+                        a.band === "high"
+                          ? "bg-ord-deposit-bg text-ord-deposit"
+                          : "bg-ord-chip text-ord-head"
+                      )}
+                    >
+                      {a.band === "high" ? "urgent" : "watch"}
+                    </span>
+                  </Link>
+                ))}
+                {atRisk.length > 6 && (
+                  <p className="px-2 pt-1 text-xs text-muted-foreground">
+                    and {atRisk.length - 6} more
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader className="flex flex-row items-center gap-2">
               {/* Card icons take the spec's row-icon family. */}

@@ -513,6 +513,48 @@ history. City-level pricing is an absent dataset, not a modelling choice.
 Refresh is manual for now: `select refresh_lane_price_stats();` as the service
 role. It rebuilds 539 lanes in ~2s.
 
+## Exception engine (0059) — SHIPPED DARK
+
+`feature_flags.exception_engine = false`. A **Needs attention** card on the
+dashboard, above Follow-ups: work going wrong whether or not anyone chose to
+look at it.
+
+The brief's version compares live GPS against a routing ETA and drafts the
+customer notification. Both are parked — GPS is dark and untested, the notice
+needs the AI key. What ships is the middle third: score, queue, acknowledge.
+
+- **The score is TypeScript, not SQL, and that is the point.** Every signal is
+  already a column, and `src/lib/risk/score.ts` runs over `loads_full` /
+  `loads_sales_safe` — so RLS, the 0013 column grants and `hidden_at` all apply
+  without this feature having its own opinion about any of them. A SECURITY
+  DEFINER scorer would have been the sixth thing in one day to bypass a row
+  policy. Migration 0059 contains **no function at all**, asserted in a test.
+- Factors: delivery overdue, pickup overdue, no carrier (weighted up when
+  pickup is within 2 days), unsigned agreement, overdue follow-up, and nothing
+  recorded for a week while moving. Quotes and delivered orders are excluded —
+  neither can be late.
+- **Two ways to be urgent**, because a pure sum gets it wrong. Found on the real
+  sample set: a delivery two days late summed to 42 and landed in "watch" while
+  three moderate problems summed to 77 and shouted. The late delivery is the one
+  with a customer in a driveway. So `sum >= 45` **or** any single factor `>= 30`.
+- **`daysUntil` anchors DATE columns at noon on both sides.** Anchoring only the
+  date — the obvious version — makes today read as −1 from lunchtime onward,
+  which would have put every active order in the queue as overdue. Pinned by a
+  test.
+- **`risk_acknowledgements` is per-FACTOR, not per-order**: "I know it has no
+  carrier" must not also silence "it is three days past delivery". DELETE is
+  allowed — unlike the audit tables, this is working state, and "actually, that
+  is not handled" has to be expressible. An expired `snoozed_until` stops
+  counting.
+- Sample orders carry promise dates and carriers so this is demonstrable: with
+  the flag on, 5 of 18 surface — two urgent, and a late delivery.
+
+**Stale comment worth knowing about:** the dashboard's "Needs a carrier" card is
+gated on `canSeeMargin` with a comment claiming `carrier_id` is not in
+`loads_sales_safe`. Probed with a real sales session — it **is** readable. The
+card is being hidden from reps for no reason. Left alone because un-hiding it
+changes what reps see.
+
 ## Integrations
 
 | | |
