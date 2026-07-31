@@ -132,3 +132,53 @@ describe("migration 0053 — the orders, and the view leak", () => {
     expect(sql53).not.toMatch(/policy[^;]*on carriers/i);
   });
 });
+
+const sql54 = readFileSync(
+  join(process.cwd(), "supabase/migrations/0054_hide_from_aggregates.sql"),
+  "utf8"
+);
+
+describe("migration 0054 — the aggregates", () => {
+  it("filters every loads subquery in dashboard_stats", () => {
+    // A definer function runs as its OWNER, so the row policy never applies.
+    // With 25,867 loads hidden the dashboard still read 171 new loads,
+    // $569,690 revenue and 18,227 follow-ups due.
+    const fn = sql54.slice(
+      sql54.indexOf("function public.dashboard_stats"),
+      sql54.indexOf("function public.loads_status_counts")
+    );
+    const fromLoads = fn.match(/from loads\b/g) ?? [];
+    const guarded = fn.match(/where hidden_at is null/g) ?? [];
+    expect(fromLoads.length).toBeGreaterThanOrEqual(6);
+    // Every `from loads` gets its own guard; the vehicle join guards l.hidden_at.
+    expect(guarded).toHaveLength(fromLoads.length);
+    expect(fn).toMatch(/join loads l on l\.id = v\.load_id\s+where l\.hidden_at is null/);
+  });
+
+  it("filters the tab-strip counts too", () => {
+    const fn = sql54.slice(sql54.indexOf("function public.loads_status_counts"));
+    expect(fn).toMatch(/from loads\s+where hidden_at is null/);
+  });
+
+  it("keeps both functions security definer — the fix is the filter, not the mode", () => {
+    // Dropping to invoker would change who may call them and what they can see;
+    // 0041 exists because these numbers were wrong once already.
+    // Counted on the definitions, not on prose — the header comment names the
+    // mode too, and that must not be what makes this pass.
+    const defs = sql54.match(/create or replace function[\s\S]*?security definer/g) ?? [];
+    expect(defs).toHaveLength(2);
+    expect(sql54).not.toMatch(/create or replace function[^;]*security invoker/i);
+  });
+
+  it("hides the SMS diagnostics log, which prints customer numbers", () => {
+    expect(sql54).toMatch(/alter table webhook_events add column if not exists hidden_at timestamptz;/);
+    expect(sql54).toMatch(/update webhook_events set hidden_at = now\(\) where hidden_at is null;/);
+    const p = sql54.slice(sql54.indexOf('create policy "webhook_events_select_admin"'));
+    expect(p.slice(0, 250)).toMatch(/hidden_at is null\s*and public\.current_profile_role\(\) = 'admin'/);
+  });
+
+  it("deletes nothing", () => {
+    expect(sql54).not.toMatch(/\bdelete from\b/i);
+    expect(sql54).not.toMatch(/\bdrop (table|column)\b/i);
+  });
+});

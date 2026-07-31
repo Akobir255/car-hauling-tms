@@ -299,12 +299,52 @@ their 1,960 COI / W-9 / authority documents** — the stated exception.
 **Restore is three statements** (Supabase SQL editor, service role):
 
 ```sql
-update loads     set hidden_at = null;
-update customers set hidden_at = null;
-update messages  set hidden_at = null;
+update loads          set hidden_at = null;
+update customers      set hidden_at = null;
+update messages       set hidden_at = null;
+update webhook_events set hidden_at = null;
 ```
 
-### The trap that cost a migration — non-invoker views bypass RLS
+The views and functions need no change to restore: every condition they carry
+is `hidden_at is null`, which is true for every row again.
+
+### Five sample orders are the only visible data (seeded 2026-07-31)
+
+`10000004-US` … `10000008-US`, with fictional customers, one vehicle each, a
+follow-up on all five, and paperwork spread deliberately: **2 signed, 2 sent and
+unsigned, 1 never sent.** Each carries "Sample record seeded 2026-07-31 for
+demo. Not a real order." in its internal notes, so nobody dispatches a truck to
+one. Delete them with `delete from loads where notes like 'Sample record
+seeded%'` (vehicles and events cascade; their five customers are `source =
+'sample'`).
+
+### The trap that cost THREE migrations — anything that skips RLS needs telling
+
+Same root cause, found three times, each time only because the screen still
+showed data after the table said zero:
+
+| | What bypassed the policy | Caught by |
+|---|---|---|
+| 0052 | — (the hide itself) | — |
+| 0053 | non-invoker **views** — `loads_full`, `loads_full_contact` | probing the view, not the table |
+| 0054 | **security definer RPCs** — `dashboard_stats`, `loads_status_counts` | the owner's dashboard screenshot |
+
+0054 is the one to remember: with all 25,867 loads hidden and the Recent Loads
+table correctly empty, the dashboard still read **171 new loads, $569,690
+revenue, 18,227 follow-ups due and 26,137 vehicles**, because a `security
+definer` function runs as its OWNER and the row policy never applies. Both
+functions keep that mode on purpose — the fix is a `hidden_at is null` per
+subquery, not a change of mode.
+
+`webhook_events` went the same way in 0054: the inbound-SMS diagnostics panel
+prints `from_addr`, a real customer's mobile number, with the message body in
+`raw`.
+
+**Rule: if you add a view, an RPC, or any aggregate over a table with row
+rules, verify through the thing users actually read.** Checking the base table
+proves nothing.
+
+### The trap in detail — non-invoker views bypass RLS
 
 0052 hid `customers` with a row policy and verified it: a signed-in admin
 reading `customers` got zero rows. **That verification was not enough.**
