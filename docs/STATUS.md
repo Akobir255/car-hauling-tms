@@ -463,6 +463,56 @@ messages are in their tables with every column intact.
   table is a 0053 if asked.
 - Carriers, their contacts, COI and authority were explicitly left alone.
 
+## Lane pricing (0057/0058) — SHIPPED DARK
+
+`feature_flags.lane_pricing = false`. The quote screen suggests a price from our
+own history, the order page asks why a quote died, and both disappear when the
+flag is off.
+
+**What it is NOT, and this matters.** The brief asks for a gradient-boosted
+regression on CARRIER COST. That is not buildable here and shipping it anyway
+would be worse than shipping nothing:
+
+```
+carrier_pay populated        25,866 loads
+carrier_pay_confirmed           195 loads
+```
+
+The other 25,671 were *derived* at creation as `customer_rate − reservation fee`
+(0038, createLoad). A model trained on them learns an arithmetic identity,
+scores near-perfectly and knows nothing about the market — the dangerous kind of
+wrong. **The carrier-cost model stays blocked until confirmed carrier pay
+accumulates on dispatch sheets.** `distance_miles` is set on 2 of 25,867 rows,
+so there is no distance feature either.
+
+**Why STATE pairs.** Measured, not assumed: 24,483 distinct city pairs yield 42
+lanes with ≥5 samples. State pairs yield 553 with ≥10, covering 80.9% of
+history. City-level pricing is an absent dataset, not a modelling choice.
+
+- **`lane_price_stats`** — 539 published lanes, keyed origin state × destination
+  state × vehicle class × transport, holding p25/median/p75 and won/lost counts.
+  Rebuilt by `refresh_lane_price_stats()`, service-role only (verified: anon,
+  sales AND admin all get 42501).
+- **The ten-load floor is the privacy guard, not just a statistical one.** These
+  aggregates are computed over the 25,867 HIDDEN loads — that history is the
+  whole point — so `having count(*) >= 10` in SQL is what stops a published row
+  describing one customer's price. Enforced again in `pickLane()`.
+- **The median is what we typically QUOTE, not what wins.** Only 796 loads ever
+  reached a won state against 6,612 cancelled — a 10.7% win rate, one or two
+  wins per lane. Win rate is withheld entirely below 10 decided quotes rather
+  than printing "60%" off five loads.
+- **`quote_outcomes`** — append-only, the asset. 6,612 cancelled quotes in this
+  book have no recorded reason because there was nowhere to put one. Captures
+  outcome, reason, our price and *the competitor's price*, which is the
+  expensive field and the one that makes the rest mean something.
+- **`price_overrides`** — append-only; suggested vs. typed, with sample size, so
+  "overrode a median of 12" and "of 400" read differently.
+- `pg_safeupdate` rejects a bare `DELETE`, even inside a SECURITY DEFINER
+  function — hence `delete … where true` in 0058.
+
+Refresh is manual for now: `select refresh_lane_price_stats();` as the service
+role. It rebuilds 539 lanes in ~2s.
+
 ## Integrations
 
 | | |

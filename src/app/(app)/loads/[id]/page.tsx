@@ -27,6 +27,7 @@ import type {
 import { OrderActionBar } from "./order-action-bar";
 import { EsignPanel } from "./esign-panel";
 import { TrackingPanel } from "./tracking-panel";
+import { QuoteOutcomeForm } from "./quote-outcome-form";
 import { isFeatureEnabled } from "@/lib/flags";
 import { OrderMoreMenu } from "./order-more-menu";
 import { NotesThread } from "./notes-thread";
@@ -175,8 +176,9 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   const readOnly = !canEdit(load, profile);
   const ownerName = assignedTo?.full_name || assignedTo?.email || null;
 
-  // One boolean read; the Tracking band below does not exist when it is false.
+  // One boolean read each; the bands below do not exist when they are false.
   const gpsEnabled = await isFeatureEnabled("gps_tracking");
+  const lanePricingEnabled = await isFeatureEnabled("lane_pricing");
 
   // The header shows the order's Loadboard SETTING when one is chosen (the
   // old system's header select); otherwise it falls back to where the order
@@ -390,6 +392,25 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
               events={contractEvents ?? []}
             />
           </SectionBand>
+          )}
+
+          {/* Phase 6a. The mirror image of E-Sign above: that band is for work
+              that came off, this one is for work that did not. It shows on a
+              quote, where the outcome is still open, and on anything already
+              closed so a wrong call can be corrected. 6,612 quotes in this book
+              died with no reason recorded — this is the only thing that stops
+              that number growing. */}
+          {lanePricingEnabled && (
+            <SectionBand title="Quote outcome">
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  {isPreOrder
+                    ? "When this is decided either way, say why. Win/loss at a given price is the most valuable pricing data we have, and it only exists if somebody records it."
+                    : "Already an order — recording the outcome here corrects the pricing record without touching the load."}
+                </p>
+                <QuoteOutcomeForm loadId={load.id} open={isPreOrder} />
+              </div>
+            </SectionBand>
           )}
 
           {/* Phase 2, and it renders only where it means something: an order
