@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Feature flags (migration 0050).
@@ -17,18 +18,29 @@ export type FeatureKey =
   | "lane_pricing"
   | "exception_engine";
 
-export async function isFeatureEnabled(key: FeatureKey): Promise<boolean> {
+// One PostgREST round trip per request, however many flags a page awaits.
+// React's cache() memoizes per argument for the CURRENT server request only —
+// so a flip still lands on the very next request — and dedupes only identical
+// calls, which is why this fetches the whole table (four rows) instead of one
+// key: per-key fetches would still be one round trip per distinct flag.
+// Outside a render (route handlers) cache() just calls through uncached, which
+// is the old behaviour.
+const loadFlags = cache(async (): Promise<Record<string, boolean>> => {
   try {
     const { data, error } = await createAdminClient()
       .from("feature_flags")
-      .select("enabled")
-      .eq("key", key)
-      .maybeSingle();
-    // Unknown flag or a failed read means OFF. A feature flag that fails open
-    // is not a feature flag.
-    if (error || !data) return false;
-    return Boolean(data.enabled);
+      .select("key, enabled");
+    // An empty map reads as every flag OFF — the failure mode we want.
+    if (error || !data) return {};
+    return Object.fromEntries(data.map((row) => [row.key, Boolean(row.enabled)]));
   } catch {
-    return false;
+    return {};
   }
+});
+
+export async function isFeatureEnabled(key: FeatureKey): Promise<boolean> {
+  // Unknown flag or a failed read means OFF. A feature flag that fails open
+  // is not a feature flag.
+  const flags = await loadFlags();
+  return flags[key] ?? false;
 }

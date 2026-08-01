@@ -68,6 +68,18 @@ const TABLES = [
   "ticket_comments",
   "sms_suppressions",
   "webhook_events",
+  // 0051: every AI call including the failures, then what the humans changed.
+  // Parent-first — ai_corrections references ai_extractions.
+  "ai_extractions",
+  "ai_corrections",
+  // 0057-0059. quote_outcomes and price_overrides are append-only and are the
+  // asset lane pricing exists to accumulate. lane_price_stats is rebuildable
+  // via refresh_lane_price_stats(), but a restore should not depend on someone
+  // remembering to run it.
+  "quote_outcomes",
+  "price_overrides",
+  "risk_acknowledgements",
+  "lane_price_stats",
 ];
 
 const args = process.argv.slice(2);
