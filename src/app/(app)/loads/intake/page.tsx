@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 export default async function IntakePage() {
-  await requireRole("admin", "dispatcher", "sales");
+  const profile = await requireRole("admin", "dispatcher", "sales");
   if (!(await isFeatureEnabled("ai_intake"))) notFound();
 
   return (
@@ -44,6 +44,13 @@ export default async function IntakePage() {
             </Link>{" "}
             in the meantime.
           </p>
+          {profile.role === "admin" && (
+            <p className="mt-2 text-sm">
+              <Link href="/admin/ai" className="text-ord-accent">
+                AI intake telemetry →
+              </Link>
+            </p>
+          )}
         </div>
       ) : (
         <IntakeForm />

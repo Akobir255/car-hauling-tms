@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Bot,
   Building2,
   ClipboardList,
   FileText,
@@ -39,6 +40,7 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; roles?: UserRo
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/tickets", label: "Tickets", icon: Ticket },
   { href: "/admin/users", label: "Users", icon: UserCog, roles: ["admin"] },
+  { href: "/admin/ai", label: "AI intake", icon: Bot, roles: ["admin"] },
 ];
 
 // Shared by the three ghost buttons that sit on the band. Every line here is
