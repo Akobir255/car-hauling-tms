@@ -1,0 +1,9 @@
+# The test suite pins source and migration files as TEXT (regexes over SQL,
+# header strings, config) — a CRLF checkout on Windows silently breaks those
+# matches, so every text file checks out LF everywhere.
+* text=auto eol=lf
+*.woff2 binary
+*.ico binary
+*.png binary
+*.jpg binary
+*.gz binary
