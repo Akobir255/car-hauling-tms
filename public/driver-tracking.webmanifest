@@ -1,0 +1,9 @@
+{
+  "name": "Driver Tracking",
+  "short_name": "Tracking",
+  "description": "Share your location with dispatch for the order you are hauling.",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [{ "src": "/favicon.ico", "sizes": "any", "type": "image/x-icon" }]
+}

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { isFeatureEnabled } from "@/lib/flags";
 import { resolveTrackingToken } from "@/lib/tracking/tokens";
@@ -11,6 +12,17 @@ import { DriverTracker } from "./driver-tracker";
 // the margin, and the way to guarantee that is to not send it.
 
 export const dynamic = "force-dynamic";
+
+// The manifest is linked from THIS page only, not app-wide: Add to Home Screen
+// here gives the driver a standalone screen that reopens on this same token
+// URL — the manifest deliberately has no start_url, which per spec defaults to
+// the page that linked it. CSP already allows it (manifest-src 'self', a file
+// in public/). This is a bookmark with its own icon, not background tracking:
+// no mobile browser tracks from a locked phone, and nothing here claims to.
+export const metadata: Metadata = {
+  title: "Location sharing",
+  manifest: "/driver-tracking.webmanifest",
+};
 
 export default async function DriverTrackingPage({
   params,

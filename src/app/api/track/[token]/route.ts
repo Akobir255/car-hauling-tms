@@ -205,5 +205,29 @@ async function evaluateGeofences(
       payload: { fence: f.kind, recorded_at: occurredAt },
       source: "gps",
     });
+
+    // The truck has left the DELIVERY fence: the freight is off, and location
+    // sharing has no further purpose. The driver link dies now instead of
+    // resting on the 45-day TTL — statuses sit at Dispatched until the CD/SD
+    // integration lands, so status alone would never kill it. Same revoke
+    // shape as the mint path (revoked_at on the live row); the CUSTOMER link
+    // deliberately survives — the most common time a shipper opens it is
+    // right after the car lands.
+    if (f.kind === "delivery" && verdict.transition === "departed") {
+      await admin
+        .from("tracking_tokens")
+        .update({ revoked_at: new Date().toISOString() })
+        .eq("load_id", loadId)
+        .eq("kind", "driver")
+        .is("revoked_at", null);
+      // Margin-free payload, like every load_events row: kind and reason only.
+      await recordEvent({
+        loadId,
+        type: "tracking_link_revoked",
+        payload: { kind: "driver", reason: "delivery_departed" },
+        source: "gps",
+        occurredAt,
+      });
+    }
   }
 }

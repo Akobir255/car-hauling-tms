@@ -47,6 +47,21 @@ export const DEFAULT_TOKEN_TTL_DAYS = 45;
 
 export type TrackingTokenKind = "driver" | "customer";
 
+/**
+ * Pure lifecycle decision, split out of resolveTrackingToken so it can be
+ * tested without a database: is a token of this kind dead once its load has
+ * reached this status?
+ */
+export function isTokenDeadForStatus(kind: TrackingTokenKind, status: LoadStatus): boolean {
+  const dead = kind === "driver" ? DRIVER_TOKEN_DEAD_STATUSES : CUSTOMER_TOKEN_DEAD_STATUSES;
+  return dead.includes(status);
+}
+
+/** Pure TTL check. Expiring exactly on the boundary counts as expired. */
+export function isTokenExpired(expiresAt: string, nowMs: number = Date.now()): boolean {
+  return new Date(expiresAt).getTime() <= nowMs;
+}
+
 export type TrackingTokenRow = {
   id: string;
   load_id: string;
@@ -86,7 +101,7 @@ export async function resolveTrackingToken(
   // accepted by the ingest endpoint just because it is a valid token.
   if (t.kind !== kind) return { ok: false, reason: "wrong_kind" };
   if (t.revoked_at) return { ok: false, reason: "revoked" };
-  if (new Date(t.expires_at).getTime() <= Date.now()) return { ok: false, reason: "expired" };
+  if (isTokenExpired(t.expires_at)) return { ok: false, reason: "expired" };
 
   const { data: load } = await admin
     .from("loads")
@@ -95,8 +110,9 @@ export async function resolveTrackingToken(
     .maybeSingle();
   if (!load) return { ok: false, reason: "not_found" };
 
-  const dead = kind === "driver" ? DRIVER_TOKEN_DEAD_STATUSES : CUSTOMER_TOKEN_DEAD_STATUSES;
-  if (dead.includes(load.status as LoadStatus)) return { ok: false, reason: "load_closed" };
+  if (isTokenDeadForStatus(kind, load.status as LoadStatus)) {
+    return { ok: false, reason: "load_closed" };
+  }
 
   return { ok: true, row: t, load: load as { id: string; load_number: string; status: LoadStatus } };
 }
