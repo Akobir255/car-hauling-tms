@@ -11,7 +11,7 @@ import type { LoadEventRow } from "@/lib/events/types";
 import { DeleteButton } from "@/components/delete-button";
 import { SectionBand, BandRow, Field } from "@/components/section-band";
 import { Button } from "@/components/ui/button";
-import { formatCurrency, formatDate, formatPhone } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateTime, formatPhone } from "@/lib/format";
 import { actionsFor } from "@/lib/order-status";
 import { Mail } from "lucide-react";
 import type {
@@ -26,7 +26,9 @@ import type {
 } from "@/types/database";
 import { OrderActionBar } from "./order-action-bar";
 import { EsignPanel } from "./esign-panel";
-import { TrackingPanel } from "./tracking-panel";
+import { TrackingPanel, type TrackingTokenSummary } from "./tracking-panel";
+import { LiveTrackingMap } from "@/components/tracking/live-tracking-map";
+import type { TrackFence, TrackFix } from "@/components/tracking/tracking-map";
 import { QuoteOutcomeForm } from "./quote-outcome-form";
 import { isFeatureEnabled } from "@/lib/flags";
 import { OrderMoreMenu } from "./order-more-menu";
@@ -36,6 +38,32 @@ import { LoadRequestsBand } from "./load-requests";
 import { deleteLoad } from "../actions";
 
 const BACK_PATH = { lead: "/leads", quote: "/quotes", order: "/orders" } as const;
+
+type TrackingTokenRow = {
+  kind: string;
+  created_at: string;
+  expires_at: string;
+  last_used_at: string | null;
+};
+
+// Unrevoked tokens whose 45-day backstop TTL hasn't lapsed, one per kind.
+// Module scope, not inline in the component: the render itself must stay pure
+// (react-hooks/purity is a build error on an inline Date.now()).
+function liveTokenSummaries(rows: TrackingTokenRow[]): {
+  driver: TrackingTokenSummary | null;
+  customer: TrackingTokenSummary | null;
+} {
+  const nowMs = Date.now();
+  let driver: TrackingTokenSummary | null = null;
+  let customer: TrackingTokenSummary | null = null;
+  for (const t of rows) {
+    if (new Date(t.expires_at).getTime() <= nowMs) continue;
+    const summary: TrackingTokenSummary = { issuedAt: t.created_at, lastPingAt: t.last_used_at };
+    if (t.kind === "driver") driver = summary;
+    else if (t.kind === "customer") customer = summary;
+  }
+  return { driver, customer };
+}
 
 export async function generateMetadata({
   params,
@@ -213,6 +241,53 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   const requests = (requestRows ?? []) as LoadRequest[];
   const versions = (versionRows ?? []) as ContractVersion[];
   const cardOnFile = ((cardRows ?? [])[0] ?? null) as ContractCard | null;
+
+  // Phase 2 read side, fetched only when the Tracking band renders — and
+  // THROUGH THE CALLER'S CLIENT: staff select on shipment_locations,
+  // load_geofences, geofence_events and tracking_tokens is exactly what 0050
+  // grants (is_active_staff), so RLS is the authority here, not this page.
+  const showTracking = !isPreOrder && gpsEnabled;
+  let trackFixes: TrackFix[] = [];
+  let trackFences: TrackFence[] = [];
+  let fenceEvents: { fence: string; transition: string; occurred_at: string }[] = [];
+  let driverTokenInfo: TrackingTokenSummary | null = null;
+  let customerTokenInfo: TrackingTokenSummary | null = null;
+  if (showTracking) {
+    const [{ data: fixRows }, { data: fenceRows }, { data: fenceEventRows }, { data: tokenRows }] =
+      await Promise.all([
+        // Newest 200 stored fixes; reversed below so the trail draws oldest→newest.
+        supabase
+          .from("shipment_locations")
+          .select("id, lat, lng, recorded_at")
+          .eq("load_id", id)
+          .order("recorded_at", { ascending: false })
+          .limit(200),
+        supabase.from("load_geofences").select("kind, lat, lng, radius_m").eq("load_id", id),
+        supabase
+          .from("geofence_events")
+          .select("fence, transition, occurred_at")
+          .eq("load_id", id)
+          .order("occurred_at", { ascending: true }),
+        supabase
+          .from("tracking_tokens")
+          .select("kind, created_at, expires_at, last_used_at")
+          .eq("load_id", id)
+          .is("revoked_at", null),
+      ]);
+    trackFixes = ((fixRows ?? []) as TrackFix[]).slice().reverse();
+    trackFences = (fenceRows ?? []) as TrackFence[];
+    fenceEvents = (fenceEventRows ?? []) as typeof fenceEvents;
+    const live = liveTokenSummaries((tokenRows ?? []) as TrackingTokenRow[]);
+    driverTokenInfo = live.driver;
+    customerTokenInfo = live.customer;
+  }
+  // Fences are made when a driver link is issued, so their absence AFTER that
+  // means the address would not geocode — which used to be a server-side
+  // console.warn and nothing else.
+  const fenceKinds = new Set(trackFences.map((f) => f.kind));
+  const fenceGaps = driverTokenInfo
+    ? (["pickup", "delivery"] as const).filter((k) => !fenceKinds.has(k))
+    : [];
 
   // msgplane's orange NEXT: walk the list this record lives in (newest-first,
   // same stage) without going back to it. Walking by STATUS sent every parked
@@ -416,9 +491,40 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
           {/* Phase 2, and it renders only where it means something: an order
               (a quote has nobody hauling it) with the flag on. When the flag is
               off this band does not exist, which is what "shipped dark" means. */}
-          {!isPreOrder && gpsEnabled && (
+          {showTracking && (
             <SectionBand title="Tracking">
-              <TrackingPanel loadId={load.id} readOnly={readOnly} />
+              <div className="space-y-4">
+                <TrackingPanel
+                  loadId={load.id}
+                  readOnly={readOnly}
+                  driverToken={driverTokenInfo}
+                  customerToken={customerTokenInfo}
+                  driverPhone={load.driver_phone}
+                />
+                <LiveTrackingMap
+                  loadId={load.id}
+                  initialFixes={trackFixes}
+                  fences={trackFences}
+                />
+                {fenceGaps.length > 0 && (
+                  <p className="rounded-md border border-chart-2 bg-chart-2/15 px-3 py-2 text-sm">
+                    {fenceGaps
+                      .map((k) => `The ${k} address could not be geocoded — no arrival detection at ${k}.`)
+                      .join(" ")}{" "}
+                    Positions still record; only automatic arrival detection is lost.
+                  </p>
+                )}
+                {fenceEvents.length > 0 && (
+                  <ul className="space-y-1 text-sm text-muted-foreground">
+                    {fenceEvents.map((e) => (
+                      <li key={`${e.fence}-${e.transition}`}>
+                        {e.transition === "arrived" ? "Arrived at" : "Departed"} {e.fence} —{" "}
+                        {formatDateTime(e.occurred_at)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </SectionBand>
           )}
 

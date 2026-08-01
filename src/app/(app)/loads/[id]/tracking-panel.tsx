@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { issueTrackingLink } from "./tracking-actions";
+import { formatDateTime, formatPhone } from "@/lib/format";
+import { issueTrackingLink, textDriverLink } from "./tracking-actions";
 
 // The way into Phase 2. Two links per order:
 //
@@ -13,18 +14,70 @@ import { issueTrackingLink } from "./tracking-actions";
 //
 // Issuing REPLACES any live link of the same kind, which kills the old URL. That
 // is said on the button rather than discovered by a driver mid-haul.
+//
+// The URL itself is shown once, at mint time, and never again — but the FACT of
+// a live token (issued when, pinged when) is staff-readable in tracking_tokens,
+// so the server passes that in as props and the panel stops looking amnesiac.
+
+export type TrackingTokenSummary = {
+  issuedAt: string;
+  /** tracking_tokens.last_used_at — stamped by the ingest route on every accepted ping. */
+  lastPingAt: string | null;
+};
 
 type Issued = { kind: "driver" | "customer"; url: string };
+
+function fenceWarning(missing: ("pickup" | "delivery")[]): string {
+  return missing
+    .map((k) => `The ${k} address could not be geocoded — no arrival detection at ${k}.`)
+    .join(" ");
+}
+
+function TokenStatus({
+  label,
+  token,
+  showPing,
+}: {
+  label: string;
+  token: TrackingTokenSummary | null;
+  showPing: boolean;
+}) {
+  return (
+    <div className="rounded-md border px-3 py-2 text-sm">
+      <span className="font-medium">{label}</span>{" "}
+      {token ? (
+        <span className="text-muted-foreground">
+          live — issued {formatDateTime(token.issuedAt)}
+          {/* Only the driver link pings; the customer page never stamps last_used_at. */}
+          {showPing &&
+            (token.lastPingAt
+              ? ` · last ping ${formatDateTime(token.lastPingAt)}`
+              : " · no pings yet")}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">none live</span>
+      )}
+    </div>
+  );
+}
 
 export function TrackingPanel({
   loadId,
   readOnly,
+  driverToken,
+  customerToken,
+  driverPhone,
 }: {
   loadId: string;
   readOnly: boolean;
+  driverToken: TrackingTokenSummary | null;
+  customerToken: TrackingTokenSummary | null;
+  driverPhone: string | null;
 }) {
   const [pending, startTransition] = useTransition();
+  const [texting, startTexting] = useTransition();
   const [issued, setIssued] = useState<Issued | null>(null);
+  const [fenceNote, setFenceNote] = useState<string | null>(null);
 
   const issue = (kind: "driver" | "customer") => {
     startTransition(async () => {
@@ -34,7 +87,20 @@ export function TrackingPanel({
         return;
       }
       setIssued({ kind, url: result.url });
+      if (result.fencesMissing?.length) setFenceNote(fenceWarning(result.fencesMissing));
       toast.success(`${kind === "driver" ? "Driver" : "Customer"} link ready.`);
+    });
+  };
+
+  const textToDriver = () => {
+    startTexting(async () => {
+      const result = await textDriverLink(loadId);
+      if (result.fencesMissing?.length) setFenceNote(fenceWarning(result.fencesMissing));
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(`Driver link texted to ${formatPhone(result.sentTo)}.`);
     });
   };
 
@@ -56,6 +122,11 @@ export function TrackingPanel({
         link is read-only — status and distance, never the carrier or the price.
       </p>
 
+      <div className="grid gap-2 sm:grid-cols-2">
+        <TokenStatus label="Driver link" token={driverToken} showPing />
+        <TokenStatus label="Customer link" token={customerToken} showPing={false} />
+      </div>
+
       {!readOnly && (
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" disabled={pending} onClick={() => issue("driver")}>
@@ -64,7 +135,29 @@ export function TrackingPanel({
           <Button size="sm" variant="secondary" disabled={pending} onClick={() => issue("customer")}>
             {pending ? "Working…" : "New customer link"}
           </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={texting || pending || !driverPhone}
+            onClick={textToDriver}
+          >
+            {texting ? "Texting…" : "Text link to driver"}
+          </Button>
         </div>
+      )}
+
+      {!readOnly && (
+        <p className="text-[12px] text-muted-foreground">
+          {driverPhone
+            ? `Texting sends the live driver link to ${formatPhone(driverPhone)} — a new one is minted first if none is live.`
+            : "To text the driver, add their phone on the dispatch sheet first."}
+        </p>
+      )}
+
+      {fenceNote && (
+        <p className="rounded-md border border-chart-2 bg-chart-2/15 px-3 py-2 text-sm">
+          {fenceNote} Positions still record; only automatic arrival detection is lost.
+        </p>
       )}
 
       {issued && (

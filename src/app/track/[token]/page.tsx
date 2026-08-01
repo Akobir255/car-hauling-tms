@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isFeatureEnabled } from "@/lib/flags";
 import { resolveTrackingToken } from "@/lib/tracking/tokens";
 import { formatDateTime } from "@/lib/format";
+import { TrackingMap, type TrackFix } from "@/components/tracking/tracking-map";
+import { AutoRefresh } from "@/components/tracking/auto-refresh";
 
 // The customer's tracking page (Phase 2). Read-only, no login.
 //
@@ -48,14 +50,13 @@ export default async function CustomerTrackingPage({
   const admin = createAdminClient();
   const loadId = resolved.load.id;
 
-  const [{ data: position }, { data: fences }, { data: stops }] = await Promise.all([
+  const [{ data: trailRows }, { data: fences }, { data: stops }] = await Promise.all([
     admin
       .from("shipment_locations")
-      .select("lat, lng, recorded_at")
+      .select("id, lat, lng, recorded_at")
       .eq("load_id", loadId)
       .order("recorded_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .limit(200),
     admin.from("load_geofences").select("kind, lat, lng").eq("load_id", loadId),
     admin
       .from("geofence_events")
@@ -64,9 +65,12 @@ export default async function CustomerTrackingPage({
       .order("occurred_at", { ascending: true }),
   ]);
 
-  // Deliberately coarse. A shipper needs to know the car is moving and roughly
-  // where — not the driver's doorstep-level position, which is a person's
-  // location, not a package's.
+  // Oldest→newest for the trail; the newest fix is the position of record.
+  const trail = ((trailRows ?? []) as TrackFix[]).slice().reverse();
+  const position = trail[trail.length - 1] ?? null;
+
+  // The miles figure is straight-line and rounded — a "how far away" answer,
+  // not an ETA — and it is labeled as such below.
   const delivery = (fences ?? []).find((f) => f.kind === "delivery");
   const remainingMiles =
     position && delivery
@@ -104,7 +108,7 @@ export default async function CustomerTrackingPage({
           </div>
           {remainingMiles != null && !arrivedDelivery && (
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Distance remaining</dt>
+              <dt className="text-muted-foreground">Straight-line distance</dt>
               <dd className="tabular-nums">~{remainingMiles.toLocaleString()} mi</dd>
             </div>
           )}
@@ -117,11 +121,16 @@ export default async function CustomerTrackingPage({
         </dl>
       </section>
 
-      {/* The map goes here. It is NOT built: Mapbox GL needs a public token this
-          project does not have, and it also needs api.mapbox.com and
-          events.mapbox.com added to connect-src plus worker-src blob: in
-          src/lib/security-headers.ts — without which it fails silently under
-          the CSP. Everything above works today without it. */}
+      {/* Trail + last position only. NO fence circles here on purpose: this
+          page names the stops as city/state, and a 500m circle centred on the
+          pickup is the pickup ADDRESS with one extra step — drawing it would
+          undo the redaction the queries above maintain. Leaflet over
+          tile.openstreetmap.org, both already allowed by the CSP. */}
+      {trail.length > 0 && <TrackingMap fixes={trail} />}
+
+      {/* No realtime channel for an anonymous visitor — a periodic server
+          re-render keeps the page current through the same redacted queries. */}
+      <AutoRefresh intervalMs={60_000} />
 
       <p className="text-xs text-muted-foreground">
         Positions are reported by the driver&apos;s device and can lag by a few minutes or pause
