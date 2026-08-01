@@ -74,7 +74,19 @@ export type TrackingTokenRow = {
 
 export type ResolvedToken =
   | { ok: true; row: TrackingTokenRow; load: { id: string; load_number: string; status: LoadStatus } }
-  | { ok: false; reason: "not_found" | "wrong_kind" | "revoked" | "expired" | "load_closed" };
+  | {
+      ok: false;
+      // "revoked_after_delivery" is the ingest route's auto-revoke (the truck
+      // left the delivery fence): for the driver that is the GOOD ending, and
+      // the pages say "delivery complete" instead of "dead link" for it.
+      reason:
+        | "not_found"
+        | "wrong_kind"
+        | "revoked"
+        | "revoked_after_delivery"
+        | "expired"
+        | "load_closed";
+    };
 
 /**
  * Validate a token from a public URL. Uses the service role because the caller
@@ -100,7 +112,26 @@ export async function resolveTrackingToken(
   // Kind is checked, not assumed: a customer's read-only link must never be
   // accepted by the ingest endpoint just because it is a valid token.
   if (t.kind !== kind) return { ok: false, reason: "wrong_kind" };
-  if (t.revoked_at) return { ok: false, reason: "revoked" };
+  if (t.revoked_at) {
+    // A DRIVER token is routinely revoked by the SYSTEM when the truck leaves
+    // the delivery fence (the ingest route's auto-revoke). For the person
+    // holding the phone that is a finished job, not a broken link, and the
+    // pages need to say so. The departed fence event is the evidence — a
+    // token revoked by rotation or by hand has no such row and stays plain
+    // "revoked". The customer link survives delivery, so its revocations are
+    // always plain.
+    if (kind === "driver") {
+      const { data: departed } = await admin
+        .from("geofence_events")
+        .select("id")
+        .eq("load_id", t.load_id)
+        .eq("fence", "delivery")
+        .eq("transition", "departed")
+        .maybeSingle();
+      if (departed) return { ok: false, reason: "revoked_after_delivery" };
+    }
+    return { ok: false, reason: "revoked" };
+  }
   if (isTokenExpired(t.expires_at)) return { ok: false, reason: "expired" };
 
   const { data: load } = await admin
@@ -118,6 +149,18 @@ export async function resolveTrackingToken(
 }
 
 /**
+ * The pre-order refusal, pure so it is testable without a database. Tracking a
+ * lead or a quote makes no sense — there is no truck — and a link is a
+ * credential, so the rule is enforced where tokens are made, not only in the
+ * server actions that happen to call it today. Same words as the actions'
+ * friendly error, so the message reads identically wherever it surfaces.
+ */
+export function mintStageGateError(stage: string | null | undefined): string | null {
+  if (stage === "order") return null;
+  return `Tracking links are for orders — this record is still a ${stage ?? "lead"}.`;
+}
+
+/**
  * Issue a link for a load, replacing any live one of the same kind. Runs as the
  * CALLER, so the insert policy in 0050 still decides whether this staff member
  * may write to this load — issuing a driver link is a write on the order.
@@ -129,6 +172,20 @@ export async function mintTrackingToken(
   ttlDays: number = DEFAULT_TOKEN_TTL_DAYS
 ): Promise<{ token: string | null; error: string | null }> {
   const supabase = await createClient();
+
+  // Defense in depth: the server actions already refuse pre-order stages with
+  // this same error, but an action is not the only conceivable caller of a
+  // mint. Re-checking here means no future code path can hand a lead or a
+  // quote a live tracking URL. The read runs as the caller, like everything
+  // else in this function, so RLS still decides whether the load is visible.
+  const { data: load } = await supabase
+    .from("loads")
+    .select("pipeline_stage")
+    .eq("id", loadId)
+    .maybeSingle();
+  if (!load) return { token: null, error: "Order not found." };
+  const stageError = mintStageGateError(load.pipeline_stage);
+  if (stageError) return { token: null, error: stageError };
 
   // Revoke first: the unique index in 0050 allows one live token per load per
   // kind, so reissuing without this fails on conflict rather than rotating.

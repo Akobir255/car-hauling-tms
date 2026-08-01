@@ -35,7 +35,9 @@ export default async function DriverTrackingPage({
   const resolved = await resolveTrackingToken(token, "driver");
 
   if (!resolved.ok) {
-    const finished = resolved.reason === "load_closed";
+    const finished =
+      resolved.reason === "load_closed" ||
+      resolved.reason === "revoked_after_delivery";
     return (
       <div className="mx-auto max-w-md space-y-3 p-5">
         <h1 className="text-2xl font-bold">

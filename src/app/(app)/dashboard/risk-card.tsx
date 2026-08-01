@@ -1,12 +1,18 @@
 "use client";
 
-import { Component, useTransition, type ReactNode } from "react";
+import { Component, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { TriangleAlert } from "lucide-react";
+import { ChevronRight, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { acknowledgeRiskFactor, snoozeLoadRisk } from "./risk-actions";
+import {
+  acknowledgeRiskFactor,
+  listHandledRisk,
+  snoozeLoadRisk,
+  unacknowledgeRisk,
+  type HandledRiskItem,
+} from "./risk-actions";
 
 // The Needs-attention card, now with the two buttons that keep an alerting
 // feature alive: "Handled" acknowledges the row's worst factor, "Snooze 3d"
@@ -104,6 +110,110 @@ function RiskRow({ item }: { item: RiskCardItem }) {
   );
 }
 
+// The factor keys, said small enough for a one-line restore row.
+const FACTOR_LABELS: Record<string, string> = {
+  delivery_overdue: "late delivery",
+  pickup_overdue: "late pickup",
+  no_carrier: "no carrier",
+  unsigned: "unsigned agreement",
+  followup_overdue: "overdue follow-up",
+  stale: "no activity",
+  position_stale: "GPS gone quiet",
+  pickup_dwell: "parked at pickup",
+};
+
+function handledLabel(item: HandledRiskItem): string {
+  if (item.factor == null) {
+    return item.snoozedUntil
+      ? `snoozed until ${new Date(item.snoozedUntil).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        })}`
+      : "snoozed";
+  }
+  return FACTOR_LABELS[item.factor] ?? item.factor;
+}
+
+// The way back. 0059 allows DELETE on acknowledgements precisely so "actually,
+// that is not handled" stays expressible — this collapsed line is that promise
+// with a button on it. The list is fetched on first open, not on every
+// dashboard render: nobody pays for a section they never expand.
+function RecentlyHandled() {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<HandledRiskItem[] | null>(null);
+  const [pending, start] = useTransition();
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && items === null) {
+      start(async () => {
+        const r = await listHandledRisk();
+        if (r.error) toast.error(r.error);
+        setItems(r.items);
+      });
+    }
+  };
+
+  const restore = (item: HandledRiskItem) =>
+    start(async () => {
+      const r = await unacknowledgeRisk(item.loadId, item.factor);
+      if (r.error) toast.error(r.error);
+      else {
+        toast.success(`${item.loadNumber ?? "Order"} — back on the list.`);
+        setItems((prev) =>
+          prev ? prev.filter((x) => !(x.loadId === item.loadId && x.factor === item.factor)) : prev
+        );
+      }
+    });
+
+  return (
+    <div className="border-t pt-1">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        className="focus-ring flex w-full items-center gap-1 rounded-sm px-2 py-1 text-left text-[11px] text-muted-foreground transition-colors hover:bg-msg-hover hover:text-foreground"
+      >
+        <ChevronRight
+          className={cn("size-3 transition-transform", open && "rotate-90")}
+          aria-hidden="true"
+        />
+        Recently handled
+      </button>
+      {open && (
+        <div className="space-y-0.5 pb-1">
+          {items === null && <p className="px-2 py-1 text-xs text-muted-foreground">Loading…</p>}
+          {items?.length === 0 && (
+            <p className="px-2 py-1 text-xs text-muted-foreground">Nothing handled lately.</p>
+          )}
+          {items?.map((item) => (
+            <div
+              key={`${item.loadId}:${item.factor ?? "*"}`}
+              className="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-xs hover:bg-msg-hover"
+            >
+              <span className="min-w-0 truncate">
+                <Link href={`/loads/${item.loadId}`} className="tabular-nums text-msg-link">
+                  {item.loadNumber ?? "Order"}
+                </Link>{" "}
+                <span className="text-muted-foreground">— {handledLabel(item)}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => restore(item)}
+                disabled={pending}
+                className="focus-ring shrink-0 rounded-sm border px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-msg-hover hover:text-foreground disabled:opacity-50"
+              >
+                Restore
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function RiskCard({ items, total }: { items: RiskCardItem[]; total: number }) {
   return (
     <RiskCardBoundary>
@@ -121,6 +231,7 @@ export function RiskCard({ items, total }: { items: RiskCardItem[]; total: numbe
               and {total - items.length} more
             </p>
           )}
+          <RecentlyHandled />
         </CardContent>
       </Card>
     </RiskCardBoundary>

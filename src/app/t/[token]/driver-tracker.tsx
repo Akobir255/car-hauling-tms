@@ -33,7 +33,7 @@ const QUEUE_MAX_AGE_MS = 24 * 60 * 60_000;
  */
 const DRAIN_DELAY_MS = 30_000;
 
-type Status = "starting" | "sharing" | "denied" | "unavailable" | "stopped";
+type Status = "starting" | "sharing" | "denied" | "unavailable" | "stopped" | "done";
 
 type QueuedFix = {
   lat: number;
@@ -42,7 +42,17 @@ type QueuedFix = {
   recorded_at: string;
 };
 
-type PingOutcome = "ok" | "gone" | "too_fast" | "bad" | "failed";
+type PingOutcome = "ok" | "done" | "gone" | "too_fast" | "bad" | "failed";
+
+/**
+ * 410 reasons that mean the JOB is over rather than the link being broken. The
+ * ingest route passes resolveTrackingToken's reason through in the body:
+ * "revoked_after_delivery" is the auto-revoke that fires when the truck leaves
+ * the delivery fence, "load_closed" a load already marked delivered or paid.
+ * Both are the good ending — the driver must not be sent to dispatch for a new
+ * link they no longer need.
+ */
+const COMPLETED_REASONS = ["revoked_after_delivery", "load_closed"];
 
 // The key is scoped by token so two orders tracked from one phone (a new link
 // after a re-dispatch, say) never mix their backlogs.
@@ -119,6 +129,20 @@ export function DriverTracker({ token, loadNumber }: { token: string; loadNumber
     [releaseWakeLock]
   );
 
+  // The good ending: the server said the delivery is complete. Shown as a
+  // finish, not an error — and the backlog is cleared, because a revoked token
+  // can never accept it and a dead queue in localStorage helps nobody.
+  const finishSharing = useCallback(() => {
+    stoppedRef.current = true;
+    setStatus("done");
+    setLastError(null);
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (drainRef.current) clearTimeout(drainRef.current);
+    releaseWakeLock();
+    writeQueue(token, []);
+    setQueuedCount(0);
+  }, [releaseWakeLock, token]);
+
   const sendPing = useCallback(
     async (fix: QueuedFix): Promise<PingOutcome> => {
       try {
@@ -128,7 +152,21 @@ export function DriverTracker({ token, loadNumber }: { token: string; loadNumber
           body: JSON.stringify(fix),
         });
         if (res.ok) return "ok";
-        if (res.status === 410) return "gone";
+        if (res.status === 410) {
+          // The route says WHY the link died; a finished job and a replaced
+          // link ask for opposite behaviour from the person holding the phone.
+          let reason: string | null = null;
+          try {
+            const body: unknown = await res.json();
+            if (body && typeof body === "object" && "error" in body) {
+              const e = (body as { error: unknown }).error;
+              if (typeof e === "string") reason = e;
+            }
+          } catch {
+            // A 410 with an unreadable body is still a dead link.
+          }
+          return reason !== null && COMPLETED_REASONS.includes(reason) ? "done" : "gone";
+        }
         if (res.status === 429) return "too_fast";
         if (res.status === 400) return "bad";
         return "failed";
@@ -149,6 +187,10 @@ export function DriverTracker({ token, loadNumber }: { token: string; loadNumber
     if (!queue.length) return;
 
     const outcome = await sendPing(queue[0]);
+    if (outcome === "done") {
+      finishSharing();
+      return;
+    }
     if (outcome === "gone") {
       stopSharing("This link is no longer active. Ask dispatch for a new one.");
       return;
@@ -158,7 +200,7 @@ export function DriverTracker({ token, loadNumber }: { token: string; loadNumber
       writeQueue(token, rest);
       setQueuedCount(rest.length);
     }
-  }, [sendPing, stopSharing, token]);
+  }, [finishSharing, sendPing, stopSharing, token]);
 
   const scheduleDrain = useCallback(() => {
     if (drainRef.current) clearTimeout(drainRef.current);
@@ -179,8 +221,14 @@ export function DriverTracker({ token, loadNumber }: { token: string; loadNumber
       const outcome = await sendPing(fix);
       setSending(false);
 
+      if (outcome === "done") {
+        // The truck has left the delivery fence (or the load closed) and the
+        // server retired the link. A finished job, not a broken one.
+        finishSharing();
+        return;
+      }
       if (outcome === "gone") {
-        // The job is over or the link was replaced. Stop rather than posting
+        // The link was replaced or expired mid-haul. Stop rather than posting
         // into the void for the rest of the day.
         stopSharing("This link is no longer active. Ask dispatch for a new one.");
         return;
@@ -200,7 +248,7 @@ export function DriverTracker({ token, loadNumber }: { token: string; loadNumber
       setLastSent(new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }));
       scheduleDrain();
     },
-    [scheduleDrain, sendPing, stopSharing, token]
+    [finishSharing, scheduleDrain, sendPing, stopSharing, token]
   );
 
   const readAndSend = useCallback(() => {
@@ -294,6 +342,16 @@ export function DriverTracker({ token, loadNumber }: { token: string; loadNumber
         {status === "stopped" && (
           <p className="text-lg font-bold text-muted-foreground">Sharing stopped</p>
         )}
+        {status === "done" && (
+          <>
+            <p className="text-lg font-bold text-[#2e7d32] dark:text-[#81c784]">
+              This delivery is complete — you can close this page
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Thanks — nothing more to send for this order.
+            </p>
+          </>
+        )}
 
         <dl className="mt-4 space-y-1 text-sm">
           <div className="flex justify-between gap-4">
@@ -311,7 +369,7 @@ export function DriverTracker({ token, loadNumber }: { token: string; loadNumber
         {lastError && <p className="mt-3 text-sm text-destructive">{lastError}</p>}
       </div>
 
-      {status !== "stopped" && (
+      {status !== "stopped" && status !== "done" && (
         <p className="text-sm font-medium">
           Keep this screen on and the phone plugged in — tracking stops when the screen is off.
         </p>

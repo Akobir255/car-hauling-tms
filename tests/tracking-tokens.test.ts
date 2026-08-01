@@ -7,6 +7,7 @@ import {
   DRIVER_TOKEN_DEAD_STATUSES,
   isTokenDeadForStatus,
   isTokenExpired,
+  mintStageGateError,
 } from "../src/lib/tracking/tokens";
 import { EVENT_TYPES } from "../src/lib/events/types";
 import type { LoadStatus } from "../src/types/database";
@@ -17,6 +18,10 @@ const routeSrc = readFileSync(
 );
 const trackerSrc = readFileSync(
   join(process.cwd(), "src/app/t/[token]/driver-tracker.tsx"),
+  "utf8"
+);
+const tokensSrc = readFileSync(
+  join(process.cwd(), "src/lib/tracking/tokens.ts"),
   "utf8"
 );
 
@@ -165,5 +170,57 @@ describe("auto-revoke on delivery", () => {
       /from\("tracking_tokens"\)[\s\S]*?\.is\("revoked_at", null\);/
     );
     expect(revokeBlock![0]).not.toMatch(/"customer"/);
+  });
+});
+
+describe("mint stage gate — defense in depth", () => {
+  it("refuses a lead and a quote with the server actions' own words", () => {
+    // Same sentence as loadStageGate in tracking-actions.ts, so the refusal
+    // reads identically wherever it surfaces.
+    expect(mintStageGateError("lead")).toBe(
+      "Tracking links are for orders — this record is still a lead."
+    );
+    expect(mintStageGateError("quote")).toBe(
+      "Tracking links are for orders — this record is still a quote."
+    );
+  });
+
+  it("treats a missing stage as a lead, never as permission", () => {
+    expect(mintStageGateError(null)).toMatch(/still a lead/);
+    expect(mintStageGateError(undefined)).toMatch(/still a lead/);
+  });
+
+  it("lets an order mint", () => {
+    expect(mintStageGateError("order")).toBeNull();
+  });
+
+  it("is enforced inside mintTrackingToken itself, so no future caller can skip it", () => {
+    // The action-level gate keeps the friendly path; this pins the wall behind
+    // it — a token is a credential, and the rule lives where tokens are made.
+    expect(tokensSrc).toMatch(/select\("pipeline_stage"\)/);
+    expect(tokensSrc).toMatch(/mintStageGateError\(load\.pipeline_stage\)/);
+  });
+});
+
+describe("driver-page end states", () => {
+  it("the resolver tells revoked-after-delivery apart from a plain revocation", () => {
+    // The departed delivery fence event is the evidence for the upgrade — a
+    // token revoked by rotation or by hand has no such row.
+    expect(tokensSrc).toMatch(/"revoked_after_delivery"/);
+    expect(tokensSrc).toMatch(/\.eq\("fence", "delivery"\)/);
+    expect(tokensSrc).toMatch(/\.eq\("transition", "departed"\)/);
+  });
+
+  it("the ingest route 410s a finished job with the reason in the body", () => {
+    expect(routeSrc).toMatch(/resolved\.reason === "revoked_after_delivery"/);
+    expect(routeSrc).toMatch(/\{ error: resolved\.reason \}/);
+  });
+
+  it("the driver page reads the reason: a finished job says so, a dead link keeps the old message", () => {
+    expect(trackerSrc).toMatch(
+      /const COMPLETED_REASONS = \["revoked_after_delivery", "load_closed"\];/
+    );
+    expect(trackerSrc).toMatch(/This delivery is complete — you can close this page/);
+    expect(trackerSrc).toMatch(/This link is no longer active\. Ask dispatch for a new one\./);
   });
 });

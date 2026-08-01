@@ -303,3 +303,41 @@ describe("migration 0059", () => {
     expect(sql).toMatch(/\('exception_engine', false/);
   });
 });
+
+describe("risk queue restore — the card's recently-handled section", () => {
+  // File-text pins, same style as the 0059 block above: the card is a client
+  // component and the actions pull in next/cache, so neither is importable in
+  // a unit test — but the promise 0059 makes ("actually, that is not handled"
+  // has to be expressible) needs a UI to stay true, and this is it.
+  const cardSrc = readFileSync(
+    join(process.cwd(), "src/app/(app)/dashboard/risk-card.tsx"),
+    "utf8"
+  );
+  const actionsSrc = readFileSync(
+    join(process.cwd(), "src/app/(app)/dashboard/risk-actions.ts"),
+    "utf8"
+  );
+
+  it("acknowledged items are listed with a Restore button wired to unacknowledgeRisk", () => {
+    expect(cardSrc).toMatch(/Recently handled/);
+    expect(cardSrc).toMatch(/unacknowledgeRisk\(item\.loadId, item\.factor\)/);
+    expect(cardSrc).toMatch(/>\s*Restore\s*</);
+  });
+
+  it("restore is a factor-scoped delete through the caller's RLS client", () => {
+    expect(actionsSrc).toMatch(
+      /from\("risk_acknowledgements"\)\.delete\(\)\.eq\("load_id", loadId\)/
+    );
+    // No admin client anywhere in these actions — the row policies decide.
+    expect(actionsSrc).not.toMatch(/createAdminClient/);
+  });
+
+  it("the recently-handled read drops expired snoozes and reads loads via the role views", () => {
+    expect(actionsSrc).toMatch(/listHandledRisk/);
+    // An expired snooze already stopped counting in assess(); no dead buttons.
+    expect(actionsSrc).toMatch(/Date\.parse\(r\.snoozed_until\) >= now/);
+    // Load numbers come from the role views, never the base table (0013).
+    expect(actionsSrc).toMatch(/loads_sales_safe/);
+    expect(actionsSrc).toMatch(/MANAGER_LOADS_TABLE/);
+  });
+});

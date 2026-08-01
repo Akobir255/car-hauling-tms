@@ -56,8 +56,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   const resolved = await resolveTrackingToken(token, "driver");
   if (!resolved.ok) {
     // A driver needs to know the difference between "wrong link" and "this job
-    // is over" — they act on it. Anyone else learns nothing useful.
-    const gone = resolved.reason === "expired" || resolved.reason === "revoked" || resolved.reason === "load_closed";
+    // is over" — they act on it. Anyone else learns nothing useful. The body
+    // carries the resolver's reason so the page can tell the GOOD ending apart:
+    // "revoked_after_delivery" (the auto-revoke below fired) and "load_closed"
+    // mean the job is finished, not that the driver needs a new link.
+    const gone =
+      resolved.reason === "expired" ||
+      resolved.reason === "revoked" ||
+      resolved.reason === "revoked_after_delivery" ||
+      resolved.reason === "load_closed";
     return small(gone ? 410 : 404, { error: resolved.reason });
   }
 
