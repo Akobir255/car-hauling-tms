@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isFeatureEnabled } from "@/lib/flags";
 import { resolveTrackingToken } from "@/lib/tracking/tokens";
 import { formatDateTime } from "@/lib/format";
+import { formatBusinessDateTime, getRoadEta } from "@/lib/tracking/eta";
 import { TrackingMap, type TrackFix } from "@/components/tracking/tracking-map";
 import { AutoRefresh } from "@/components/tracking/auto-refresh";
 
@@ -70,7 +71,8 @@ export default async function CustomerTrackingPage({
   const position = trail[trail.length - 1] ?? null;
 
   // The miles figure is straight-line and rounded — a "how far away" answer,
-  // not an ETA — and it is labeled as such below.
+  // not an ETA — and it is labeled as such below. It is the FALLBACK now: when
+  // ORS answers, the road figure and an arrival estimate stand in for it.
   const delivery = (fences ?? []).find((f) => f.kind === "delivery");
   const remainingMiles =
     position && delivery
@@ -82,9 +84,27 @@ export default async function CustomerTrackingPage({
   const arrivedPickup = (stops ?? []).some(
     (s) => s.fence === "pickup" && s.transition === "arrived"
   );
-  const arrivedDelivery = (stops ?? []).some(
-    (s) => s.fence === "delivery" && s.transition === "arrived"
-  );
+  // ANY delivery-fence event means the truck reached the destination — the
+  // departure event (which auto-revokes the driver link) is gated behind
+  // arrival in the ingest route, but checking both costs nothing and a page
+  // that says "in transit" after the car is off the truck is the failure mode.
+  const deliveryStops = (stops ?? []).filter((s) => s.fence === "delivery");
+  const atDelivery = deliveryStops.length > 0;
+  const deliveredAt =
+    deliveryStops.find((s) => s.transition === "arrived")?.occurred_at ??
+    deliveryStops[0]?.occurred_at ??
+    null;
+
+  // Road distance + ETA, strictly best-effort (null on any failure, cached per
+  // fix for ~30 min in the lib). Never asked for once the truck has reached the
+  // delivery fence — an ETA on a delivered car is noise, and skipping the call
+  // entirely is cheaper than suppressing the render. Only miles and a time ever
+  // reach this page: the lib drops the route geometry at parse time, so there
+  // is nothing here to leak beyond what the straight-line figure already said.
+  const eta =
+    !atDelivery && position && delivery
+      ? await getRoadEta({ loadId, fix: position, delivery })
+      : null;
 
   return (
     <div className="mx-auto max-w-lg space-y-6 p-5">
@@ -96,7 +116,7 @@ export default async function CustomerTrackingPage({
       <section className="rounded-md border p-5">
         <p className="text-sm text-muted-foreground">Status</p>
         <p className="text-xl font-bold">
-          {arrivedDelivery
+          {atDelivery
             ? "Delivered"
             : (STATUS_WORDS[resolved.load.status] ?? "In progress")}
         </p>
@@ -106,7 +126,29 @@ export default async function CustomerTrackingPage({
             <dt className="text-muted-foreground">Picked up</dt>
             <dd>{arrivedPickup ? "Yes" : "Not yet"}</dd>
           </div>
-          {remainingMiles != null && !arrivedDelivery && (
+          {/* The truck has arrived: say when, and imply no further movement —
+              no distance, no ETA. The arrival stamp is fence data, not an
+              address, so nothing redacted above becomes visible here. */}
+          {atDelivery && deliveredAt && (
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">Arrived</dt>
+              <dd className="tabular-nums">{formatBusinessDateTime(deliveredAt)}</dd>
+            </div>
+          )}
+          {eta && (
+            <>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Distance by road</dt>
+                <dd className="tabular-nums">~{eta.roadMiles.toLocaleString()} mi</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Estimated arrival</dt>
+                <dd className="tabular-nums">{formatBusinessDateTime(eta.etaAt)}</dd>
+              </div>
+            </>
+          )}
+          {/* Straight-line stays as the fallback when ORS had no answer. */}
+          {!eta && remainingMiles != null && !atDelivery && (
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">Straight-line distance</dt>
               <dd className="tabular-nums">~{remainingMiles.toLocaleString()} mi</dd>

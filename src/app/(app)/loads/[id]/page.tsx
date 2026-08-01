@@ -29,6 +29,7 @@ import { EsignPanel } from "./esign-panel";
 import { TrackingPanel, type TrackingTokenSummary } from "./tracking-panel";
 import { LiveTrackingMap } from "@/components/tracking/live-tracking-map";
 import type { TrackFence, TrackFix } from "@/components/tracking/tracking-map";
+import { formatBusinessDateTime, getRoadEta, type RoadEta } from "@/lib/tracking/eta";
 import { QuoteOutcomeForm } from "./quote-outcome-form";
 import { isFeatureEnabled } from "@/lib/flags";
 import { OrderMoreMenu } from "./order-more-menu";
@@ -289,6 +290,17 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
     ? (["pickup", "delivery"] as const).filter((k) => !fenceKinds.has(k))
     : [];
 
+  // Road distance + ETA off the data the band already fetched — no second
+  // query, at most one (cached, best-effort) ORS call, and none at all once
+  // any delivery-fence event exists: an ETA on an arrived truck is noise.
+  const latestFix = trackFixes[trackFixes.length - 1] ?? null;
+  const deliveryFence = trackFences.find((f) => f.kind === "delivery") ?? null;
+  const atDelivery = fenceEvents.some((e) => e.fence === "delivery");
+  let roadEta: RoadEta | null = null;
+  if (showTracking && !atDelivery && latestFix && deliveryFence) {
+    roadEta = await getRoadEta({ loadId: id, fix: latestFix, delivery: deliveryFence });
+  }
+
   // msgplane's orange NEXT: walk the list this record lives in (newest-first,
   // same stage) without going back to it. Walking by STATUS sent every parked
   // record off through the order list, however it got there.
@@ -501,6 +513,18 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                   customerToken={customerTokenInfo}
                   driverPhone={load.driver_phone}
                 />
+                {/* Server-rendered on purpose (not in the panel, which is a
+                    client component about links): the figure comes from an
+                    ORS call the server cached per fix, and it goes stale with
+                    the page, same as the fence-event list below. */}
+                {roadEta && (
+                  <p className="text-sm">
+                    <span className="text-muted-foreground">Road distance to delivery </span>
+                    <span className="tabular-nums">~{roadEta.roadMiles.toLocaleString()} mi</span>
+                    <span className="text-muted-foreground"> · estimated arrival </span>
+                    <span className="tabular-nums">{formatBusinessDateTime(roadEta.etaAt)}</span>
+                  </p>
+                )}
                 <LiveTrackingMap
                   loadId={load.id}
                   initialFixes={trackFixes}
