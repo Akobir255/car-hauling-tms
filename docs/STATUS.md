@@ -3,7 +3,7 @@
 US Star Trucking's broker TMS. Replaces a paid SuiteCRM-based system (msgplane,
 $250/mo + $50/user). Live at **https://carshiphelp.com** for a team of ~48.
 
-Last updated: 2026-07-26.
+Last updated: 2026-07-31 (late evening — the GPS/AI build-out pass).
 
 ## Stack
 
@@ -243,18 +243,56 @@ check it and 404 when it is off.
   gating evaluation on storage meant arrival never fired, and since departure is
   gated behind arrival, the feature emitted nothing at all. `tests/geofence.test.ts`
   pins both directions of this.
-- **NOT built**: the Mapbox dashboard map and the map on the customer page. No
-  Mapbox token exists, and Mapbox GL also needs `api.mapbox.com`,
-  `events.mapbox.com` in `connect-src` plus `worker-src blob:` in
-  `security-headers.ts` or it fails silently under the CSP.
+- **Built 2026-07-31 (evening): the consumption side.** Both maps exist on
+  **Leaflet + OSM, not Mapbox** — leaflet was already a dependency (the quote
+  form's route-map) and `tile.openstreetmap.org` already in img-src, so the
+  Mapbox plan above was solving a problem we didn't have. Zero CSP change.
+  `src/components/tracking/` draws trail (last 200 fixes), both fences and a
+  last-position marker on the order page — the FIRST subscriber of the 0050
+  realtime publication, with a 45s polling fallback on channel error — and a
+  slimmer variant on `/track/<token>` (deliberately NO fence circles there: a
+  fence centre is the address). All staff reads go through the caller's RLS
+  client. The TrackingPanel now shows live token state + last driver ping and
+  a "Text to driver" button (via `runSmsChunk`, single recipient, logged to
+  messages); `issueTrackingLink` refuses pre-order stages server-side, gained
+  the `VERCEL_PROJECT_PRODUCTION_URL` fallback, and returns geocode failures
+  to the UI instead of a server-only console.warn.
+- **Driver page survivability (same pass):** screen wake lock (re-acquired on
+  visibilitychange, which also triggers an immediate fix), failed posts
+  buffered in localStorage with their original `recorded_at` (cap 50, pruned
+  at the 24h backdate window, drained one per cycle inside the 25s rate
+  limit — the client finally uses the backdating the server always
+  supported), a minimal `public/driver-tracking.webmanifest`, and honest
+  on-page guidance that tracking stops when the screen is off. Delivery-fence
+  DEPARTURE now auto-revokes the driver token and records
+  `tracking_link_revoked` on the spine (customer token deliberately stays
+  alive). `event_type` is unconstrained TEXT in 0049, so no migration was
+  needed for the new type. Still open: road-distance/ETA via ORS.
 
-## AI intake (0051) — BUILT, NOT APPLIED, BLOCKED ON A KEY
+## AI intake (0051) — BUILT AND APPLIED, BLOCKED ON THE KEY ONLY
 
 `/loads/intake`: paste an email or attach a load sheet, get a filled-in order
 form with a confidence on every field, correct it, press confirm. Ships behind
-`feature_flags.ai_intake = false` and 404s when off. **Migration 0051 has not
-been pushed and no `ANTHROPIC_API_KEY` exists in Vercel** — the page renders a
-"not configured on this deployment" card rather than a broken form until it does.
+`feature_flags.ai_intake = false` and 404s when off. **Migration 0051 IS
+applied** — it rode along with the 0052–0060 push; verified 2026-07-31 with
+`supabase migration list` (0051 present remote) and a live REST probe (both
+tables answer, zero rows). An earlier version of this file said it was
+unpushed; that claim cost a near-miss `db push --include-all`. **Only
+`ANTHROPIC_API_KEY` is missing in Vercel** — the page renders a "not
+configured on this deployment" card until it exists.
+
+- **Hardened 2026-07-31 (evening):** the Anthropic client carries
+  `timeout: 90_000` and the intake page exports `maxDuration = 120` (segment
+  config on the PAGE is what covers its server actions), so a platform kill
+  can no longer outrun the never-throw handling and the audit insert.
+  `output_config.effort = "medium"` (adaptive thinking stays on) trims the
+  Opus 5 default-high thinking spend. Confidence is schema-bounded 0..1 (an
+  out-of-range-high value used to suppress the "check" chip). The accept
+  list names the four real image types — `image/*` invited iPhone HEIC that
+  the API rejects only after upload. Text + file submissions now send BOTH
+  to the model and store `input_text` alongside. Storage keys are sanitized.
+  `contact.company` reaches `createLoad` as `customer_company` (new
+  customers only).
 
 - **The AI never commits anything.** READ produces a draft; CONFIRM is a human
   pressing a button, and it calls the ordinary `createLoad` rather than a second
@@ -282,9 +320,14 @@ been pushed and no `ANTHROPIC_API_KEY` exists in Vercel** — the page renders a
 - Correction writes are `ON CONFLICT DO NOTHING` against
   `(extraction_id, field_path, human_value)`. Confirm can fail and be retried,
   and nothing may delete from that table.
-- **Not wired**: `ai_extractions.load_id` stays null. Stamping it means owning
-  the redirect and forking the creation path, which is the one thing the confirm
-  action exists to avoid.
+- **`load_id` IS wired (2026-07-31 evening)**, without forking the creation
+  path: `confirmIntake` sets `ai_extraction_id` on the FormData it already
+  hands to the ordinary `createLoad`, and `createLoad` stamps
+  `ai_extractions.load_id` via the admin client after its insert succeeds —
+  UUID-validated, first-write-wins (`.is("load_id", null)`), non-fatal on
+  failure, redirect untouched. 0051 pre-authorized exactly this (service-role
+  stamp, same rule margin lives under). Confirmed and abandoned extractions
+  are now distinguishable, which is what every future quality metric keys on.
 
 ## THE WHOLE BOOK IS HIDDEN (0052 + 0053) — read this before debugging "no data"
 
@@ -523,8 +566,31 @@ history. City-level pricing is an absent dataset, not a modelling choice.
 - `pg_safeupdate` rejects a bare `DELETE`, even inside a SECURITY DEFINER
   function — hence `delete … where true` in 0058.
 
-Refresh is manual for now: `select refresh_lane_price_stats();` as the service
-role. It rebuilds 539 lanes in ~2s.
+- **2026-07-31 evening — the loops got closed.** The suggestion band is a
+  shared component (`src/components/pricing/lane-suggestion.tsx`) on BOTH
+  pricing forms — the edit form is where leads actually get priced (lead→
+  quote happens BY PRICING, including on edit), and it had nothing.
+  `recordPriceOverride` finally has call sites: suggested-vs-typed records
+  fire-and-forget from both forms (`load_id` null on the new form — 0057
+  already made the column nullable), gated on the rate actually changing.
+- **Refresh is now a daily Vercel cron** (`vercel.json` →
+  `/api/cron/refresh-lanes`, 09:00 UTC), which timing-safe-checks
+  `Authorization: Bearer CRON_SECRET` then calls the refresh via the admin
+  client. `/api/cron` had to join `SELF_AUTHENTICATING_PREFIXES` in
+  `src/lib/supabase/proxy.ts` — the scheduler sends no cookie, and the
+  middleware's 307-to-/login would have made every run "succeed" against
+  login-page HTML. Manual refresh still works the old way.
+- **Migration 0061 (UNAPPLIED — the only one)** folds `quote_outcomes` into
+  `n_won`/`n_lost` (won = won-status OR won outcome; lost = cancelled/lost
+  status OR lost/expired outcome, never double-counting), preserving
+  SECURITY DEFINER + revokes + the `delete … where true` safeupdate
+  workaround + the ≥10 privacy floor. Pinned by tests.
+- **The carrier-cost blocker got its accelerant:** the dispatch sheet now has
+  a marker-guarded "this is the settled figure" checkbox, threaded into
+  `saveDispatchSheet`, and `isConfirmedCarrierPay` accepts it — so a
+  settlement EQUAL to the derived offer (the common case, structurally
+  unconfirmable before) can finally be recorded. `storedConfirmed` is now a
+  never-demote floor.
 
 ## Exception engine (0059) — SHIPPED DARK
 
@@ -561,6 +627,22 @@ needs the AI key. What ships is the middle third: score, queue, acknowledge.
   counting.
 - Sample orders carry promise dates and carriers so this is demonstrable: with
   the flag on, 5 of 18 surface — two urgent, and a late delivery.
+- **2026-07-31 evening — the queue can be worked, and GPS feeds it.** Per-row
+  **Handled** (acks that row's worst factor) and **Snooze 3d** (whole-order,
+  `factor` null) buttons on the card, via `risk-actions.ts` writing through
+  the caller's RLS client; `acknowledged.has("*")` now actually silences a
+  whole order, which the dashboard's null→`"*"` mapping always promised and
+  `assess()` never honored. `daysUntil` truncates timestamps toward zero —
+  a follow-up one HOUR late used to read "due 1 day ago" (floor(-0.04) =
+  -1) and `stale` fired at 6.5 days. With `gps_tracking` on, the scorer
+  gains `position_stale` (25 — tracking live but silent 8h+, also the alarm
+  for the phone-locked driver page) and `pickup_dwell` (20 — arrived, never
+  departed after 24h), and a fix in the last 24h SUPPRESSES the
+  `updated_at`-based stale factor (a pinging truck is not an abandoned
+  order). First entry into the high band writes `risk_flagged` onto the
+  spine (check-then-insert dedupe, margin-free payload). The 500-row query
+  now orders by `delivery_eta` asc nulls-last so the cap degrades toward
+  the urgent, not the arbitrary. Still TypeScript, still no SQL function.
 
 **Stale comment worth knowing about:** the dashboard's "Needs a carrier" card is
 gated on `canSeeMargin` with a comment claiming `carrier_id` is not in
@@ -701,8 +783,23 @@ nothing changed visually.
 ## Open items
 
 - **Phase 3 needs `ANTHROPIC_API_KEY` in Vercel** (Project → Settings →
-  Environment Variables, all three environments), and `supabase db push` to apply
-  0051. Until both, `/loads/intake` is a card explaining it is not configured.
+  Environment Variables, all three environments), then a redeploy. That is
+  the WHOLE remaining blocker — 0051 is already applied (see the AI intake
+  section; the old claim here that it needed a push was stale).
+- **`CRON_SECRET` in Vercel** (all environments) — the daily lane-refresh
+  cron 503s without it. Then `npx supabase db push` for **0061**, the only
+  unapplied migration.
+- **Flag flips are now a command**: `node scripts/set-flag.mjs <key> on|off`
+  (service role, refuses unknown keys) instead of freehand SQL. The four
+  dark features stay dark until an operator runs it.
+- **First GPS flip needs a live check**: confirm the realtime channel
+  reaches SUBSCRIBED with a staff session (polling fallback hides a silent
+  failure at 45s staleness), then pilot one driver link on a phone that is
+  mounted and plugged in.
+- `scripts/backup.mjs` now covers the post-0050 tables (`ai_extractions`,
+  `ai_corrections`, `quote_outcomes`, `price_overrides`,
+  `risk_acknowledgements`, `lane_price_stats`) — the append-only asset
+  tables had been sitting in a no-PITR project with no backup at all.
 - **Phone numbers are stored E.164 as of Phase 3** — `storedPhone()` in
   `src/lib/messaging/ringcentral.ts`, applied on customer create/update and on
   every phone column in `coreValues()`. A number it cannot read (an extension, a
