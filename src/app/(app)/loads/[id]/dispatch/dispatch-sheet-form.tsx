@@ -185,6 +185,22 @@ export function DispatchSheetForm({
         <div className="space-y-1.5">
           <FieldLabel htmlFor="carrier_pay">Carrier pay ($)</FieldLabel>
           <Input id="carrier_pay" name="carrier_pay" inputMode="decimal" defaultValue={load.carrier_pay ?? ""} />
+          {/* Marker input, same pattern as require_card_present on the edit
+              form: it proves this form carried the checkbox, so a partial form
+              can't be read as "not settled". */}
+          <input type="hidden" name="carrier_pay_settled_present" value="1" />
+          {/* Without this, a carrier settling at exactly the posted offer could
+              never be recorded as confirmed — equality is all the arithmetic in
+              pricing.ts has to go on. */}
+          <label className="flex items-center gap-2 text-sm max-md:min-h-12">
+            <input
+              type="checkbox"
+              name="carrier_pay_settled"
+              defaultChecked={load.carrier_pay_confirmed}
+              className="size-4 accent-primary"
+            />
+            This is the settled figure the carrier agreed to
+          </label>
         </div>
         <TermsSelect
           name="balance_paid_by"

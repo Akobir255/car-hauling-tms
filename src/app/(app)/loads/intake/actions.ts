@@ -12,7 +12,7 @@ import {
   inputSha256,
   type IntakeInput,
 } from "@/lib/ai/extract-intake";
-import { flattenFields, type IntakeExtraction } from "@/lib/ai/intake-schema";
+import { flattenFields, lowConfidenceFields, type IntakeExtraction } from "@/lib/ai/intake-schema";
 import { createLoad } from "../actions";
 
 // Phase 3. Two actions, and the split between them is the whole safety story:
@@ -21,6 +21,18 @@ import { createLoad } from "../actions";
 // touches money — it fills in a form and waits.
 
 const ALLOWED_IMAGE = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+
+/**
+ * The client's filename becomes part of a storage KEY, so it is reduced to a
+ * safe basename: no path separators, nothing outside [A-Za-z0-9._-], no leading
+ * dots, capped. The untouched original still goes in input_filename — that is
+ * data in a column, not a key.
+ */
+function safeBasename(name: string): string {
+  const base = name.split(/[\\/]/).pop() ?? "";
+  const cleaned = base.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^[._]+/, "").slice(0, 80);
+  return cleaned || "upload";
+}
 
 export type IntakeState = {
   extractionId: string | null;
@@ -84,9 +96,11 @@ export async function runIntakeExtraction(
     filename = f.name;
     mediaType = f.type;
     const base64 = fileBytes.toString("base64");
+    // Text pasted ALONGSIDE the file rides with it — dropping it silently read
+    // half the submission. contentFor sends both to the model.
     input = isPdf
-      ? { kind: "pdf", base64, filename: f.name }
-      : { kind: "image", base64, mediaType: f.type, filename: f.name };
+      ? { kind: "pdf", base64, filename: f.name, text: text || undefined }
+      : { kind: "image", base64, mediaType: f.type, filename: f.name, text: text || undefined };
   } else {
     input = { kind: "text", text };
   }
@@ -99,7 +113,7 @@ export async function runIntakeExtraction(
   // bytes go to the private bucket the rest of the app already uses.
   let storagePath: string | null = null;
   if (fileBytes) {
-    storagePath = `ai-intake/${sha}-${filename}`;
+    storagePath = `ai-intake/${sha}-${safeBasename(filename ?? "")}`;
     const { error: upErr } = await createAdminClient()
       .storage.from("load-files")
       .upload(storagePath, fileBytes, { contentType: mediaType ?? undefined, upsert: true });
@@ -115,7 +129,9 @@ export async function runIntakeExtraction(
     .from("ai_extractions")
     .insert({
       kind: input.kind,
-      input_text: input.kind === "text" ? text : null,
+      // The text is stored even when a file rode along — both halves went to
+      // the model, so an audit row holding only one cannot reproduce the call.
+      input_text: text || null,
       input_storage_path: storagePath,
       input_filename: filename,
       input_media_type: mediaType,
@@ -143,9 +159,7 @@ export async function runIntakeExtraction(
   return {
     extractionId: row?.id ?? null,
     extraction: outcome.extraction,
-    lowConfidence: flattenFields(outcome.extraction)
-      .filter((f) => f.confidence < 0.85)
-      .map((f) => f.path),
+    lowConfidence: lowConfidenceFields(outcome.extraction),
     error: null,
   };
 }
@@ -230,8 +244,9 @@ export async function confirmIntake(
   }
 
   // Throws NEXT_REDIRECT on success — by design, so the dispatcher lands on the
-  // order. The extraction's load_id therefore stays null: capturing it would
-  // mean owning the redirect here and forking the creation path, which is the
-  // one thing this action exists to avoid.
+  // order. The extraction id rides along in the form data: createLoad stamps
+  // ai_extractions.load_id itself, after its insert succeeds, so no redirect is
+  // owned here and no second creation path exists.
+  if (extractionId) formData.set("ai_extraction_id", extractionId);
   return createLoad({ error: null }, formData);
 }

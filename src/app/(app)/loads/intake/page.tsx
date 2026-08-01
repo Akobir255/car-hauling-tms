@@ -11,6 +11,14 @@ import { IntakeForm } from "./intake-form";
 
 export const dynamic = "force-dynamic";
 
+// Next 16's route-segment-config docs: for Server Actions, maxDuration is set
+// "at the page level to change the default timeout of all Server Actions used
+// on the page" — an export from actions.ts does nothing. 120s sits over the
+// 90s SDK timeout in extract-intake.ts with room for the upload and the audit
+// insert, so the platform never kills the action before its never-throw
+// handling and the ai_extractions row have run.
+export const maxDuration = 120;
+
 export default async function IntakePage() {
   await requireRole("admin", "dispatcher", "sales");
   if (!(await isFeatureEnabled("ai_intake"))) notFound();

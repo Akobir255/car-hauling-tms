@@ -157,10 +157,21 @@ export function IntakeForm() {
 
         <div className="space-y-1.5">
           <FieldLabel htmlFor="file">…or attach a PDF or photo</FieldLabel>
-          <Input id="file" name="file" type="file" accept="application/pdf,image/*" />
+          {/* The exact list the server accepts — a wildcard image accept
+              invited iPhone HEIC, which was rejected only AFTER the upload. */}
+          <Input
+            id="file"
+            name="file"
+            type="file"
+            accept="application/pdf,image/png,image/jpeg,image/webp,image/gif"
+          />
           <p className="text-xs text-muted-foreground">
             Up to {MAX_UPLOAD_LABEL} — a phone photo is normally well under it. The document is
             stored so corrections can be traced back to it.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            iPhone photos (HEIC) can&apos;t be read — screenshot the photo instead, or set the
+            camera to Most Compatible.
           </p>
         </div>
 
@@ -235,7 +246,7 @@ function ReviewScreen({
         <h2 className="text-sm uppercase tracking-wide text-ord-head">Customer</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <ReviewField label="Name" path="contact.name" formName="customer_name" field={leaf(e.contact?.name)} />
-          <ReviewField label="Company" path="contact.company" field={leaf(e.contact?.company)} />
+          <ReviewField label="Company" path="contact.company" formName="customer_company" field={leaf(e.contact?.company)} />
           <ReviewField label="Phone" path="contact.phone" formName="customer_phone" field={leaf(e.contact?.phone)} />
           <ReviewField label="Email" path="contact.email" formName="customer_email" field={leaf(e.contact?.email)} />
         </div>

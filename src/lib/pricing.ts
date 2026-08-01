@@ -71,17 +71,28 @@ export function offeredCarrierPay(customerRate: number, reservationFee: number |
  * tell afterwards which figures a human actually typed.
  *
  * So the rule lives here, next to the arithmetic it depends on, and both writers
- * call it. Confirmed means: a number was submitted, and it is NOT the number we
- * would have derived ourselves.
+ * call it. Confirmed means: a number was submitted, and either the human said
+ * outright that it is the settled figure, or it is NOT the number we would have
+ * derived ourselves.
+ *
+ * The declared flag exists because equality is the arithmetic's only evidence:
+ * a carrier who settles at exactly the posted offer — the ordinary happy case —
+ * could otherwise never be recorded as confirmed at all.
  */
 export function isConfirmedCarrierPay(args: {
   submitted: number | null | undefined;
   customerRate: number | null | undefined;
   reservationFee: number | null | undefined;
-  /** Preserved when nothing was submitted — never demote a settled figure. */
+  /** The human ticked "this is the settled figure" — confirms even a figure
+   *  equal to the derived offer, which the comparison below cannot. */
+  declaredSettled?: boolean;
+  /** A settlement, once recorded, stays one — never demoted, even when a later
+   *  rate change makes the settled figure equal today's derived offer. */
   storedConfirmed?: boolean;
 }): boolean {
-  if (args.submitted == null) return args.storedConfirmed ?? false;
+  if (args.storedConfirmed) return true;
+  if (args.submitted == null) return false;
+  if (args.declaredSettled) return true;
   if (args.customerRate == null) return true;
   const offer = offeredCarrierPay(args.customerRate, args.reservationFee ?? null);
   return Math.abs(args.submitted - offer) > 0.005;

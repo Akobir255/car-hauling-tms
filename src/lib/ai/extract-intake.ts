@@ -35,8 +35,10 @@ const USER_INSTRUCTION =
 
 export type IntakeInput =
   | { kind: "text"; text: string }
-  | { kind: "pdf"; base64: string; filename: string }
-  | { kind: "image"; base64: string; mediaType: string; filename: string };
+  // `text` on the file kinds is the pasted email that arrived WITH the
+  // attachment — both halves go to the model; the sha stays on the file bytes.
+  | { kind: "pdf"; base64: string; filename: string; text?: string }
+  | { kind: "image"; base64: string; mediaType: string; filename: string; text?: string };
 
 export type ExtractionOutcome =
   | {
@@ -71,36 +73,47 @@ export function inputSha256(input: IntakeInput): string {
   return createHash("sha256").update(material).digest("hex");
 }
 
-function contentFor(input: IntakeInput): Anthropic.MessageParam["content"] {
+/** Exported for tests only — the message content is otherwise internal. */
+export function contentFor(input: IntakeInput): Anthropic.ContentBlockParam[] {
+  // The document is fenced so its own text cannot be read as instructions to
+  // us. An intake email is untrusted input — a broker who writes "ignore
+  // previous instructions" into a load sheet gets it treated as content.
+  const fenced = (text: string): Anthropic.TextBlockParam => ({
+    type: "text",
+    text: `<document>\n${text}\n</document>`,
+  });
+
   if (input.kind === "text") {
-    return [
-      { type: "text", text: USER_INSTRUCTION },
-      // The document is fenced so its own text cannot be read as instructions
-      // to us. An intake email is untrusted input — a broker who writes "ignore
-      // previous instructions" into a load sheet gets it treated as content.
-      { type: "text", text: `<document>\n${input.text}\n</document>` },
-    ];
+    return [{ type: "text", text: USER_INSTRUCTION }, fenced(input.text)];
   }
-  if (input.kind === "pdf") {
-    return [
-      {
-        type: "document",
-        source: { type: "base64", media_type: "application/pdf", data: input.base64 },
-      },
-      { type: "text", text: USER_INSTRUCTION },
-    ];
-  }
-  return [
-    {
-      type: "image",
-      source: {
-        type: "base64",
-        media_type: input.mediaType as "image/png" | "image/jpeg" | "image/gif" | "image/webp",
-        data: input.base64,
-      },
-    },
-    { type: "text", text: USER_INSTRUCTION },
-  ];
+
+  const content: Anthropic.ContentBlockParam[] =
+    input.kind === "pdf"
+      ? [
+          {
+            type: "document",
+            source: { type: "base64", media_type: "application/pdf", data: input.base64 },
+          },
+          { type: "text", text: USER_INSTRUCTION },
+        ]
+      : [
+          {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: input.mediaType as "image/png" | "image/jpeg" | "image/gif" | "image/webp",
+              data: input.base64,
+            },
+          },
+          { type: "text", text: USER_INSTRUCTION },
+        ];
+
+  // A dispatcher often pastes the email AND attaches the load sheet it came
+  // with. Both halves are the document; silently dropping the text read only
+  // half the order. Fenced like the text-only kind, for the same reason.
+  const pasted = input.text?.trim();
+  if (pasted) content.push(fenced(pasted));
+  return content;
 }
 
 /**
@@ -133,7 +146,11 @@ export async function extractIntake(input: IntakeInput): Promise<ExtractionOutco
   }
 
   try {
-    const client = new Anthropic();
+    // 90s is the SDK cutting the call off, in MILLISECONDS (TS SDK convention;
+    // the default is 10 minutes). It must sit UNDER the page's maxDuration so
+    // a hung call fails HERE — through the catch below, with the audit insert
+    // still to come — instead of Vercel killing the action around both.
+    const client = new Anthropic({ timeout: 90_000 });
     const response = await client.messages.parse({
       model: INTAKE_MODEL,
       // Generous: a dealer sheet with twelve vehicles produces a long object,
@@ -141,7 +158,9 @@ export async function extractIntake(input: IntakeInput): Promise<ExtractionOutco
       max_tokens: 16000,
       system: SYSTEM,
       messages: [{ role: "user", content: contentFor(input) }],
-      output_config: { format: zodOutputFormat(intakeSchema) },
+      // Medium effort keeps adaptive thinking on but stops the default-high
+      // spend — this is structured transcription, not a reasoning problem.
+      output_config: { effort: "medium", format: zodOutputFormat(intakeSchema) },
     });
 
     const meta: ExtractionMeta = {

@@ -125,4 +125,62 @@ describe("isConfirmedCarrierPay", () => {
       isConfirmedCarrierPay({ submitted: rate, customerRate: rate, reservationFee: null })
     ).toBe(false);
   });
+
+  it("confirms a figure EQUAL to the offer when the human declares it settled", () => {
+    // The dispatch sheet's checkbox. A carrier settling at exactly the posted
+    // offer is the ordinary happy case, and equality is the only evidence the
+    // arithmetic has — so without the declaration it could never be recorded.
+    expect(
+      isConfirmedCarrierPay({
+        submitted: offer,
+        customerRate: rate,
+        reservationFee: deposit,
+        declaredSettled: true,
+      })
+    ).toBe(true);
+  });
+
+  it("a declared settlement with no figure submitted confirms nothing", () => {
+    expect(
+      isConfirmedCarrierPay({
+        submitted: null,
+        customerRate: rate,
+        reservationFee: deposit,
+        declaredSettled: true,
+      })
+    ).toBe(false);
+  });
+
+  it("an unticked checkbox changes nothing — the arithmetic rule still applies", () => {
+    expect(
+      isConfirmedCarrierPay({
+        submitted: offer,
+        customerRate: rate,
+        reservationFee: deposit,
+        declaredSettled: false,
+      })
+    ).toBe(false);
+    expect(
+      isConfirmedCarrierPay({
+        submitted: 750,
+        customerRate: rate,
+        reservationFee: deposit,
+        declaredSettled: false,
+      })
+    ).toBe(true);
+  });
+
+  it("never demotes a stored settlement, even when it equals today's offer", () => {
+    // Rates can drift until a settled figure coincides with the derived offer;
+    // re-saving the prefilled sheet must not flip a settlement back into an
+    // estimate.
+    expect(
+      isConfirmedCarrierPay({
+        submitted: offer,
+        customerRate: rate,
+        reservationFee: deposit,
+        storedConfirmed: true,
+      })
+    ).toBe(true);
+  });
 });

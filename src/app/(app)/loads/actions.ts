@@ -142,6 +142,9 @@ export async function createLoad(
   const customerName = (formData.get("customer_name") || "").toString().trim();
   const customerEmail = (formData.get("customer_email") || "").toString().trim();
   const customerPhone = (formData.get("customer_phone") || "").toString().trim();
+  // Posted by the AI-intake review screen; the manual form doesn't carry it,
+  // which reads as blank and keeps today's behaviour there.
+  const customerCompany = (formData.get("customer_company") || "").toString().trim();
   if (!customerName) return { error: "Customer name is required." };
 
   const parsedCore = loadCoreSchema.safeParse(Object.fromEntries(formData.entries()));
@@ -192,6 +195,7 @@ export async function createLoad(
       .from("customers")
       .insert({
         contact_name: customerName,
+        company_name: customerCompany || null,
         email: customerEmail || null,
         phone: storedPhone(customerPhone),
         sales_owner_id: profile.role === "sales" ? profile.id : null,
@@ -248,6 +252,23 @@ export async function createLoad(
     return { error: "Could not create load — try again." };
   }
   const load = { id: loadId };
+
+  // AI-intake provenance: when the form came from the review screen, stamp the
+  // extraction with the load it became. Service-role write because 0051
+  // reserves load_id for it (the table is append-only to staff), first-write
+  // wins, and NEVER fatal — the order exists either way, and this must not
+  // become a second creation path.
+  const aiExtractionId = (formData.get("ai_extraction_id") || "").toString();
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(aiExtractionId)) {
+    const { error: stampError } = await admin
+      .from("ai_extractions")
+      .update({ load_id: loadId })
+      .eq("id", aiExtractionId)
+      .is("load_id", null);
+    if (stampError) {
+      console.error("AI intake: could not stamp extraction load_id:", stampError.message);
+    }
+  }
 
   if (derivedCarrierPay != null) {
     // Left UNCONFIRMED on purpose (0038): this is the offer that goes to the
@@ -1243,10 +1264,20 @@ export async function saveDispatchSheet(
       .eq("id", loadId)
       .maybeSingle();
 
+    // "This is the settled figure" checkbox. A carrier settling at exactly the
+    // posted offer is indistinguishable from the offer by arithmetic alone, so
+    // the human can say so outright. Marker-input guarded (same pattern as
+    // require_card_present) so a form without the control cannot be read as
+    // "not settled".
+    const declaredSettled =
+      formData.has("carrier_pay_settled_present") &&
+      formData.get("carrier_pay_settled") === "on";
+
     const confirmed = isConfirmedCarrierPay({
       submitted: carrierPay,
       customerRate: tariff ?? current?.customer_rate,
       reservationFee: deposit ?? current?.deposit_amount,
+      declaredSettled,
       storedConfirmed: current?.carrier_pay_confirmed ?? false,
     });
 

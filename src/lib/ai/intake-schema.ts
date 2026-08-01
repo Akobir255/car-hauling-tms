@@ -44,7 +44,11 @@ export const MAX_TEXT_CHARS = 200_000;
 const field = <T extends z.ZodTypeAny>(inner: T) =>
   z.object({
     value: inner.nullable(),
-    confidence: z.number(),
+    // The bounds are validated CLIENT-side by messages.parse() — the SDK strips
+    // numeric min/max from the wire schema — so they change nothing the model
+    // sees and need no PROMPT_VERSION bump. A confidence of 7 or −1 now fails
+    // the parse instead of sailing past every threshold comparison.
+    confidence: z.number().min(0).max(1),
   });
 
 const str = () => field(z.string());
