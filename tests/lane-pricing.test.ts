@@ -9,6 +9,7 @@ import {
   toSuggestion,
   type LaneStat,
 } from "../src/lib/pricing/lanes";
+import { overrideToRecord } from "../src/components/pricing/lane-suggestion";
 
 const lane = (over: Partial<LaneStat> = {}): LaneStat => ({
   origin_state: "CA",
@@ -161,5 +162,71 @@ describe("migration 0057/0058", () => {
   it("counts a won lane by status, and treats cancelled and lost as lost", () => {
     expect(fix).toMatch(/filter \(where l\.status in \('cancelled','lost'\)\)/);
     expect(fix).toMatch(/'booked','dispatched','picked_up'/);
+  });
+});
+
+describe("overrideToRecord", () => {
+  const s = toSuggestion(lane(), {})!; // median 750, 298 samples
+
+  it("records a typed rate that disagrees with the suggestion", () => {
+    expect(overrideToRecord("900", s)).toEqual({ suggested: 750, entered: 900, sampleSize: 298 });
+  });
+
+  it("does not call agreeing with the median an override", () => {
+    expect(overrideToRecord("750", s)).toBeNull();
+  });
+
+  it("records nothing without a suggestion on screen", () => {
+    expect(overrideToRecord("900", null)).toBeNull();
+  });
+
+  it("records nothing for an empty or unreadable rate — a lead, not a price", () => {
+    expect(overrideToRecord("", s)).toBeNull();
+    expect(overrideToRecord("  ", s)).toBeNull();
+    expect(overrideToRecord("abc", s)).toBeNull();
+    expect(overrideToRecord("0", s)).toBeNull();
+    expect(overrideToRecord("-50", s)).toBeNull();
+  });
+});
+
+describe("migration 0061", () => {
+  const sql = readFileSync(
+    join(process.cwd(), "supabase/migrations/0061_lane_refresh_quote_outcomes.sql"),
+    "utf8"
+  );
+
+  it("keeps the ten-load privacy floor", () => {
+    // Still the guard that stops a published aggregate describing one hidden
+    // customer's price — outcome folding must not loosen it.
+    expect(sql).toMatch(/having count\(\*\) >= 10;/);
+  });
+
+  it("still refuses to let authenticated run the refresh", () => {
+    expect(sql).toMatch(
+      /revoke all on function public\.refresh_lane_price_stats\(\) from public, anon, authenticated;/
+    );
+    expect(sql).toMatch(/security definer/);
+  });
+
+  it("keeps the pg_safeupdate workaround on the delete", () => {
+    expect(sql).toMatch(/delete from lane_price_stats where true;/);
+  });
+
+  it("folds quote_outcomes into the win and loss counts", () => {
+    expect(sql).toMatch(/from quote_outcomes q/);
+    expect(sql).toMatch(/bool_or\(q\.outcome = 'won'\)/);
+    expect(sql).toMatch(/bool_or\(q\.outcome in \('lost', 'expired'\)\)/);
+  });
+
+  it("never counts a load as both won and lost", () => {
+    // The lost filter is gated on NOT matching the won condition.
+    expect(sql).toMatch(/not \(\s*l\.status in \(\s*'ready'[\s\S]*?or coalesce\(o\.any_won, false\)\s*\)\s*and \(l\.status in \('cancelled','lost'\) or coalesce\(o\.any_lost, false\)\)/);
+  });
+
+  it("coalesces the outcome flags — bool_or over no rows is NULL, not false", () => {
+    // Without the coalesce, a plain cancelled load with no outcome rows makes
+    // the lost filter NULL and silently drops out of the count.
+    expect(sql).toMatch(/coalesce\(o\.any_won, false\)/);
+    expect(sql).toMatch(/coalesce\(o\.any_lost, false\)/);
   });
 });

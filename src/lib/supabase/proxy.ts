@@ -35,7 +35,10 @@ const PUBLIC_PATHS = [
 // the fix. NOTE the warning above applies with full force: this bypass is
 // prefix-based, so that handler authenticates itself -- token, kind, expiry,
 // load state and rate limit are all checked there.
-const SELF_AUTHENTICATING_PREFIXES = ["/api/telephony", "/api/track"];
+// /api/cron/* is invoked by Vercel's scheduler, which sends a CRON_SECRET
+// bearer header and no cookie — a 307 to /login would return 200 with HTML
+// and the job would "succeed" without ever running.
+const SELF_AUTHENTICATING_PREFIXES = ["/api/telephony", "/api/track", "/api/cron"];
 
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;

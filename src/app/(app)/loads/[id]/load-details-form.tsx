@@ -7,7 +7,10 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { FormSection, FieldLabel } from "@/components/form-section";
+import { LaneSuggestionBand, overrideToRecord } from "@/components/pricing/lane-suggestion";
+import type { LaneSuggestion } from "@/lib/pricing/lanes";
 import { RouteMap } from "@/components/route-map";
+import { recordPriceOverride } from "./quote-outcome-actions";
 import {
   BALANCE_PAID_BY,
   COD_METHOD,
@@ -79,6 +82,8 @@ function EndpointFields({
   dateLabel,
   contact,
   onContact,
+  stateValue,
+  onStateChange,
   locked,
   copyOptions,
 }: {
@@ -89,6 +94,10 @@ function EndpointFields({
   dateLabel: string;
   contact: ContactState;
   onContact: (field: keyof ContactState, value: string) => void;
+  /** Controlled, unlike the fields around it: the lane-suggestion band needs
+   *  to react as the state codes are typed, not after a save. */
+  stateValue: string;
+  onStateChange: (value: string) => void;
   /** A copy is active: these fields track their source instead of the rep. */
   locked: boolean;
   copyOptions: CopyOption[];
@@ -117,7 +126,13 @@ function EndpointFields({
         </div>
         <div className="col-span-1 space-y-1.5">
           <FieldLabel htmlFor={`${prefix}_state`}>State</FieldLabel>
-          <Input id={`${prefix}_state`} name={`${prefix}_state`} maxLength={2} defaultValue={v(`${prefix}_state`)} />
+          <Input
+            id={`${prefix}_state`}
+            name={`${prefix}_state`}
+            maxLength={2}
+            value={stateValue}
+            onChange={(e) => onStateChange(e.target.value)}
+          />
         </div>
         <div className="col-span-3 space-y-1.5 md:col-span-2">
           <FieldLabel htmlFor={`${prefix}_zip`}>ZIP</FieldLabel>
@@ -240,6 +255,21 @@ export function LoadDetailsForm({
   const [distance, setDistance] = useState(load.distance_miles?.toString() ?? "");
   const [dirty, setDirty] = useState(false);
 
+  // Controlled for the lane-suggestion band: leads get PRICED on this form
+  // (updateLoad promotes lead→quote on pricing), so the pricing moment needs
+  // the same history the new-load form shows. States and transport feed the
+  // lookup; the rate feeds the outlier warning and the override record.
+  const [pickupState, setPickupState] = useState(load.pickup_state ?? "");
+  const [deliveryState, setDeliveryState] = useState(load.delivery_state ?? "");
+  const [transport, setTransport] = useState<string>(load.transport_type);
+  const [rate, setRate] = useState(load.customer_rate?.toString() ?? "");
+  // The suggestion currently on screen — a ref because it is only read at
+  // submit time, to record an override against exactly what the rep saw.
+  const laneRef = useRef<LaneSuggestion | null>(null);
+  const handleLaneSuggestion = useCallback((s: LaneSuggestion | null) => {
+    laneRef.current = s;
+  }, []);
+
   // What the rep typed, kept separately from what a ticked box is mirroring,
   // so unticking can hand the typed values back instead of the copy.
   const [pickupTyped, setPickupTyped] = useState<ContactState>(() => contactOf(load, "pickup"));
@@ -294,6 +324,25 @@ export function LoadDetailsForm({
       ref={formRef}
       action={formAction}
       onInput={() => setDirty(true)}
+      onSubmit={() => {
+        // Pricing telemetry, fire-and-forget: the rep re-priced this load away
+        // from the suggestion on screen. Gated on the rate actually changing
+        // this session — re-saving an old rate is not a new pricing decision —
+        // and the action never throws, so the save cannot be hurt by it.
+        if (Number(rate) === Number(load.customer_rate ?? NaN)) return;
+        const rec = overrideToRecord(rate, laneRef.current);
+        if (rec) {
+          void recordPriceOverride({
+            loadId: load.id,
+            originState: pickupState,
+            destState: deliveryState,
+            suggested: rec.suggested,
+            entered: rec.entered,
+            sampleSize: rec.sampleSize,
+            reason: null,
+          });
+        }
+      }}
       onKeyDown={(e) => {
         // Enter in a text input must never submit the whole form mid-edit;
         // Save is an explicit click (or tab + Enter on the button).
@@ -341,6 +390,8 @@ export function LoadDetailsForm({
             dateLabel="Ready date"
             contact={pickupContact}
             onContact={(field, value) => setPickupTyped((prev) => ({ ...prev, [field]: value }))}
+            stateValue={pickupState}
+            onStateChange={setPickupState}
             locked={pickupCopy && Boolean(shipper)}
             copyOptions={
               shipper
@@ -362,6 +413,8 @@ export function LoadDetailsForm({
             dateLabel="ETA"
             contact={deliveryContact}
             onContact={(field, value) => setDeliveryTyped((prev) => ({ ...prev, [field]: value }))}
+            stateValue={deliveryState}
+            onStateChange={setDeliveryState}
             locked={deliveryCopy !== null}
             copyOptions={[
               ...(shipper
@@ -389,7 +442,12 @@ export function LoadDetailsForm({
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
               <div className="space-y-1.5">
                 <FieldLabel htmlFor="transport_type">Transport type</FieldLabel>
-                <NativeSelect id="transport_type" name="transport_type" defaultValue={load.transport_type}>
+                <NativeSelect
+                  id="transport_type"
+                  name="transport_type"
+                  value={transport}
+                  onChange={(e) => setTransport(e.target.value)}
+                >
                   <option value="open">Open</option>
                   <option value="enclosed">Enclosed</option>
                   <option value="driveaway">Driveaway</option>
@@ -409,7 +467,13 @@ export function LoadDetailsForm({
             <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
               <div className="space-y-1.5">
                 <FieldLabel htmlFor="customer_rate">Rate ($)</FieldLabel>
-                <Input id="customer_rate" name="customer_rate" inputMode="decimal" defaultValue={load.customer_rate ?? ""} />
+                <Input
+                  id="customer_rate"
+                  name="customer_rate"
+                  inputMode="decimal"
+                  value={rate}
+                  onChange={(e) => setRate(e.target.value)}
+                />
               </div>
               <div className="space-y-1.5">
                 <FieldLabel htmlFor="deposit_amount">Deposit ($)</FieldLabel>
@@ -420,6 +484,20 @@ export function LoadDetailsForm({
                 <Input id="balance_due" name="balance_due" inputMode="decimal" defaultValue={load.balance_due ?? ""} />
               </div>
             </div>
+            {/* What we have quoted on this lane before — same band as the
+                new-load form. No vehicle passed: vehicles are edited elsewhere
+                on this page, and the API answers with the broader lane. */}
+            <LaneSuggestionBand
+              originState={pickupState}
+              destState={deliveryState}
+              transport={transport}
+              rate={rate}
+              onUseSuggestion={(price) => {
+                setRate(String(price));
+                setDirty(true);
+              }}
+              onSuggestionChange={handleLaneSuggestion}
+            />
             <div className="space-y-1.5">
               {/* The one 700-weight string in the spec. msgplane also paints it
                   #2196f3, but that is 3.1:1 as text — the emphasis comes from

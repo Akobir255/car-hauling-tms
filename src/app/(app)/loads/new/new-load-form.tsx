@@ -8,10 +8,12 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { FormSection, FieldLabel } from "@/components/form-section";
+import { LaneSuggestionBand, overrideToRecord } from "@/components/pricing/lane-suggestion";
 import { defaultReservationFee, offeredCarrierPay } from "@/lib/pricing";
-import { isOutlier, type LaneSuggestion } from "@/lib/pricing/lanes";
+import type { LaneSuggestion } from "@/lib/pricing/lanes";
 import type { LoadFormState } from "../actions";
 import { createLoad } from "../actions";
+import { recordPriceOverride } from "../[id]/quote-outcome-actions";
 import { VehiclesFieldArray } from "./vehicles-field-array";
 
 const initialState: LoadFormState = { error: null };
@@ -283,52 +285,13 @@ export function NewLoadForm() {
     };
   }, [pickup.zip, delivery.zip, transport, firstVehicle.vehicle_type, firstVehicle.condition]);
 
-  // Phase 6a — what we have actually quoted on this state lane before.
-  //
-  // Separate from the ORS estimate above and deliberately so: that one is a
-  // computed price from distance, this one is our own history. When they
-  // disagree, the disagreement is the useful part, so both are shown.
-  //
-  // Keyed on STATE, not ZIP, so it answers as soon as the states are known —
-  // typically several fields before a ZIP is typed.
-  const [lane, setLane] = useState<LaneSuggestion | null>(null);
-  useEffect(() => {
-    let active = true;
-    // Every setLane below sits inside the timer, including the "not two states
-    // yet" clear. A synchronous setState in an effect body is a lint ERROR
-    // under React 19 (react-hooks/set-state-in-effect) — same fix as the toast
-    // in intake-form.tsx.
-    const timer = setTimeout(async () => {
-      const from = pickup.state.trim();
-      const to = delivery.state.trim();
-      if (from.length !== 2 || to.length !== 2) {
-        if (active) setLane(null);
-        return;
-      }
-      try {
-        const params = new URLSearchParams({
-          from,
-          to,
-          vehicle: firstVehicle.vehicle_type,
-          transport,
-        });
-        const r = await fetch(`/api/pricing/lane?${params.toString()}`);
-        // 503 is the feature being off. Not an error worth showing anyone.
-        if (!active || !r.ok) {
-          if (active) setLane(null);
-          return;
-        }
-        const d = await r.json();
-        if (active) setLane(d.suggestion ?? null);
-      } catch {
-        if (active) setLane(null);
-      }
-    }, 400);
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [pickup.state, delivery.state, transport, firstVehicle.vehicle_type]);
+  // The lane suggestion currently on screen (LaneSuggestionBand reports it).
+  // A ref, not state: it is only read at submit time, to record an override
+  // against exactly what the rep was shown.
+  const laneRef = useRef<LaneSuggestion | null>(null);
+  const handleLaneSuggestion = useCallback((s: LaneSuggestion | null) => {
+    laneRef.current = s;
+  }, []);
 
   // What the carrier is offered = total minus the reservation fee we keep.
   const rateNum = Number(rate);
@@ -376,6 +339,25 @@ export function NewLoadForm() {
     <form
       action={formAction}
       onInput={() => setDirty(true)}
+      onSubmit={() => {
+        // Pricing telemetry, fire-and-forget: the rep saved a rate that
+        // differs from the suggestion on screen. There is no load yet at the
+        // pricing moment on this form — price_overrides.load_id is nullable
+        // (0057) for that reason — and the action never throws, so the save
+        // cannot be hurt by its telemetry.
+        const rec = overrideToRecord(rate, laneRef.current);
+        if (rec) {
+          void recordPriceOverride({
+            loadId: null,
+            originState: pickup.state,
+            destState: delivery.state,
+            suggested: rec.suggested,
+            entered: rec.entered,
+            sampleSize: rec.sampleSize,
+            reason: null,
+          });
+        }
+      }}
       onKeyDown={(e) => {
         const target = e.target as HTMLElement;
         if (e.key === "Enter" && target.tagName === "INPUT") e.preventDefault();
@@ -531,45 +513,16 @@ export function NewLoadForm() {
           {/* What we have quoted on this lane before. Advisory, like the
               estimate below it, but sourced from our own book rather than from
               distance — so the wording says "quoted", never "predicted". */}
-          {lane && (
-            <div className="col-span-2 space-y-1 rounded-md border border-dashed bg-muted px-3 py-2 text-sm lg:col-span-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span>
-                  We usually quote{" "}
-                  <span className="font-semibold tabular-nums">
-                    ${lane.median.toLocaleString()}
-                  </span>{" "}
-                  <span className="text-muted-foreground">
-                    · typically ${lane.low.toLocaleString()}–${lane.high.toLocaleString()} · from{" "}
-                    {lane.samples.toLocaleString()} past loads
-                  </span>
-                </span>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="max-md:min-h-12"
-                  onClick={() => setRate(String(lane.median))}
-                >
-                  Use ${lane.median.toLocaleString()}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {lane.matchedOn}
-                {lane.broadened && " — no history for this exact vehicle and transport, so this is the wider lane"}
-                {lane.winRate != null &&
-                  ` · ${Math.round(lane.winRate * 100)}% of decided quotes here were won`}
-              </p>
-              {isOutlier(rate.trim() === "" ? null : rateNum, lane) && (
-                <p className="text-xs text-ord-deposit">
-                  ${rateNum.toLocaleString()} is{" "}
-                  {rateNum > lane.median ? "above" : "below"} the usual by{" "}
-                  {Math.abs(Math.round(((rateNum - lane.median) / lane.median) * 100))}% — worth a
-                  second look, and worth a note saying why.
-                </p>
-              )}
-            </div>
-          )}
+          <LaneSuggestionBand
+            originState={pickup.state}
+            destState={delivery.state}
+            vehicleType={firstVehicle.vehicle_type}
+            transport={transport}
+            rate={rate}
+            onUseSuggestion={(price) => setRate(String(price))}
+            onSuggestionChange={handleLaneSuggestion}
+            className="col-span-2 lg:col-span-4"
+          />
 
           {/* Suggested price — advisory only; the agent sets the real rate. */}
           {(suggestLoading || suggestion || suggestError) && (
