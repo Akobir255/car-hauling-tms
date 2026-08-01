@@ -5,11 +5,12 @@
 // be tested against "the day before the pickup date" and every interesting case
 // here is a date boundary.
 //
-// The brief's version of this compares live GPS against a routing ETA. That
-// needs Phase 2 switched on and a routing key, so what is scored here is the
-// paperwork-and-promises half: dates that have passed, an order with nobody
-// hauling it, an agreement nobody signed. In this book those are the failures
-// that actually happen, and none of them need a satellite.
+// The brief's version of this compares live GPS against a routing ETA. The
+// routing half still needs a key, so the core is the paperwork-and-promises
+// half: dates that have passed, an order with nobody hauling it, an agreement
+// nobody signed. When Phase 2 is switched on, the caller may also inject the
+// GPS signals it already fetched (last fix, live driver link, pickup-fence
+// arrivals) — all optional, so the scorer works identically with GPS dark.
 
 /** Statuses where an order is committed but not yet delivered. */
 export const ACTIVE_STATUSES = [
@@ -39,7 +40,30 @@ export type RiskInput = {
   contract_sent: boolean | null;
   follow_up_at: string | null;
   updated_at: string | null;
+  // Phase 2 signals, injected by the caller only when gps_tracking is on.
+  // Optional so the scorer is unchanged with GPS dark — absent means unknown,
+  // and an unknown must never fire an alarm on its own.
+  /** recorded_at of the newest shipment_locations row for this load. */
+  lastFixAt?: string | null;
+  /** An unexpired, unrevoked driver token exists — somebody is meant to be pinging. */
+  trackingActive?: boolean;
+  /** geofence_events: arrived at the pickup fence. */
+  arrivedPickupAt?: string | null;
+  /** geofence_events: departed the pickup fence. */
+  departedPickupAt?: string | null;
 };
+
+/** Every factor key assess() can emit — the vocabulary for acknowledgements. */
+export const RISK_FACTOR_KEYS = [
+  "delivery_overdue",
+  "pickup_overdue",
+  "no_carrier",
+  "unsigned",
+  "followup_overdue",
+  "stale",
+  "position_stale",
+  "pickup_dwell",
+] as const;
 
 export type RiskFactor = {
   key: string;
@@ -69,17 +93,30 @@ const DAY = 86_400_000;
  * makes today read as -1 from lunchtime onward, which would have put every
  * active order in the queue as overdue.
  *
- * A real timestamp (updated_at) keeps instant-to-instant arithmetic, where
- * flooring is right: 9.5 days untouched is 9 days untouched, not 10.
+ * A real timestamp (updated_at, follow_up_at) keeps instant-to-instant
+ * arithmetic, truncated TOWARD ZERO: 9.5 days untouched is 9 days untouched,
+ * not 10, and a follow-up one hour late is 0 whole days late, not "due 1 day
+ * ago". Math.floor here rounded negative intervals AWAY from zero —
+ * floor(-0.04) is -1 — which fired "overdue" an hour past a timestamp and
+ * "stale" at 6.5 days, both contradicting the sentence above.
  */
 export function daysUntil(iso: string | null, now: Date): number | null {
   if (!iso) return null;
   const dateOnly = iso.length <= 10;
   const t = Date.parse(dateOnly ? `${iso}T12:00:00Z` : iso);
   if (!Number.isFinite(t)) return null;
-  if (!dateOnly) return Math.floor((t - now.getTime()) / DAY);
+  // + 0 turns Math.trunc's -0 (for a timestamp under a day past) into +0.
+  if (!dateOnly) return Math.trunc((t - now.getTime()) / DAY) + 0;
   const base = Date.parse(`${now.toISOString().slice(0, 10)}T12:00:00Z`);
   return Math.round((t - base) / DAY);
+}
+
+/** Whole hours from `iso` to now; null when absent or unparseable. */
+function hoursSince(iso: string | null | undefined, now: Date): number | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  return Math.trunc((now.getTime() - t) / 3_600_000) + 0;
 }
 
 /**
@@ -91,8 +128,11 @@ export function daysUntil(iso: string | null, now: Date): number | null {
  */
 export function assess(load: RiskInput, now: Date, acknowledged: Set<string> = new Set()): RiskAssessment {
   const f: RiskFactor[] = [];
+  // "*" is a whole-order acknowledgement — a null-factor row in
+  // risk_acknowledgements, which is what a snooze inserts. It silences
+  // everything until it expires.
   const add = (key: string, weight: number, detail: string) => {
-    if (!acknowledged.has(key)) f.push({ key, weight, detail });
+    if (!acknowledged.has("*") && !acknowledged.has(key)) f.push({ key, weight, detail });
   };
 
   const toPickup = daysUntil(load.pickup_ready_date, now);
@@ -137,9 +177,37 @@ export function assess(load: RiskInput, now: Date, acknowledged: Set<string> = n
       `Follow-up was due ${Math.abs(toFollowUp)} day${Math.abs(toFollowUp) === 1 ? "" : "s"} ago`);
   }
 
-  // Moving, but nothing has been recorded against it for a week.
+  // ---- Phase 2 signals, when the caller injected them ----
+
+  const fixAge = hoursSince(load.lastFixAt, now);
+
+  // A driver link is live but the phone has gone quiet. This is the alarm for
+  // the driver page's phone-locked failure mode: tracking was set up, the truck
+  // is supposedly moving, and no position has come in for a working shift.
+  if (
+    load.trackingActive === true &&
+    ["dispatched", "picked_up"].includes(load.status) &&
+    (fixAge == null || fixAge >= 8)
+  ) {
+    add("position_stale", 25,
+      fixAge == null
+        ? "Driver tracking is live but no position has ever come in"
+        : `Driver tracking is live but the last GPS fix was ${fixAge} hours ago`);
+  }
+
+  // Arrived at the pickup fence a full day ago and never left, still marked
+  // dispatched — a car that will not load, or a driver who gave up quietly.
+  const dwell = hoursSince(load.arrivedPickupAt, now);
+  if (load.status === "dispatched" && !load.departedPickupAt && dwell != null && dwell >= 24) {
+    add("pickup_dwell", 20, `Arrived at the pickup ${dwell} hours ago and has not left`);
+  }
+
+  // Moving, but nothing has been recorded against it for a week. A recent GPS
+  // fix suppresses this: a pinging truck is not an abandoned order, even when
+  // nobody has typed on it — GPS pings never touch loads.updated_at.
   const sinceTouch = load.updated_at ? -1 * (daysUntil(load.updated_at, now) ?? 0) : null;
-  if (moving && sinceTouch != null && sinceTouch >= 7) {
+  const pingedRecently = fixAge != null && fixAge < 24;
+  if (moving && sinceTouch != null && sinceTouch >= 7 && !pingedRecently) {
     add("stale", 12, `Nothing recorded on this order for ${sinceTouch} days`);
   }
 

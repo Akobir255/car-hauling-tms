@@ -10,19 +10,19 @@ import {
   MessageSquare,
   Package,
   ShieldAlert,
-  TriangleAlert,
   Truck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
-import { cn } from "@/lib/utils";
 import { isFeatureEnabled } from "@/lib/flags";
+import { recordEvent } from "@/lib/events/record-event";
 import {
   ACTIVE_STATUSES as RISK_STATUSES,
   atRiskQueue,
   type RiskAssessment,
   type RiskInput,
 } from "@/lib/risk/score";
+import { RiskCard } from "./risk-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -181,7 +181,10 @@ export default async function DashboardPage() {
   // between the two reads, and Date.now() during render is a lint error under
   // React 19's purity rule besides.
   const asOf = new Date();
-  const exceptionsEnabled = await isFeatureEnabled("exception_engine");
+  const [exceptionsEnabled, gpsEnabled] = await Promise.all([
+    isFeatureEnabled("exception_engine"),
+    isFeatureEnabled("gps_tracking"),
+  ]);
   let atRisk: RiskAssessment[] = [];
   if (exceptionsEnabled) {
     let riskQuery = supabase
@@ -190,6 +193,13 @@ export default async function DashboardPage() {
         "id, load_number, status, carrier_id, pickup_ready_date, delivery_eta, date_signed, contract_sent_at, contract_sent, follow_up_at, updated_at"
       )
       .in("status", RISK_STATUSES)
+      // The 500-row cap has to degrade toward the rows most likely to be in
+      // trouble, and deterministically: earliest promised delivery first (an
+      // overdue one sorts before everything), then earliest pickup, then id so
+      // two renders never disagree about which rows made the cut.
+      .order("delivery_eta", { ascending: true, nullsFirst: false })
+      .order("pickup_ready_date", { ascending: true, nullsFirst: false })
+      .order("id", { ascending: true })
       .limit(500);
     if (isSales) riskQuery = riskQuery.eq("sales_owner_id", profile.id);
     const { data: riskRows, error: riskError } = await riskQuery;
@@ -199,7 +209,8 @@ export default async function DashboardPage() {
       console.error("at-risk queue failed:", riskError.message);
     } else {
       const acked = new Map<string, Set<string>>();
-      const ids = (riskRows ?? []).map((r) => r.id);
+      let rows = (riskRows ?? []) as RiskInput[];
+      const ids = rows.map((r) => r.id);
       if (ids.length) {
         const { data: acks } = await supabase
           .from("risk_acknowledgements")
@@ -213,7 +224,93 @@ export default async function DashboardPage() {
           acked.set(a.load_id, set);
         }
       }
-      atRisk = atRiskQueue((riskRows ?? []) as RiskInput[], asOf, acked);
+
+      // With GPS on, hand the scorer what the satellites know: latest fix per
+      // load, whether a driver link is live, and pickup-fence arrivals. All
+      // best-effort — a failed read scores like GPS-dark, never a broken page.
+      // Reads go through the caller's client like everything else here; all
+      // three tables are staff-readable under 0050 (tracking_tokens included).
+      if (gpsEnabled && ids.length) {
+        const [locsRes, tokensRes, fencesRes] = await Promise.all([
+          // Newest-first plus first-seen-per-load below = latest fix per load.
+          // Capped at PostgREST's 1,000 rows: with more recent fixes than that
+          // across candidates, a quiet truck's older fix drops out and it
+          // scores as unfixed — the alarming direction, not the silent one.
+          supabase
+            .from("shipment_locations")
+            .select("load_id, recorded_at")
+            .in("load_id", ids)
+            .order("recorded_at", { ascending: false })
+            .limit(1000),
+          supabase
+            .from("tracking_tokens")
+            .select("load_id")
+            .in("load_id", ids)
+            .eq("kind", "driver")
+            .is("revoked_at", null)
+            .gt("expires_at", asOf.toISOString()),
+          supabase
+            .from("geofence_events")
+            .select("load_id, transition, occurred_at")
+            .in("load_id", ids)
+            .eq("fence", "pickup"),
+        ]);
+        for (const r of [locsRes, tokensRes, fencesRes]) {
+          if (r.error) console.error("risk GPS signal read failed:", r.error.message);
+        }
+        const lastFix = new Map<string, string>();
+        for (const l of locsRes.data ?? []) {
+          if (!lastFix.has(l.load_id)) lastFix.set(l.load_id, l.recorded_at);
+        }
+        const liveDriver = new Set((tokensRes.data ?? []).map((t) => t.load_id));
+        const arrived = new Map<string, string>();
+        const departed = new Map<string, string>();
+        for (const g of fencesRes.data ?? []) {
+          if (g.transition === "arrived") arrived.set(g.load_id, g.occurred_at);
+          else if (g.transition === "departed") departed.set(g.load_id, g.occurred_at);
+        }
+        rows = rows.map((r) => ({
+          ...r,
+          lastFixAt: lastFix.get(r.id) ?? null,
+          trackingActive: liveDriver.has(r.id),
+          arrivedPickupAt: arrived.get(r.id) ?? null,
+          departedPickupAt: departed.get(r.id) ?? null,
+        }));
+      }
+
+      atRisk = atRiskQueue(rows, asOf, acked);
+
+      // First time a load reaches the high band, put it on the timeline.
+      // Check-then-insert against an append-only table: a rare race duplicate
+      // is acceptable, a flood is not — so a failed dedupe read emits nothing.
+      // Best-effort throughout, and the payload is margin-free by construction
+      // ({score, reason}); load_events.payload is readable by all staff.
+      const flagged = atRisk.filter((a) => a.band === "high");
+      if (flagged.length) {
+        const { data: already, error: dedupeError } = await supabase
+          .from("load_events")
+          .select("load_id")
+          .eq("event_type", "risk_flagged")
+          .in("load_id", flagged.map((a) => a.id));
+        if (dedupeError) {
+          console.error("risk_flagged dedupe read failed:", dedupeError.message);
+        } else {
+          const seen = new Set((already ?? []).map((e) => e.load_id));
+          // recordEvent never throws; failures log inside it.
+          await Promise.all(
+            flagged
+              .filter((a) => !seen.has(a.id))
+              .map((a) =>
+                recordEvent({
+                  loadId: a.id,
+                  type: "risk_flagged",
+                  payload: { score: a.score, reason: a.factors[0]?.detail ?? "at risk" },
+                  source: "integration",
+                })
+              )
+          );
+        }
+      }
     }
   }
 
@@ -419,49 +516,21 @@ export default async function DashboardPage() {
               somebody chose, this is work going wrong whether or not anyone
               chose to look. Scored in TypeScript from the same role view the
               rest of this page reads, so it inherits RLS and the margin column
-              grants rather than needing its own opinion about either. */}
+              grants rather than needing its own opinion about either. The card
+              itself is a client component for the Handled/Snooze buttons, with
+              its own error boundary — it may vanish, never take the page. */}
           {exceptionsEnabled && atRisk.length > 0 && (
-            <Card>
-              <CardHeader className="flex flex-row items-center gap-2">
-                <TriangleAlert className="size-4 text-ord-deposit" aria-hidden="true" />
-                <CardTitle>Needs attention</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-1.5">
-                {atRisk.slice(0, 6).map((a) => (
-                  <Link
-                    key={a.id}
-                    href={`/loads/${a.id}`}
-                    className="flex items-start justify-between gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-msg-hover"
-                  >
-                    <span className="min-w-0">
-                      <span className="tabular-nums text-msg-link">{a.loadNumber}</span>
-                      {/* The worst factor only. A stacked list of five worries
-                          per order is a wall nobody reads; the rest are on the
-                          order itself. */}
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {a.factors[0]?.detail}
-                        {a.factors.length > 1 && ` · +${a.factors.length - 1} more`}
-                      </span>
-                    </span>
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wide",
-                        a.band === "high"
-                          ? "bg-ord-deposit-bg text-ord-deposit"
-                          : "bg-ord-chip text-ord-head"
-                      )}
-                    >
-                      {a.band === "high" ? "urgent" : "watch"}
-                    </span>
-                  </Link>
-                ))}
-                {atRisk.length > 6 && (
-                  <p className="px-2 pt-1 text-xs text-muted-foreground">
-                    and {atRisk.length - 6} more
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+            <RiskCard
+              items={atRisk.slice(0, 6).map((a) => ({
+                id: a.id,
+                loadNumber: a.loadNumber,
+                band: a.band,
+                detail: a.factors[0]?.detail ?? null,
+                worstFactor: a.factors[0]?.key ?? null,
+                extraCount: Math.max(0, a.factors.length - 1),
+              }))}
+              total={atRisk.length}
+            />
           )}
 
           <Card>

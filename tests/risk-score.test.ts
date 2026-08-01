@@ -39,6 +39,15 @@ describe("daysUntil", () => {
     expect(daysUntil(null, NOW)).toBeNull();
     expect(daysUntil("whenever", NOW)).toBeNull();
   });
+
+  it("truncates a timestamp toward zero — an hour past reads 0, not -1", () => {
+    // Math.floor rounded -0.04 down to -1, so a follow-up one hour late read
+    // "due 1 day ago" and "stale" fired at 6.5 days — both contradicting the
+    // function's own comment that 9.5 days untouched is 9, not 10.
+    expect(daysUntil(new Date(NOW.getTime() - 3_600_000).toISOString(), NOW)).toBe(0);
+    expect(daysUntil(new Date(NOW.getTime() - 1.5 * 86_400_000).toISOString(), NOW)).toBe(-1);
+    expect(daysUntil(new Date(NOW.getTime() + 1.5 * 86_400_000).toISOString(), NOW)).toBe(1);
+  });
 });
 
 describe("assess", () => {
@@ -86,6 +95,27 @@ describe("assess", () => {
     expect(assess(load({ ...stale, status: "booked" }), NOW).factors.map((f) => f.key)).not.toContain("stale");
   });
 
+  it("does not call a follow-up an hour late overdue", () => {
+    // Day-granular on purpose: the queue talks in whole days, and "due 1 day
+    // ago" an hour after the reminder was the old floor bug.
+    const hourLate = new Date(NOW.getTime() - 3_600_000).toISOString();
+    expect(assess(load({ follow_up_at: hourLate }), NOW).factors.map((f) => f.key))
+      .not.toContain("followup_overdue");
+    const dayLate = new Date(NOW.getTime() - 25 * 3_600_000).toISOString();
+    expect(assess(load({ follow_up_at: dayLate }), NOW).factors.map((f) => f.key))
+      .toContain("followup_overdue");
+  });
+
+  it("stale waits for seven FULL days, not six and a half", () => {
+    const touched = (hoursAgo: number) =>
+      assess(
+        load({ status: "in_transit", updated_at: new Date(NOW.getTime() - hoursAgo * 3_600_000).toISOString() }),
+        NOW
+      ).factors.map((f) => f.key);
+    expect(touched(6.5 * 24)).not.toContain("stale");
+    expect(touched(7.5 * 24)).toContain("stale");
+  });
+
   it("drops a factor somebody has acknowledged", () => {
     const l = load({ carrier_id: null, pickup_ready_date: iso(1) });
     expect(assess(l, NOW).factors).toHaveLength(1);
@@ -99,6 +129,17 @@ describe("assess", () => {
     const keys = assess(l, NOW, new Set(["no_carrier"])).factors.map((f) => f.key);
     expect(keys).toContain("delivery_overdue");
     expect(keys).not.toContain("no_carrier");
+  });
+
+  it("a whole-order acknowledgement ('*') silences every factor", () => {
+    // A null-factor risk_acknowledgements row — which is what a snooze
+    // inserts — reaches the scorer as "*".
+    const wreck = load({
+      carrier_id: null, date_signed: null, contract_sent_at: null,
+      pickup_ready_date: iso(-1), delivery_eta: iso(-3),
+    });
+    expect(assess(wreck, NOW).factors.length).toBeGreaterThan(1);
+    expect(assess(wreck, NOW, new Set(["*"])).factors).toHaveLength(0);
   });
 
   it("caps the score at 100 however many things are wrong", () => {
@@ -149,6 +190,50 @@ describe("assess", () => {
   });
 });
 
+describe("GPS-aware factors", () => {
+  // Injected by the dashboard only when gps_tracking is on; absent fields must
+  // score exactly like GPS-dark, which every earlier test in this file proves.
+  const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3_600_000).toISOString();
+  const keys = (over: Partial<RiskInput>) => assess(load(over), NOW).factors.map((f) => f.key);
+
+  it("position_stale: a live driver link that has gone quiet for 8+ hours", () => {
+    expect(keys({ status: "dispatched", trackingActive: true, lastFixAt: hoursAgo(9) }))
+      .toContain("position_stale");
+    // Never fixed at all is the same alarm — the phone-locked failure mode.
+    expect(keys({ status: "picked_up", trackingActive: true, lastFixAt: null }))
+      .toContain("position_stale");
+  });
+
+  it("position_stale stays quiet when fixes are fresh, tracking is off, or nothing has been dispatched", () => {
+    expect(keys({ status: "dispatched", trackingActive: true, lastFixAt: hoursAgo(2) }))
+      .not.toContain("position_stale");
+    expect(keys({ status: "dispatched", lastFixAt: null }))
+      .not.toContain("position_stale");
+    expect(keys({ status: "booked", trackingActive: true, lastFixAt: hoursAgo(20) }))
+      .not.toContain("position_stale");
+  });
+
+  it("pickup_dwell: at the pickup fence for 24h with no departure, still dispatched", () => {
+    expect(keys({ status: "dispatched", arrivedPickupAt: hoursAgo(30) }))
+      .toContain("pickup_dwell");
+    expect(keys({ status: "dispatched", arrivedPickupAt: hoursAgo(30), departedPickupAt: hoursAgo(28) }))
+      .not.toContain("pickup_dwell");
+    expect(keys({ status: "dispatched", arrivedPickupAt: hoursAgo(10) }))
+      .not.toContain("pickup_dwell");
+    // Once the carrier reports picked up, the dwell question is answered.
+    expect(keys({ status: "picked_up", arrivedPickupAt: hoursAgo(30) }))
+      .not.toContain("pickup_dwell");
+  });
+
+  it("a recent GPS fix suppresses updated_at staleness — a pinging truck is not abandoned", () => {
+    const base: Partial<RiskInput> = { status: "in_transit", updated_at: iso(-9) };
+    expect(keys(base)).toContain("stale");
+    expect(keys({ ...base, lastFixAt: hoursAgo(3) })).not.toContain("stale");
+    // A fix older than a day does not vouch for the truck.
+    expect(keys({ ...base, lastFixAt: hoursAgo(30) })).toContain("stale");
+  });
+});
+
 describe("atRiskQueue", () => {
   it("ignores quotes and finished work — neither can be late", () => {
     const rows = [
@@ -175,6 +260,12 @@ describe("atRiskQueue", () => {
     const rows = [load({ id: "x", delivery_eta: iso(-6) })];
     const ack = new Map([["x", new Set(["delivery_overdue"])]]);
     expect(atRiskQueue(rows, NOW, ack)).toHaveLength(0);
+  });
+
+  it("a whole-order '*' acknowledgement drops the load however many factors it has", () => {
+    const rows = [load({ id: "x", delivery_eta: iso(-6), carrier_id: null, date_signed: null })];
+    expect(atRiskQueue(rows, NOW)).toHaveLength(1);
+    expect(atRiskQueue(rows, NOW, new Map([["x", new Set(["*"])]]))).toHaveLength(0);
   });
 });
 
