@@ -60,8 +60,15 @@ declare
 begin
   select id into leo from public.profiles where email = 'leo@usstrucking.org';
   if leo is null then
-    -- Assigning to NULL is what this migration exists to undo. Fail instead.
-    raise exception 'No profile for leo@usstrucking.org — refusing to assign the book to nobody';
+    -- On US Star's database this profile always exists, and assigning the
+    -- book to NULL is what this migration exists to undo — so missing meant
+    -- fail. On a FRESH install for another company there are no profiles and
+    -- no book yet, so there is nothing to assign: skip, don't die.
+    if exists (select 1 from public.loads) or exists (select 1 from public.customers) then
+      raise exception 'No profile for leo@usstrucking.org — refusing to assign the book to nobody';
+    end if;
+    raise notice 'fresh install: no profiles and no book — nothing to assign';
+    return;
   end if;
 
   update public.loads set sales_owner_id = leo where sales_owner_id is null;
