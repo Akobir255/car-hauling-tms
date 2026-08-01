@@ -267,7 +267,19 @@ check it and 404 when it is off.
   DEPARTURE now auto-revokes the driver token and records
   `tracking_link_revoked` on the spine (customer token deliberately stays
   alive). `event_type` is unconstrained TEXT in 0049, so no migration was
-  needed for the new type. Still open: road-distance/ETA via ORS.
+  needed for the new type.
+- **Road distance + ETA (2026-08-01):** `src/lib/tracking/eta.ts` calls ORS
+  directions from the latest fix to the delivery fence centre, cached via
+  `unstable_cache` per (load, fix) for 30 min, strictly best-effort — any
+  failure renders without it and is never cached. Shown on the staff
+  Tracking band and on the customer page (business-timezone arrival
+  estimate; the straight-line figure stays as the fallback, and the page
+  shows DELIVERED once a delivery-fence event exists). The driver page's
+  revisit and 410 handling now distinguish "this delivery is complete" from
+  a dead link, and `mintTrackingToken` itself refuses pre-order stages —
+  defense in depth under the action-level gate. `eta_updated` events remain
+  unwritten on purpose: read paths must not write the spine; the ingest
+  route or a cron is the right writer if the timeline ever wants them.
 
 ## AI intake (0051) — BUILT AND APPLIED, BLOCKED ON THE KEY ONLY
 
@@ -328,6 +340,18 @@ configured on this deployment" card until it exists.
   failure, redirect untouched. 0051 pre-authorized exactly this (service-role
   stamp, same rule margin lives under). Confirmed and abandoned extractions
   are now distinguishable, which is what every future quality metric keys on.
+- **Telemetry dashboard (2026-08-01): `/admin/ai`** — the first consumer of
+  the audit tables. Calls/day (parsed vs failed), failure split by
+  stop_reason, p50/p95 latency, 7d/30d token sums with spend estimated at
+  claude-opus-5 list rates, correction rate per field, the confidently-wrong
+  list (`model_confidence >= 0.85` AND corrected), confirmed-vs-abandoned
+  via the load_id stamp, all grouped by prompt_version. requireRole
+  admin/dispatcher with caller's-client reads (0051 RLS decides), and the
+  select NEVER fetches `input_text` — it is a customer's email verbatim;
+  pinned by tests. Renders regardless of the flag with flag/key status
+  chips, so it reads "no calls yet" today and works the moment the key
+  lands. Linked beside Users in the topbar and from the intake
+  not-configured card.
 
 ## THE WHOLE BOOK IS HIDDEN (0052 + 0053) — read this before debugging "no data"
 
@@ -643,6 +667,11 @@ needs the AI key. What ships is the middle third: score, queue, acknowledge.
   spine (check-then-insert dedupe, margin-free payload). The 500-row query
   now orders by `delivery_eta` asc nulls-last so the cap degrades toward
   the urgent, not the arbitrary. Still TypeScript, still no SQL function.
+- 2026-08-01: a collapsed **Recently handled** section on the card lists
+  active acknowledgements/snoozes with a Restore button — the DELETE path
+  0059 designed for "actually, that is not handled". Known wrinkle: the card
+  only renders while something is at risk, so a fully-handled queue hides
+  the restore affordance until the next item surfaces.
 
 **Stale comment worth knowing about:** the dashboard's "Needs a carrier" card is
 gated on `canSeeMargin` with a comment claiming `carrier_id` is not in
