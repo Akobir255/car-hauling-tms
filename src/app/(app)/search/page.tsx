@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { after } from "next/server";
+import { headers } from "next/headers";
 import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { recordAccess } from "@/lib/events/record-access";
 import { SectionBand } from "@/components/section-band";
 import { StatusBadge } from "@/components/status-badge";
 import { PaperworkBadge } from "@/components/paperwork-badge";
@@ -150,6 +153,31 @@ export default async function SearchPage({
       .in("id", ownerIds);
     for (const o of owners ?? []) ownerById.set(o.id, o);
   }
+
+  // Access log (0067). This page — not /api/search, which nothing in the app
+  // calls — is where staff actually search the book, and every hit below
+  // prints a shipper's name, phone and email. Logging the route and not this
+  // would have produced a search log with nothing in it.
+  //
+  // The count is `customerById.size`, deliberately NOT the `customers.length`
+  // shown in the Shippers heading. That heading means "shippers matching what
+  // you typed"; the log has to mean "contact records this read put on screen",
+  // and the backfill above adds the shipper of every matched ORDER to that
+  // set. Searching an order number matches no shipper and still discloses one.
+  //
+  // `headers()` is read during render and closed over — inside the after()
+  // callback it throws in a Server Component. See the customer detail page.
+  const forwardedFor = (await headers()).get("x-forwarded-for");
+  after(() =>
+    recordAccess({
+      action: "customer_search",
+      actorId: profile.id,
+      entityType: "customer",
+      resultCount: customerById.size,
+      term: raw,
+      ip: forwardedFor,
+    })
+  );
 
   return (
     <div className="space-y-5">

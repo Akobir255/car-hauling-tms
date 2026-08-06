@@ -248,6 +248,27 @@
      shadow reads as a different system — so this stays a 2px navy-tinted hint.
      Anything deeper turns 100 rows into corduroy. */
   --ord-shadow: rgba(11, 92, 171, 0.14);
+
+  /* ---- Session watermark --------------------------------------------------
+     Ink for the attribution overlay (see session-watermark.tsx). Two values,
+     and the split is NOT light-vs-dark — it is SCREEN vs PAPER.
+
+     --watermark-ink is the theme's own foreground at 14%. It has to be the
+     foreground rather than a fixed grey, because a grey chosen against
+     #ffffff vanishes on #121212. 14% is calibrated, not picked: composited on
+     the light page it lands on #e0e0e0, which IS --border — so the rule is
+     "as present as a hairline rule, never as present as content", and the
+     same alpha measures 1.32:1 light and 1.40:1 dark, i.e. the two themes
+     read alike instead of one being twice the other. The first draft used 9%
+     (#ebebeb, 1.19:1) and that is too little to survive a phone photo of a
+     monitor, which is the entire job.
+
+     --watermark-ink-paper is black at 18% (~#d1d1d1, 1.52:1) for anywhere the
+     surface is white whatever the theme: print, and the dispatch sheet.
+     Heavier than the screen value on purpose — a printer dithers pale greys
+     away and a scan or a fax starts from less than a photo does. */
+  --watermark-ink: rgb(33 33 33 / 0.14);
+  --watermark-ink-paper: rgb(0 0 0 / 0.18);
 }
 
 .dark {
@@ -335,6 +356,13 @@
   --ord-carrier: #cfd8dc;
   --ord-carrier-bg: #2a3238;
   --ord-shadow: rgba(0, 0, 0, 0.55);
+
+  /* The mirror of the light value: this theme's own 87% ink at the same 14%,
+     which is what makes the two themes measure alike (1.40:1 here against
+     1.32:1 on white) rather than one being a ghost of the other.
+     --watermark-ink-paper deliberately does NOT flip — paper is white in both
+     themes, so anything paper-like keeps the light-mode ink. */
+  --watermark-ink: rgb(224 224 224 / 0.14);
 }
 
 @layer base {
@@ -372,6 +400,47 @@
     -moz-osx-font-smoothing: auto;
     text-rendering: optimizeLegibility;
   }
+}
+
+/* ---- Session watermark ------------------------------------------------------
+   The colour and the print behaviour for session-watermark.tsx. Unlayered on
+   purpose: Tailwind's utilities live in @layer utilities, and unlayered rules
+   outrank a layered one, so these win over any text-* utility that lands on the
+   overlay later without needing !important.
+
+   Why the overlay is TEXT and not a background-image of tiled SVG, which is the
+   obvious way to draw a watermark: Chrome's print dialog ships with "Background
+   graphics" OFF, so a background would silently not print for most of this team
+   most of the time, and the one requirement this feature cannot fail is
+   surviving Ctrl+P. Foreground text is never dropped by that setting. */
+[data-session-watermark] {
+  color: var(--watermark-ink);
+}
+
+/* The dispatch sheet is paper, not UI: it paints itself black-on-white in BOTH
+   themes so it prints identically everywhere. In dark mode the overlay's light
+   ink would wash out over that white sheet ON SCREEN, which is exactly the
+   screenshot a watermark exists for. The overlay is a SIBLING of <main>, so a
+   custom property set on the sheet cannot inherit into it — :has() is what
+   reaches back up the tree. Any future forced-light page marks itself the same
+   way. */
+body:has([data-paper-sheet]) [data-session-watermark] {
+  color: var(--watermark-ink-paper);
+}
+
+@media print {
+  [data-session-watermark] {
+    /* Paper is white whatever theme the screen was in. */
+    color: var(--watermark-ink-paper);
+    /* Nothing else here fights the UA's ink-saving pass, and a watermark it
+       lightens into nothing is a watermark that isn't there. */
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  /* The overlay is position: fixed, and in the paged media formatting model a
+     fixed box is repeated on EVERY page (CSS 2.1 §9.6.1) — that, not this
+     block, is what carries the watermark onto page two of a long dispatch
+     sheet. Do not "fix" it to absolute. */
 }
 
 /* The focus indicator for hand-rolled links and buttons that carry no variant

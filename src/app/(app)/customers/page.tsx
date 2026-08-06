@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { after } from "next/server";
+import { headers } from "next/headers";
 import { Mail, Phone, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { recordAccess } from "@/lib/events/record-access";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/empty-state";
@@ -43,6 +46,25 @@ export default async function CustomersPage({
   const from = total === 0 ? 0 : page * PAGE_SIZE + 1;
   const to = Math.min(page * PAGE_SIZE + customers.length, total);
   const pageHref = (p: number) => (p > 0 ? `/customers?page=${p}` : "/customers");
+
+  // Access log (0067). The count is the rows on THIS page — what was actually
+  // disclosed — not `total`, which is a number the database reported and
+  // nobody read. Paging through the book therefore leaves one row per page,
+  // which is the shape that makes a bulk read visible.
+  //
+  // `headers()` is read during render and closed over; calling it inside the
+  // after() callback throws in a Server Component. See the customer detail
+  // page for the full reason.
+  const forwardedFor = (await headers()).get("x-forwarded-for");
+  after(() =>
+    recordAccess({
+      action: "customer_list",
+      actorId: profile.id,
+      entityType: "customer",
+      resultCount: customers.length,
+      ip: forwardedFor,
+    })
+  );
 
   return (
     <div className="space-y-4">

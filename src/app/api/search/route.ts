@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { MANAGER_LOADS_TABLE } from "@/lib/loads-table";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { recordAccess } from "@/lib/events/record-access";
 
 // Global search across shippers, carriers and orders — the omnibox in the
 // sidebar. Reads go through the caller's session client, so RLS decides what
@@ -30,6 +31,8 @@ function likePattern(term: string): string {
 export async function GET(req: NextRequest) {
   const profile = await requireProfile();
   const raw = (req.nextUrl.searchParams.get("q") || "").trim();
+  // Below two characters nothing is queried and nothing comes back, so there
+  // is no read to log — the access-log call is at the end of this handler.
   if (raw.length < 2) return NextResponse.json({ hits: [] as SearchHit[] });
 
   const term = raw.slice(0, 60);
@@ -113,6 +116,25 @@ export async function GET(req: NextRequest) {
       href: `/loads/${l.id}`,
     });
   }
+
+  // Access log (0067). `after()` runs this once the response is on its way, so
+  // the searcher never waits on the insert; a route handler may read its own
+  // request inside the callback, unlike a Server Component.
+  //
+  // The count is the CUSTOMER hits, not hits.length. This row's subject is the
+  // customer book — mixing carrier and order matches into the number would
+  // make "how many contact records did this person pull up" unanswerable,
+  // which is the only question the log exists to answer.
+  after(() =>
+    recordAccess({
+      action: "customer_search",
+      actorId: profile.id,
+      entityType: "customer",
+      resultCount: (customers.data ?? []).length,
+      term,
+      ip: req.headers.get("x-forwarded-for"),
+    })
+  );
 
   return NextResponse.json({ hits });
 }

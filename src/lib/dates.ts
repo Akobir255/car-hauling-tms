@@ -33,15 +33,22 @@ function tzOffsetMinutes(tz: string, at: Date): number {
   return Math.round((asUtc - at.getTime()) / 60_000);
 }
 
-// The instant at which "today" ends (23:59:59.999) in the business timezone.
-export function endOfBusinessDay(now: Date = new Date()): Date {
-  const dayParts = new Intl.DateTimeFormat("en-CA", {
+// Today's calendar date in the business timezone, as YYYY-MM-DD. en-CA is
+// what produces that shape without hand-assembling parts. Exported because the
+// session watermark stamps a date onto every screen and it has to be the same
+// "today" the follow-up queues use, not the server's UTC one.
+export function businessDay(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
     timeZone: BUSINESS_TZ,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).format(now);
-  const [y, m, d] = dayParts.split("-").map(Number);
+}
+
+// The instant at which "today" ends (23:59:59.999) in the business timezone.
+export function endOfBusinessDay(now: Date = new Date()): Date {
+  const [y, m, d] = businessDay(now).split("-").map(Number);
 
   // Guess assuming the current offset, then correct once in case the guess
   // lands across a DST transition.

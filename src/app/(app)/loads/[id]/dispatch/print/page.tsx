@@ -97,7 +97,16 @@ export default async function DispatchSheetPrintPage({
   );
 
   return (
-    <div className="mx-auto max-w-4xl bg-white p-6 text-[13px] leading-snug text-black print:p-0">
+    // data-paper-sheet: this block is black-on-white in BOTH themes (it is
+    // paper, not UI), and the session watermark from the (app) layout is
+    // painted OVER it. Without the marker a dark-theme session would draw a
+    // light watermark on a white sheet and lose it — globals.css reads this
+    // attribute and switches the overlay to paper ink. See the watermark
+    // block there.
+    <div
+      data-paper-sheet=""
+      className="mx-auto max-w-4xl bg-white p-6 text-[13px] leading-snug text-black print:p-0"
+    >
       <PrintButton />
 
       <div className="mb-3 flex items-start justify-between border-b-2 border-black pb-2">

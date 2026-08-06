@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import { customerName } from "@/lib/page-title";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { recordAccess } from "@/lib/events/record-access";
 import { canEdit } from "@/lib/record-access";
 import type { Customer, Message, Profile } from "@/types/database";
 import { CustomerForm } from "../customer-form";
@@ -35,6 +38,32 @@ export default async function EditCustomerPage({
 
   if (!data) notFound();
   const customer = data as Customer;
+
+  // Access log (0067). This page is the whole contact record — name, phone,
+  // email, addresses — so a view of it is the read most worth being able to
+  // point at later.
+  //
+  // Logged only AFTER the record was found. `notFound()` above disclosed
+  // nothing, and RLS returning zero rows is the same non-disclosure, so a
+  // "viewed" row there would make the log describe access that never happened.
+  //
+  // The header is read HERE, during render, and closed over. `after()` runs
+  // outside React's rendering lifecycle, and in a Server Component `headers()`
+  // and `cookies()` THROW when called inside the callback — Next has to know
+  // during render which parts of the tree touch request data. A route handler
+  // is not subject to this; a page is.
+  const forwardedFor = (await headers()).get("x-forwarded-for");
+  after(() =>
+    recordAccess({
+      action: "customer_view",
+      actorId: profile.id,
+      entityType: "customer",
+      entityId: customer.id,
+      resultCount: 1,
+      ip: forwardedFor,
+    })
+  );
+
   const canAssignOwner = profile.role !== "sales";
   // Shippers are searchable by anyone since 0037 — by name, phone or email —
   // so this page now opens for people who do not own the account.
