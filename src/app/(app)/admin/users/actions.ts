@@ -97,11 +97,29 @@ export async function setUserPassword(
   // Boot any session they already had. Our gate treats a session with no
   // verified row as stale and signs it out on its next request, so clearing
   // these is what stops the old password's session outliving the reset.
+  //
+  // Note what this does NOT do. That gate is OUR code, and it only runs when
+  // the request comes through the app. The access token itself is Supabase's
+  // and stays valid until it expires, so a token already copied out of the
+  // cookie jar keeps reading the database directly. supabase-js has no
+  // admin "sign out user N" -- auth.admin.signOut() needs that user's own
+  // JWT, which a reset does not have.
+  //
+  // So this is a password change, not an eviction. Deactivating is the
+  // eviction: `active` is checked by is_active_staff() and
+  // current_profile_role() inside Postgres (0013), so flipping it kills a
+  // copied token the instant it is set. Offboarding = deactivate or delete.
   await admin.from("login_verifications").delete().eq("user_id", id);
   await admin.from("pending_logins").delete().eq("user_id", id);
 
   revalidatePath("/admin/users");
-  return { error: null, success: `New password set for ${target.email}. They are signed out everywhere.` };
+  return {
+    error: null,
+    success:
+      `New password set for ${target.email}, and their app sessions are ended. ` +
+      `If they are leaving, deactivate the account instead — that is what stops ` +
+      `a token they already copied.`,
+  };
 }
 
 // Removing a person from the system.

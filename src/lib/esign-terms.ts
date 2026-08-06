@@ -20,12 +20,29 @@ export const COMPANY = {
 // sent; resending refreshes the window.
 export const CONTRACT_LINK_EXPIRY_DAYS = 14;
 
+// The window runs from whichever happened last -- sending, resending, or
+// signing. Two cases used to return `false` here and so never expired at all:
+//
+//   * SIGNED. `if (signedAt || ...) return false` meant a signed contract's
+//     link lived forever, and that page shows the shipper's name, company,
+//     phone, both addresses, the vehicle and the price, to anyone holding the
+//     URL, with no login.
+//   * NEVER SENT. `!sentAt` also returned false. Worse than it sounds: the
+//     REVOKE button (voidSignature in loads/actions.ts) clears
+//     contract_sent_at and mints a fresh token, so revoking a signature
+//     produced a permanently immortal link -- the opposite of revoking.
+//
+// A never-sent contract is now treated as dead rather than eternal: there is
+// no window to be inside of, so there is nothing to show.
 export function isContractLinkExpired(
   sentAt: string | null,
   signedAt: string | null
 ): boolean {
-  if (signedAt || !sentAt) return false;
-  return Date.now() - new Date(sentAt).getTime() > CONTRACT_LINK_EXPIRY_DAYS * 86_400_000;
+  const stamps = [sentAt, signedAt]
+    .map((d) => (d ? new Date(d).getTime() : NaN))
+    .filter((t) => Number.isFinite(t));
+  if (stamps.length === 0) return true;
+  return Date.now() - Math.max(...stamps) > CONTRACT_LINK_EXPIRY_DAYS * 86_400_000;
 }
 
 export type TermsSection = {

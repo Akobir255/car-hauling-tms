@@ -18,12 +18,24 @@ describe("isContractLinkExpired", () => {
     expect(isContractLinkExpired(daysAgo(365), null)).toBe(true);
   });
 
-  it("never expires an already-signed contract — the record must stay viewable", () => {
-    expect(isContractLinkExpired(daysAgo(365), daysAgo(300))).toBe(false);
+  it("keeps a freshly signed contract viewable, and runs the window from the signature", () => {
+    // Sent 20 days ago, signed yesterday: still inside the window because
+    // signing is the later event.
+    expect(isContractLinkExpired(daysAgo(20), daysAgo(1))).toBe(false);
   });
 
-  it("reports not-expired when never sent (the unsent-token lock handles that case)", () => {
-    expect(isContractLinkExpired(null, null)).toBe(false);
+  it("expires a signed contract once its window closes", () => {
+    // The old rule returned false here forever, leaving the shipper's name,
+    // phone, both addresses and the price on a no-login page indefinitely.
+    expect(isContractLinkExpired(daysAgo(365), daysAgo(300))).toBe(true);
+  });
+
+  it("treats a never-sent contract as dead, not eternal", () => {
+    // voidSignature clears contract_sent_at and mints a new token, so the old
+    // `!sentAt -> not expired` rule made revoking a signature produce a link
+    // that never expired.
+    expect(isContractLinkExpired(null, null)).toBe(true);
+    expect(isContractLinkExpired(null, daysAgo(1))).toBe(false);
   });
 });
 

@@ -25,30 +25,56 @@ type WikiPage = { title?: string; thumbnail?: { source?: string } };
 
 export async function GET(req: NextRequest) {
   // An uploaded photo always wins over the make/model lookup. The file sits
-  // in the PRIVATE bucket, so it is fetched server-side with the service
-  // role and streamed from here — the bucket never becomes public, and the
-  // no-login contract page can still show the picture.
+  // in the PRIVATE bucket and is fetched with the service role, so the bucket
+  // never becomes public.
+  //
+  // This branch REQUIRES A SESSION. The route is on the middleware's public
+  // list (src/lib/supabase/proxy.ts) so the no-login contract page can show a
+  // make/model photo — but that exemption applied to this branch too, which
+  // meant a service-role read of customer content behind nothing but a vehicle
+  // id. Those ids are printed into every staff order page, so anyone who
+  // copied them kept access after their account was gone.
+  //
+  // Checked: the contract page renders <VehiclePhoto> without a vehicleId
+  // (src/app/sign/[token]/page.tsx:317), so it never took this branch and
+  // nothing customer-facing changes. A caller without a session falls through
+  // to the make/model lookup and gets a model shot, matching how this branch
+  // already behaves when the lookup fails.
   const vehicleId = req.nextUrl.searchParams.get("vehicleId");
   if (vehicleId && /^[0-9a-f-]{36}$/i.test(vehicleId)) {
     try {
-      const { createAdminClient } = await import("@/lib/supabase/admin");
-      const admin = createAdminClient();
-      const { data: vehicle } = await admin
-        .from("load_vehicles")
-        .select("photo_path")
-        .eq("id", vehicleId)
-        .maybeSingle();
-      if (vehicle?.photo_path) {
-        const { data: file } = await admin.storage.from("load-files").download(vehicle.photo_path);
-        if (file) {
-          return new NextResponse(file, {
-            headers: {
-              "Content-Type": file.type || "image/jpeg",
-              // Private to the viewer's browser: an override is customer
-              // content, not a public model shot.
-              "Cache-Control": "private, max-age=3600",
-            },
-          });
+      const { createClient } = await import("@/lib/supabase/server");
+      const {
+        data: { user },
+      } = await (await createClient()).auth.getUser();
+
+      // No session is an ordinary outcome here, not an error — an anonymous
+      // caller must not be able to fill the logs by guessing ids.
+      if (user) {
+        const { createAdminClient } = await import("@/lib/supabase/admin");
+        const admin = createAdminClient();
+        const { data: vehicle } = await admin
+          .from("load_vehicles")
+          .select("photo_path")
+          .eq("id", vehicleId)
+          .maybeSingle();
+        // Only ever read back what the uploader wrote: photo-actions.ts stores
+        // under `vehicles/<loadId>/...`, so anything else in that column is
+        // not a vehicle photo and must not be streamed out of a shared bucket.
+        if (vehicle?.photo_path?.startsWith("vehicles/")) {
+          const { data: file } = await admin.storage
+            .from("load-files")
+            .download(vehicle.photo_path);
+          if (file) {
+            return new NextResponse(file, {
+              headers: {
+                "Content-Type": file.type || "image/jpeg",
+                // Private to the viewer's browser: an override is customer
+                // content, not a public model shot.
+                "Cache-Control": "private, max-age=3600",
+              },
+            });
+          }
         }
       }
     } catch (err) {

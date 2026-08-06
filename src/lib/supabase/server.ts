@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { clampSessionCookie } from "./cookie-lifetime";
 
 // Server Component / Server Action client — reads the user's session from
 // cookies so RLS policies apply as that user, not as the service role.
@@ -17,7 +18,7 @@ export async function createClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, clampSessionCookie(options))
             );
           } catch {
             // Called from a Server Component (not a Server Action/Route

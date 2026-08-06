@@ -1,11 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { buildCsp } from "@/lib/security-headers";
+import { clampSessionCookie } from "./cookie-lifetime";
 
 // /sign/<token> is the customer-facing contract page — no login, reached from
 // an SMS/email link. It authenticates by the unguessable token, not a session.
 // The vehicle-image proxy is public with it: the contract shows the car's
-// photo, and the route only serves cached Wikipedia page images by make/model.
+// photo, looked up by make/model from Wikipedia. That is ALL this exemption is
+// for. The route's other branch streams the customer's UPLOADED photo out of
+// the private bucket, and it authenticates itself -- being on this list means
+// nothing here can check a session for it.
 // /verify is reached with a correct password but NO session — the session is
 // only minted once the emailed code is accepted — so it has to be public to
 // the middleware. Its own httpOnly cookie is what authorises it.
@@ -85,7 +89,7 @@ export async function updateSession(request: NextRequest) {
             request: { headers: withCspRequestHeaders(request) },
           });
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, clampSessionCookie(options))
           );
         },
       },

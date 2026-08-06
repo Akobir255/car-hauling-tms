@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isFeatureEnabled } from "@/lib/flags";
@@ -16,6 +17,12 @@ import { AutoRefresh } from "@/components/tracking/auto-refresh";
 // redaction by not fetching, rather than by remembering not to render.
 
 export const dynamic = "force-dynamic";
+
+// Reached from a text message, never from a search. If one of these URLs is
+// pasted somewhere a crawler can see it, the token stops being unguessable.
+export const metadata: Metadata = {
+  robots: { index: false, follow: false, nocache: true },
+};
 
 const STATUS_WORDS: Record<string, string> = {
   ready: "Booked",

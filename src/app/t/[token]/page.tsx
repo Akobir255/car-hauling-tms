@@ -22,6 +22,10 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Location sharing",
   manifest: "/driver-tracking.webmanifest",
+  // Token pages are reached from a text message, never from a search. If one
+  // of these URLs is ever pasted somewhere a crawler can see it, the token
+  // stops being unguessable — so tell crawlers not to keep it.
+  robots: { index: false, follow: false, nocache: true },
 };
 
 export default async function DriverTrackingPage({

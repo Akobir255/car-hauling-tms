@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { CircleDollarSign, Fuel, House, Receipt, Route, ShieldCheck } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { headers } from "next/headers";
@@ -21,6 +22,13 @@ import { SignatureForm } from "./sign-button";
 // unguessable token via the service-role client (like the webhooks). Shows
 // only what the customer needs to see — never carrier pay or internal fields.
 export const dynamic = "force-dynamic";
+
+// Reached from a text or an email, never from a search — and this page carries
+// the shipper's name, phone, both addresses and the price. If the URL is ever
+// pasted somewhere a crawler can see it, the token stops being unguessable.
+export const metadata: Metadata = {
+  robots: { index: false, follow: false, nocache: true },
+};
 
 export default async function SignPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
