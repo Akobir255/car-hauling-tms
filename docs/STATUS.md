@@ -480,6 +480,21 @@ null`, and `and c.hidden_at is null` on the customers join), never on the flag.
 **If you add a view over a table with row-level rules, check its invoker mode,
 and verify through the view, not just the table.**
 
+#### The advisor will keep calling this CRITICAL. Leave it alone.
+
+Supabase's security advisor flags `loads_full` and `loads_full_contact` as
+**"Security Definer View — CRITICAL"**, and always will: its only test is
+whether `security_invoker` is set, and it cannot see that the condition lives
+inside the view instead. Setting the flag to clear the warning hits 0013's
+`carrier_pay` revoke and takes margin away from every manager — it breaks
+rule 1 to satisfy a linter. This is a knowing exception; the two entries are
+expected and are not a to-do.
+
+The advisor is still worth reading. In Aug 2026 it caught five genuinely open
+snapshot tables (`*_pre_0013/0040/0042/0047`) holding 25k-row copies of the
+book with no RLS and no column grants — see 0062. Rule of thumb: believe it
+about **tables**, ignore it about **these two views**.
+
 ### How the hiding works
 
 - One nullable `hidden_at` on `loads`, `customers`, `messages`; the SELECT
