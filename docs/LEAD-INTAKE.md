@@ -15,9 +15,23 @@ provider is configured to send to it.
 | Needs `ANTHROPIC_API_KEY` | no | **yes** — off until set |
 
 Both converge on `createLeadFromNormalized()`: a load at status `lead`, in a
-rep's queue (`next_lead_owner`, round-robin), customer matched on phone/email,
-vehicle attached, and a `lead_intake` attribution row. Duplicates are caught —
-by the provider's own id (JSON) or the email Message-Id.
+rep's queue, customer matched on phone/email, vehicle attached, and a
+`lead_intake` attribution row. Duplicates are caught — by the provider's own id
+(JSON) or the email Message-Id.
+
+## Who gets each lead — strict round-robin
+
+`next_lead_owner()` (migration 0070) hands leads out in a strict cycle: lead 1
+to the first agent, lead 2 to the second, … lead N to the last, then back to
+the first. "First agent" is the first-hired active sales rep (order is by
+`created_at`). A `lead_rotation` pointer row remembers who got the last one and
+is advanced under a row lock, so two leads arriving together never land on the
+same rep. Deactivate a rep and they are skipped next lap; add one and they join
+the ring with no flood. To restart the cycle at the first agent:
+
+```sql
+update lead_rotation set last_owner = null where id;   -- service role
+```
 
 ## Turning a provider on
 
